@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import SuggestedRulesPanel from "@/components/SuggestedRulesPanel";
 import RuleSuggestionDialog from "@/components/RuleSuggestionDialog";
@@ -30,7 +31,7 @@ import { applyRulesToUncategorized } from "@/lib/categorize";
 export default function SalesPage() {
   const queryClient = useQueryClient();
   const logic = useSalesLogic();
-  const { dismissedSet, dismiss: dismissAudit } = useAuditDismissals();
+  const { dismissedSet, dismiss: dismissAudit, undismiss: undismissAudit } = useAuditDismissals();
   const {
     sales, sorted, paginatedRows, totalPages, currentPage, setCurrentPage, totalSales,
     open, setOpen, form, setForm, handleAdd, addSale,
@@ -43,6 +44,7 @@ export default function SalesPage() {
     chartData, totalInflows, totalOutflows, netCashFlow, currentBalance, expenses, matchedSaleIds,
     user,
   } = logic;
+  const [unfilteredAuditResult, setUnfilteredAuditResult] = useState<typeof auditResult>(null);
 
   const SortIcon = ({ field }: { field: typeof sortField }) => {
     if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
@@ -116,17 +118,19 @@ export default function SalesPage() {
                 const freshSales = queryClient.getQueryData<typeof sales>(["sales", user?.id]) || sales;
                 const freshDismissals = queryClient.getQueryData<{ transaction_id: string; issue_type: string }[]>(["audit_dismissals", user?.id]) ?? [];
                 const freshDismissedSet = new Set(freshDismissals.map((d) => `${d.transaction_id}::${d.issue_type}`));
+                setUnfilteredAuditResult(auditSales(freshSales, expenses, matchedSaleIds));
                 setAuditResult(auditSales(freshSales, expenses, matchedSaleIds, freshDismissedSet));
               }}><ShieldAlert className="h-4 w-4 mr-2" />Quick Audit</Button>
             </div>
 
             {auditResult && (
-              <AuditIssuesPanel result={auditResult} getItemLabel={(id) => { const s = sales.find((x) => x.id === id); if (!s) return null; return { date: s.date, label: `${s.client} — ${s.description}`, amount: s.amount }; }}
+              <AuditIssuesPanel result={auditResult} unfilteredResult={unfilteredAuditResult ?? undefined} dismissedSet={dismissedSet} getItemLabel={(id) => { const s = sales.find((x) => x.id === id); if (!s) return null; return { date: s.date, label: `${s.client} — ${s.description}`, amount: s.amount }; }}
                 onDeleteItems={(ids) => { logic.bulkRemove.mutate(ids, { onSuccess: () => { toast.success(`Deleted ${ids.length} sale(s)`); const freshDismissals = queryClient.getQueryData<{ transaction_id: string; issue_type: string }[]>(["audit_dismissals", user?.id]) ?? []; const ds = new Set(freshDismissals.map((d) => `${d.transaction_id}::${d.issue_type}`)); logic.setAuditResult(auditSales(sales.filter((s) => !ids.includes(s.id)), logic.expenses, logic.matchedSaleIds, ds)); } }); }}
                 onSelectItems={(ids) => { logic.selectItems(ids); toast.info(`Selected ${ids.length} item(s)`); }}
                 onCreateInvoice={handleInlineCreateInvoice}
                 onBatchCreateInvoices={(ids) => handleBatchCreateInvoices(ids)}
                 onDismissItems={(items) => { dismissAudit.mutate(items, { onSuccess: () => toast.success("Marked as non-issue — won't appear in future audits") }); }}
+                onUndismissItems={(items) => { undismissAudit.mutate(items, { onSuccess: () => toast.success("Issue restored — will appear in future audits") }); }}
               />
             )}
 

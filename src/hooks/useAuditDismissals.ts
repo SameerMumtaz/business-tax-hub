@@ -50,5 +50,23 @@ export function useAuditDismissals() {
     },
   });
 
-  return { dismissals, dismissedSet, isDismissed, dismiss, isLoading };
+  const undismiss = useMutation({
+    mutationFn: async (items: { transactionId: string; issueType: string }[]) => {
+      if (!user) return;
+      for (const item of items) {
+        const { error } = await supabase
+          .from("audit_dismissals")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("transaction_id", item.transactionId)
+          .eq("issue_type", item.issueType);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["audit_dismissals", user?.id] });
+    },
+  });
+
+  return { dismissals, dismissedSet, isDismissed, dismiss, undismiss, isLoading };
 }
