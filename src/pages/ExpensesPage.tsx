@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import SuggestedRulesPanel from "@/components/SuggestedRulesPanel";
 import DashboardLayout from "@/components/DashboardLayout";
 import useExpensesLogic, { PAGE_SIZE } from "@/hooks/useExpensesLogic";
 import { LINE_COLORS } from "@/lib/chartTheme";
@@ -92,7 +93,7 @@ export default function ExpensesPage() {
         </Dialog>
 
         <Tabs defaultValue={new URLSearchParams(window.location.search).get("tab") || "expenses"}>
-          <TabsList><TabsTrigger value="expenses">Expenses</TabsTrigger><TabsTrigger value="trends">Trends & Alerts</TabsTrigger></TabsList>
+          <TabsList><TabsTrigger value="expenses">Expenses</TabsTrigger><TabsTrigger value="trends">Trends & Alerts</TabsTrigger><TabsTrigger value="rules">Rules</TabsTrigger></TabsList>
 
           <TabsContent value="expenses" className="mt-4 space-y-3">
             <div className="flex gap-2">
@@ -227,6 +228,10 @@ export default function ExpensesPage() {
             ) : (
               <div className="rounded-lg border bg-card p-12 text-center text-muted-foreground">No expense data yet.</div>
             )}
+          </TabsContent>
+
+          <TabsContent value="rules" className="mt-4">
+            <SuggestedRulesPanel type="expense" transactions={expenses.map(e => ({ id: e.id, vendor: e.vendor, category: e.category }))} />
           </TabsContent>
         </Tabs>
       </div>
