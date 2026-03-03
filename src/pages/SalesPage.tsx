@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import StatCard from "@/components/StatCard";
-import { Plus, Trash2, ArrowDownLeft, ArrowUpRight, Activity, Wallet, ArrowUpDown, ArrowUp, ArrowDown, Tag } from "lucide-react";
+import { Plus, Trash2, ArrowDownLeft, ArrowUpRight, Activity, Wallet, ArrowUpDown, ArrowUp, ArrowDown, Tag, Search } from "lucide-react";
 import { toast } from "sonner";
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
@@ -38,8 +38,22 @@ export default function SalesPage() {
   const [sortField, setSortField] = useState<SortField>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const totalSales = sales.reduce((sum, s) => sum + s.amount, 0);
+  const searchedSales = useMemo(() => {
+    if (!searchQuery.trim()) return sales;
+    const q = searchQuery.trim().toLowerCase();
+    return sales.filter((s) =>
+      s.client.toLowerCase().includes(q) ||
+      s.description.toLowerCase().includes(q) ||
+      s.date.includes(q) ||
+      s.amount.toString().includes(q) ||
+      formatCurrency(s.amount).toLowerCase().includes(q) ||
+      (s.invoiceNumber || "").toLowerCase().includes(q)
+    );
+  }, [sales, searchQuery]);
+
+  const totalSales = searchedSales.reduce((sum, s) => sum + s.amount, 0);
 
   const handleAdd = () => {
     if (!form.date || !form.client || !form.amount) {
@@ -67,7 +81,7 @@ export default function SalesPage() {
   };
 
   const sorted = useMemo(() => {
-    return [...sales].sort((a, b) => {
+    return [...searchedSales].sort((a, b) => {
       let cmp = 0;
       switch (sortField) {
         case "date": cmp = a.date.localeCompare(b.date); break;
@@ -78,7 +92,7 @@ export default function SalesPage() {
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [sales, sortField, sortDir]);
+  }, [searchedSales, sortField, sortDir]);
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -182,6 +196,15 @@ export default function SalesPage() {
           </TabsList>
 
           <TabsContent value="sales" className="mt-4 space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by client, description, date, or amount…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
             {/* Bulk actions bar */}
             {selected.size > 0 && (
               <div className="flex items-center gap-3 bg-muted rounded-lg px-4 py-2">
