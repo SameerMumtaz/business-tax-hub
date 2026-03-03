@@ -9,8 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, FileText, Landmark, Check, X, FileUp, ArrowRight, Sparkles, Loader2 } from "lucide-react";
+import { Upload, FileText, Landmark, Check, X, FileUp, ArrowRight, Sparkles, Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { toast } from "sonner";
+
+type SortField = "date" | "description" | "type" | "category" | "amount";
+type SortDir = "asc" | "desc";
+
 
 interface ReviewTransaction extends ParsedTransaction {
   id: string;
@@ -25,6 +29,8 @@ export default function ImportPage() {
   const [step, setStep] = useState<"upload" | "review">("upload");
   const [dragOver, setDragOver] = useState(false);
   const [categorizing, setCategorizing] = useState(false);
+  const [sortField, setSortField] = useState<SortField>("date");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const processFile = useCallback((file: File) => {
     if (!file.name.endsWith(".csv") && !file.name.endsWith(".tsv") && !file.name.endsWith(".txt")) {
@@ -100,6 +106,26 @@ export default function ImportPage() {
 
   const toggleInclude = (id: string) => {
     setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, include: !t.include } : t)));
+  };
+
+  const deleteTransaction = (id: string) => {
+    setTransactions((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
+    return sortDir === "asc"
+      ? <ArrowUp className="h-3 w-3 ml-1" />
+      : <ArrowDown className="h-3 w-3 ml-1" />;
   };
 
   const updateCategory = (id: string, category: ExpenseCategory) => {
@@ -293,15 +319,38 @@ export default function ImportPage() {
                 <thead>
                   <tr>
                     <th className="w-10"></th>
-                    <th>Date</th>
-                    <th>Description</th>
-                    <th>Type</th>
-                    <th>Category</th>
-                    <th className="text-right">Amount</th>
+                    <th className="cursor-pointer select-none" onClick={() => toggleSort("date")}>
+                      <span className="inline-flex items-center">Date<SortIcon field="date" /></span>
+                    </th>
+                    <th className="cursor-pointer select-none" onClick={() => toggleSort("description")}>
+                      <span className="inline-flex items-center">Description<SortIcon field="description" /></span>
+                    </th>
+                    <th className="cursor-pointer select-none" onClick={() => toggleSort("type")}>
+                      <span className="inline-flex items-center">Type<SortIcon field="type" /></span>
+                    </th>
+                    <th className="cursor-pointer select-none" onClick={() => toggleSort("category")}>
+                      <span className="inline-flex items-center">Category<SortIcon field="category" /></span>
+                    </th>
+                    <th className="text-right cursor-pointer select-none" onClick={() => toggleSort("amount")}>
+                      <span className="inline-flex items-center justify-end">Amount<SortIcon field="amount" /></span>
+                    </th>
+                    <th className="w-10"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {transactions.map((t) => (
+                  {[...transactions]
+                    .sort((a, b) => {
+                      let cmp = 0;
+                      switch (sortField) {
+                        case "date": cmp = a.date.localeCompare(b.date); break;
+                        case "description": cmp = a.description.localeCompare(b.description); break;
+                        case "type": cmp = a.type.localeCompare(b.type); break;
+                        case "category": cmp = a.category.localeCompare(b.category); break;
+                        case "amount": cmp = a.amount - b.amount; break;
+                      }
+                      return sortDir === "asc" ? cmp : -cmp;
+                    })
+                    .map((t) => (
                     <tr key={t.id} className={!t.include ? "opacity-40" : ""}>
                       <td>
                         <button onClick={() => toggleInclude(t.id)} className="p-1">
@@ -339,6 +388,11 @@ export default function ImportPage() {
                       </td>
                       <td className={`text-right font-mono ${t.type === "income" ? "text-chart-positive" : "text-chart-negative"}`}>
                         {t.type === "income" ? "+" : "-"}{formatCurrency(t.amount)}
+                      </td>
+                      <td>
+                        <button onClick={() => deleteTransaction(t.id)} className="p-1 hover:text-destructive text-muted-foreground transition-colors">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </td>
                     </tr>
                   ))}
