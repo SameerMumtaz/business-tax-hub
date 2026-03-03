@@ -27,6 +27,9 @@ interface Worker {
 interface Job {
   id: string;
   title: string;
+  start_date: string;
+  end_date: string | null;
+  job_type: string;
 }
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
@@ -59,7 +62,7 @@ export default function TimesheetsContent() {
         supabase.from("team_members").select("id, name, worker_type, pay_rate").eq("business_user_id", user.id).in("status", ["active", "invited"]),
         supabase.from("employees").select("id, name, salary").eq("user_id", user.id),
         supabase.from("contractors").select("id, name, pay_rate").eq("user_id", user.id),
-        supabase.from("jobs").select("id, title").eq("user_id", user.id).in("status", ["scheduled", "in_progress"]),
+        supabase.from("jobs").select("id, title, start_date, end_date, job_type").eq("user_id", user.id).in("status", ["scheduled", "in_progress"]),
       ]);
 
       const w: Worker[] = [];
@@ -105,6 +108,43 @@ export default function TimesheetsContent() {
     if (result) { setCreateOpen(false); setWeekStart(""); setWeekEnd(""); }
   };
 
+  // Given a job and a timesheet week range, compute which days the job falls on
+  // and return estimated hours per day (default 8hrs per workday)
+  const computeJobHours = (jobId: string, timesheetId: string): Record<string, number> => {
+    const hours: Record<string, number> = {
+      mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0,
+      fri_hours: 0, sat_hours: 0, sun_hours: 0,
+    };
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job) return hours;
+    const ts = timesheets.find((t) => t.id === timesheetId);
+    if (!ts) return hours;
+
+    const weekStart = new Date(ts.week_start + "T00:00:00");
+    const weekEnd = new Date(ts.week_end + "T23:59:59");
+    const jobStart = new Date(job.start_date + "T00:00:00");
+    const jobEnd = job.end_date ? new Date(job.end_date + "T23:59:59") : jobStart;
+
+    // Map JS getDay() (0=Sun) to our day keys
+    const dayMap: Record<number, string> = {
+      0: "sun_hours", 1: "mon_hours", 2: "tue_hours", 3: "wed_hours",
+      4: "thu_hours", 5: "fri_hours", 6: "sat_hours",
+    };
+
+    // Walk each day of the timesheet week
+    const cursor = new Date(weekStart);
+    while (cursor <= weekEnd) {
+      // Check if this day falls within the job's date range
+      if (cursor >= jobStart && cursor <= jobEnd) {
+        const key = dayMap[cursor.getDay()];
+        if (key) hours[key] = 8; // Default 8 hours per job day
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return hours;
+  };
+
   const handleAddWorker = async () => {
     if (!addWorkerTsId || !selectedWorkerId) { toast.error("Select a worker"); return; }
     const worker = workers.find((w) => w.id === selectedWorkerId);
@@ -113,11 +153,16 @@ export default function TimesheetsContent() {
       (e) => e.timesheet_id === addWorkerTsId && e.worker_id === worker.id
     );
     if (alreadyExists) { toast.error("Worker already on this timesheet"); return; }
+
+    // Auto-populate hours if a job is selected
+    const jobHours = selectedJobId
+      ? computeJobHours(selectedJobId, addWorkerTsId)
+      : { mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0, fri_hours: 0, sat_hours: 0, sun_hours: 0 };
+
     await addEntry({
       timesheet_id: addWorkerTsId, worker_id: worker.id, worker_name: worker.name,
       worker_type: worker.type, pay_rate: worker.pay_rate,
-      mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0,
-      fri_hours: 0, sat_hours: 0, sun_hours: 0, job_id: selectedJobId || null,
+      ...jobHours as any, job_id: selectedJobId || null,
     });
     setAddWorkerTsId(null); setSelectedWorkerId(""); setSelectedJobId("");
   };
@@ -137,6 +182,15 @@ export default function TimesheetsContent() {
     if (e.key === "Escape") setEditingCell(null);
   };
   const handleJobChange = async (entryId: string, jobId: string) => {
+    if (jobId) {
+      // Auto-populate hours based on job schedule
+      const entry = entries.find((e) => e.id === entryId);
+      if (entry) {
+        const jobHours = computeJobHours(jobId, entry.timesheet_id);
+        await updateEntry(entryId, { job_id: jobId, ...jobHours } as any);
+        return;
+      }
+    }
     await updateEntry(entryId, { job_id: jobId || null } as any);
   };
 
