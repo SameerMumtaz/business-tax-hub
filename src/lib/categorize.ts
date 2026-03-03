@@ -55,7 +55,7 @@ const EXPENSE_KEYWORDS: Record<string, string[]> = {
     "ups store", "shipping supplies", "bubble wrap", "packing", "copy paper", "laminator",
     "paper shredder", "rubber bands", "paper clips", "scissors", "glue", "marker",
   ],
-  "Travel": [
+   "Travel": [
     "airline", "airbnb", "hotel", "marriott", "hilton", "hyatt", "sheraton", "westin",
     "holiday inn", "best western", "hampton inn", "courtyard", "residence inn", "fairfield",
     "united air", "delta air", "southwest", "american air", "jetblue", "spirit air",
@@ -68,6 +68,15 @@ const EXPENSE_KEYWORDS: Record<string, string[]> = {
     "mileage", "gas station", "shell", "chevron", "exxon", "bp ", "mobil", "sunoco",
     "speedway", "wawa", "quiktrip", "circle k", "pilot flying", "loves travel",
     "turnpike", "ez pass", "fastrak", "sunpass", "toll road",
+    "qt ", "qt outside", "qt inside", "racetrac", "race trac", "oncue", "on cue",
+    "buc-ee", "buc ee", "bucee", "love's", "loves ", "jump start",
+    "casey", "caseys", "kwik shop", "murphy express", "murphy oil",
+    "7-eleven", "7 eleven", "seven eleven", "sam's mart",
+    "kroger fuel", "texaco", "conoco", "phillips 66", "valero", "citgo",
+    "nte ", "ntte", "kta auto", "e-zpass",
+    "la quinta", "red roof", "super 8", "motel 6", "comfort inn", "days inn",
+    "baymont", "wyndham", "mainstay", "extended stay", "studio 6",
+    "5 star travel", "studios & suites",
   ],
   "Software & SaaS": [
     "adobe", "microsoft", "office 365", "microsoft 365", "google workspace", "google cloud",
@@ -200,6 +209,14 @@ const EXPENSE_KEYWORDS: Record<string, string[]> = {
     "tool", "drill", "saw", "compressor", "generator",
     "vehicle", "truck", "van", "fleet",
     "b&h photo", "adorama", "newegg", "micro center", "cdw",
+    "home depot", "the home depot", "lowe's", "lowes", "menards",
+    "harbor freight", "ace hardware", "ace mart", "true value",
+    "autozone", "auto zone", "o'reilly", "oreilly", "napa auto",
+    "advance auto", "pep boys", "jiffy lube", "valvoline", "midas",
+    "tire shop", "tire center", "discount tire", "firestone",
+    "pressure washer", "barton solvents", "icon collision",
+    "match auto", "dee's tire", "dees auto",
+    "car wash", "launch pad car", "soapy suds",
   ],
   "Rent": [
     "rent", "lease", "office space", "wework", "regus", "coworking", "co-working",
@@ -387,26 +404,58 @@ export async function categorizeTransactions(
 
     const aiResults: { id: string; category: string; confidence: number }[] = [];
 
+    const MAX_RETRIES = 3;
+    const INTER_BATCH_DELAY = 2000; // ms between batches to avoid rate limits
+
     for (let bIdx = 0; bIdx < batches.length; bIdx++) {
       const batch = batches[bIdx];
-      try {
-        const { data, error } = await supabase.functions.invoke("categorize", {
-          body: {
-            descriptions: batch.map((t) => ({
-              id: t.id,
-              description: t.description,
-              type: t.type,
-            })),
-          },
-        });
+      let success = false;
 
-        if (!error && data?.results) {
-          aiResults.push(...data.results);
+      for (let attempt = 0; attempt < MAX_RETRIES && !success; attempt++) {
+        try {
+          const { data, error } = await supabase.functions.invoke("categorize", {
+            body: {
+              descriptions: batch.map((t) => ({
+                id: t.id,
+                description: t.description,
+                type: t.type,
+              })),
+            },
+          });
+
+          if (error) {
+            const errMsg = typeof error === "object" && "message" in error ? (error as any).message : String(error);
+            if (errMsg.includes("429") || errMsg.includes("Rate limit")) {
+              const backoff = INTER_BATCH_DELAY * Math.pow(2, attempt);
+              console.warn(`Rate limited on batch ${bIdx + 1}, retrying in ${backoff}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+              await new Promise((r) => setTimeout(r, backoff));
+              continue;
+            }
+          }
+
+          if (!error && data?.results) {
+            aiResults.push(...data.results);
+            success = true;
+          } else if (data?.error?.includes?.("Rate limit")) {
+            const backoff = INTER_BATCH_DELAY * Math.pow(2, attempt);
+            console.warn(`Rate limited on batch ${bIdx + 1}, retrying in ${backoff}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+            await new Promise((r) => setTimeout(r, backoff));
+          } else {
+            success = true; // non-retryable error, move on
+          }
+        } catch {
+          // Network error, retry with backoff
+          const backoff = INTER_BATCH_DELAY * Math.pow(2, attempt);
+          await new Promise((r) => setTimeout(r, backoff));
         }
-      } catch {
-        // Batch failed, will fallback below
       }
-      onProgress?.((bIdx + 1), batches.length);
+
+      onProgress?.(bIdx + 1, batches.length);
+
+      // Delay between batches to stay under rate limits
+      if (bIdx < batches.length - 1) {
+        await new Promise((r) => setTimeout(r, INTER_BATCH_DELAY));
+      }
     }
 
     const aiIds = new Set(aiResults.map((r) => r.id));
