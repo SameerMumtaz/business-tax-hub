@@ -17,6 +17,11 @@ export interface Vehicle {
   loan_start_date: string | null;
   status: string;
   notes: string | null;
+  depreciation_method: string;
+  placed_in_service_date: string | null;
+  business_use_pct: number;
+  useful_life_years: number;
+  section_179_amount: number;
 }
 
 export interface VehiclePayment {
@@ -45,6 +50,61 @@ export interface AmortRow {
   balance: number;
   paid: boolean;
   paidDate?: string;
+  isExtra?: boolean;
+}
+
+// ── MACRS depreciation rates (5-year property, 200% DB, half-year convention) ──
+const MACRS_5YR = [0.20, 0.32, 0.192, 0.1152, 0.1152, 0.0576];
+const MACRS_7YR = [0.1429, 0.2449, 0.1749, 0.1249, 0.0893, 0.0892, 0.0893, 0.0446];
+
+export interface DepreciationRow {
+  year: number;
+  calendarYear: number;
+  beginningValue: number;
+  depreciation: number;
+  endingValue: number;
+  businessDepreciation: number;
+}
+
+export function calculateDepreciation(vehicle: Vehicle): DepreciationRow[] {
+  const cost = vehicle.purchase_price;
+  const sec179 = Math.min(vehicle.section_179_amount, cost);
+  const depreciableBasis = cost - sec179;
+  const pct = vehicle.business_use_pct / 100;
+  const startYear = vehicle.placed_in_service_date
+    ? new Date(vehicle.placed_in_service_date).getFullYear()
+    : vehicle.year ?? new Date().getFullYear();
+
+  const rates = vehicle.useful_life_years <= 5 ? MACRS_5YR : MACRS_7YR;
+  const rows: DepreciationRow[] = [];
+
+  // Section 179 in year 1
+  if (sec179 > 0) {
+    rows.push({
+      year: 0,
+      calendarYear: startYear,
+      beginningValue: cost,
+      depreciation: sec179,
+      endingValue: cost - sec179,
+      businessDepreciation: Math.round(sec179 * pct * 100) / 100,
+    });
+  }
+
+  let remaining = depreciableBasis;
+  for (let i = 0; i < rates.length && remaining > 0.01; i++) {
+    const dep = Math.round(depreciableBasis * rates[i] * 100) / 100;
+    const actual = Math.min(dep, remaining);
+    remaining -= actual;
+    rows.push({
+      year: i + 1,
+      calendarYear: startYear + i,
+      beginningValue: Math.round((depreciableBasis - (depreciableBasis - remaining - actual)) * 100) / 100,
+      depreciation: actual,
+      endingValue: Math.round(remaining * 100) / 100,
+      businessDepreciation: Math.round(actual * pct * 100) / 100,
+    });
+  }
+  return rows;
 }
 
 // ── Amortization calculator ──
@@ -118,6 +178,11 @@ export function useVehicles() {
         loan_start_date: r.loan_start_date,
         status: r.status,
         notes: r.notes,
+        depreciation_method: r.depreciation_method,
+        placed_in_service_date: r.placed_in_service_date,
+        business_use_pct: Number(r.business_use_pct),
+        useful_life_years: r.useful_life_years,
+        section_179_amount: Number(r.section_179_amount),
       })) as Vehicle[];
     },
   });
@@ -143,6 +208,11 @@ export function useAddVehicle() {
         loan_start_date: v.loan_start_date,
         status: v.status,
         notes: v.notes,
+        depreciation_method: v.depreciation_method,
+        placed_in_service_date: v.placed_in_service_date,
+        business_use_pct: v.business_use_pct,
+        useful_life_years: v.useful_life_years,
+        section_179_amount: v.section_179_amount,
       });
       if (error) throw error;
     },

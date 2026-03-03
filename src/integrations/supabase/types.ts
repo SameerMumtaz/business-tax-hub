@@ -1198,7 +1198,9 @@ export type Database = {
       }
       vehicles: {
         Row: {
+          business_use_pct: number
           created_at: string
+          depreciation_method: string
           id: string
           interest_rate: number
           loan_amount: number
@@ -1209,14 +1211,19 @@ export type Database = {
           monthly_payment: number
           name: string
           notes: string | null
+          placed_in_service_date: string | null
           purchase_price: number
+          section_179_amount: number
           status: string
+          useful_life_years: number
           user_id: string
           vin_last6: string | null
           year: number | null
         }
         Insert: {
+          business_use_pct?: number
           created_at?: string
+          depreciation_method?: string
           id?: string
           interest_rate?: number
           loan_amount?: number
@@ -1227,14 +1234,19 @@ export type Database = {
           monthly_payment?: number
           name: string
           notes?: string | null
+          placed_in_service_date?: string | null
           purchase_price?: number
+          section_179_amount?: number
           status?: string
+          useful_life_years?: number
           user_id: string
           vin_last6?: string | null
           year?: number | null
         }
         Update: {
+          business_use_pct?: number
           created_at?: string
+          depreciation_method?: string
           id?: string
           interest_rate?: number
           loan_amount?: number
@@ -1245,8 +1257,11 @@ export type Database = {
           monthly_payment?: number
           name?: string
           notes?: string | null
+          placed_in_service_date?: string | null
           purchase_price?: number
+          section_179_amount?: number
           status?: string
+          useful_life_years?: number
           user_id?: string
           vin_last6?: string | null
           year?: number | null
