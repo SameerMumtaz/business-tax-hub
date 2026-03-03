@@ -71,59 +71,53 @@ export async function categorizeTransactions(
     }
   }
 
-  // Step 2: AI categorization for unmatched items
+  // Step 2: AI categorization for unmatched items (batched to avoid timeouts)
   if (useAI && needsAI.length > 0) {
-    try {
-      const { data, error } = await supabase.functions.invoke("categorize", {
-        body: {
-          descriptions: needsAI.map((t) => ({
-            id: t.id,
-            description: t.description,
-            type: t.type,
-          })),
-        },
-      });
+    const BATCH_SIZE = 25;
+    const batches: CategorizeInput[][] = [];
+    for (let i = 0; i < needsAI.length; i += BATCH_SIZE) {
+      batches.push(needsAI.slice(i, i + BATCH_SIZE));
+    }
 
-      if (!error && data?.results) {
-        for (const r of data.results) {
-          // Validate the AI category is valid for expenses
-          const item = needsAI.find((n) => n.id === r.id);
-          if (item?.type === "expense" && !EXPENSE_CATEGORIES.includes(r.category as ExpenseCategory)) {
-            r.category = "Other";
-          }
-          results.push({
-            id: r.id,
-            category: r.category,
-            confidence: r.confidence,
-            source: "ai",
-          });
+    const aiResults: { id: string; category: string; confidence: number }[] = [];
+
+    for (const batch of batches) {
+      try {
+        const { data, error } = await supabase.functions.invoke("categorize", {
+          body: {
+            descriptions: batch.map((t) => ({
+              id: t.id,
+              description: t.description,
+              type: t.type,
+            })),
+          },
+        });
+
+        if (!error && data?.results) {
+          aiResults.push(...data.results);
         }
-        // Remove AI-categorized items from the needsAI list
-        const aiIds = new Set(data.results.map((r: any) => r.id));
-        const stillNeeds = needsAI.filter((n) => !aiIds.has(n.id));
-        // Fallback for any missed items
-        for (const item of stillNeeds) {
-          results.push({
-            id: item.id,
-            category: "Other",
-            confidence: 0,
-            source: "keyword",
-          });
-        }
-      } else {
-        // AI failed, fallback all to Other
-        for (const item of needsAI) {
-          results.push({
-            id: item.id,
-            category: "Other",
-            confidence: 0,
-            source: "keyword",
-          });
-        }
+      } catch {
+        // Batch failed, will fallback below
       }
-    } catch {
-      // AI call failed, fallback
-      for (const item of needsAI) {
+    }
+
+    const aiIds = new Set(aiResults.map((r) => r.id));
+    for (const r of aiResults) {
+      const item = needsAI.find((n) => n.id === r.id);
+      if (item?.type === "expense" && !EXPENSE_CATEGORIES.includes(r.category as ExpenseCategory)) {
+        r.category = "Other";
+      }
+      results.push({
+        id: r.id,
+        category: r.category,
+        confidence: r.confidence,
+        source: "ai",
+      });
+    }
+
+    // Fallback for any items not returned by AI
+    for (const item of needsAI) {
+      if (!aiIds.has(item.id)) {
         results.push({
           id: item.id,
           category: "Other",
