@@ -43,7 +43,7 @@ interface NavItem {
 const links: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/import", label: "Import", icon: Upload },
-  { to: "/categorization", label: "Categories", icon: Tag },
+  { to: "/categorization", label: "Rules", icon: Tag },
   {
     to: "/sales", label: "Sales", icon: TrendingUp,
     matchPaths: ["/sales", "/invoices", "/clients", "/aging"],
