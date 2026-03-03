@@ -34,6 +34,7 @@ import TimesheetsPage from "./pages/TimesheetsPage";
 import TeamPage from "./pages/TeamPage";
 import CrewDashboardPage from "./pages/CrewDashboardPage";
 import CrewMapPage from "./pages/CrewMapPage";
+import VehiclesPage from "./pages/VehiclesPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -65,6 +66,7 @@ const App = () => (
             <Route path="/1099" element={<ProtectedRoute><Report1099Page /></ProtectedRoute>} />
             <Route path="/aging" element={<ProtectedRoute><AgingReportPage /></ProtectedRoute>} />
             <Route path="/reconciliation" element={<ProtectedRoute><ReconciliationPage /></ProtectedRoute>} />
+            <Route path="/vehicles" element={<ProtectedRoute><VehiclesPage /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
 
             {/* Shared business routes (admin + manager) */}
