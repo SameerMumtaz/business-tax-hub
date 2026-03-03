@@ -52,7 +52,7 @@ ${descriptions.map((d, i) => `${i + 1}. [${d.type}] "${d.description}"`).join("\
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
+          model: "google/gemini-2.5-flash-lite",
           messages: [
             { role: "system", content: "You categorize business transactions. Respond ONLY with valid JSON." },
             { role: "user", content: prompt },

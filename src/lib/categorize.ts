@@ -351,12 +351,52 @@ function matchKeyword(description: string, type: string): { category: string; co
   return null;
 }
 
+// Session-level cache: description+type → result (avoids re-processing duplicates)
+const sessionCache = new Map<string, CategorizationResult>();
+
+function cacheKey(desc: string, type: string) {
+  return `${type}:${desc.toLowerCase().trim()}`;
+}
+
+/**
+ * Auto-learn: save high-confidence AI results as rules for instant future matching.
+ */
+async function autoLearnFromAI(
+  items: CategorizeInput[],
+  aiResults: { id: string; category: string; confidence: number }[]
+) {
+  const toSave: { vendor_pattern: string; category: string; type: string; priority: number }[] = [];
+  for (const r of aiResults) {
+    if (r.confidence < 0.75 || r.category === "Other") continue;
+    const item = items.find((i) => i.id === r.id);
+    if (!item) continue;
+    // Extract a keyword (first 2-3 significant words) for the rule
+    const words = item.description
+      .replace(/[^a-zA-Z0-9\s&'./-]/g, "")
+      .split(/\s+/)
+      .filter((w) => w.length > 2)
+      .slice(0, 3);
+    if (words.length === 0) continue;
+    const pattern = words.join(" ").toLowerCase();
+    if (pattern.length < 4) continue;
+    toSave.push({ vendor_pattern: pattern, category: r.category, type: item.type, priority: 5 });
+  }
+  if (toSave.length > 0) {
+    // Upsert silently — don't block on this
+    supabase
+      .from("categorization_rules")
+      .upsert(toSave, { onConflict: "vendor_pattern,type", ignoreDuplicates: true })
+      .then(() => {});
+  }
+}
+
 /**
  * Categorize transactions using a priority chain:
- * 1. Custom rules from the database
- * 2. Built-in keyword dictionary (instant, no API call)
- * 3. AI categorization (batch, only for remaining unknowns)
- * 4. Fallback to "Other"
+ * 1. Session cache (instant for repeated descriptions)
+ * 2. Custom rules from the database
+ * 3. Built-in keyword dictionary (instant, no API call)
+ * 4. AI categorization (parallel batches, only for remaining unknowns)
+ * 5. Fallback to "Other"
  */
 export async function categorizeTransactions(
   items: CategorizeInput[],
@@ -367,131 +407,109 @@ export async function categorizeTransactions(
   const results: CategorizationResult[] = [];
   const needsAI: CategorizeInput[] = [];
 
-  // Step 1: Apply custom rules, then keyword dictionary
+  // Step 1: Cache → Rules → Keywords
   for (const item of items) {
+    const ck = cacheKey(item.description, item.type);
+    const cached = sessionCache.get(ck);
+    if (cached) {
+      results.push({ ...cached, id: item.id });
+      continue;
+    }
+
     const ruleMatch = matchRule(item.description, item.type, rules);
     if (ruleMatch) {
-      results.push({
-        id: item.id,
-        category: ruleMatch,
-        confidence: 1,
-        source: "rule",
-      });
+      const r: CategorizationResult = { id: item.id, category: ruleMatch, confidence: 1, source: "rule" };
+      results.push(r);
+      sessionCache.set(ck, r);
       continue;
     }
 
     const kwMatch = matchKeyword(item.description, item.type);
     if (kwMatch) {
-      results.push({
-        id: item.id,
-        category: kwMatch.category,
-        confidence: kwMatch.confidence,
-        source: "keyword",
-      });
+      const r: CategorizationResult = { id: item.id, category: kwMatch.category, confidence: kwMatch.confidence, source: "keyword" };
+      results.push(r);
+      sessionCache.set(ck, r);
       continue;
     }
 
     needsAI.push(item);
   }
 
-  // Step 2: AI categorization for unmatched items (batched to avoid timeouts)
+  // Step 2: AI categorization — parallel batches with concurrency limit
   if (useAI && needsAI.length > 0) {
-    const BATCH_SIZE = 25;
+    const BATCH_SIZE = 40;
+    const MAX_CONCURRENT = 3;
+    const MAX_RETRIES = 3;
+    const BASE_DELAY = 1500;
     const batches: CategorizeInput[][] = [];
     for (let i = 0; i < needsAI.length; i += BATCH_SIZE) {
       batches.push(needsAI.slice(i, i + BATCH_SIZE));
     }
 
-    const aiResults: { id: string; category: string; confidence: number }[] = [];
+    let completedBatches = 0;
 
-    const MAX_RETRIES = 3;
-    const INTER_BATCH_DELAY = 2000; // ms between batches to avoid rate limits
-
-    for (let bIdx = 0; bIdx < batches.length; bIdx++) {
-      const batch = batches[bIdx];
-      let success = false;
-
-      for (let attempt = 0; attempt < MAX_RETRIES && !success; attempt++) {
+    async function processBatch(batch: CategorizeInput[]): Promise<{ id: string; category: string; confidence: number }[]> {
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
         try {
           const { data, error } = await supabase.functions.invoke("categorize", {
             body: {
-              descriptions: batch.map((t) => ({
-                id: t.id,
-                description: t.description,
-                type: t.type,
-              })),
+              descriptions: batch.map((t) => ({ id: t.id, description: t.description, type: t.type })),
             },
           });
 
-          if (error) {
-            const errMsg = typeof error === "object" && "message" in error ? (error as any).message : String(error);
-            if (errMsg.includes("429") || errMsg.includes("Rate limit")) {
-              const backoff = INTER_BATCH_DELAY * Math.pow(2, attempt);
-              console.warn(`Rate limited on batch ${bIdx + 1}, retrying in ${backoff}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
-              await new Promise((r) => setTimeout(r, backoff));
-              continue;
-            }
+          const errMsg = error ? (typeof error === "object" && "message" in error ? (error as any).message : String(error)) : "";
+          const isRateLimit = errMsg.includes("429") || errMsg.includes("Rate limit") || data?.error?.includes?.("Rate limit");
+
+          if (isRateLimit) {
+            await new Promise((r) => setTimeout(r, BASE_DELAY * Math.pow(2, attempt)));
+            continue;
           }
 
           if (!error && data?.results) {
-            aiResults.push(...data.results);
-            success = true;
-          } else if (data?.error?.includes?.("Rate limit")) {
-            const backoff = INTER_BATCH_DELAY * Math.pow(2, attempt);
-            console.warn(`Rate limited on batch ${bIdx + 1}, retrying in ${backoff}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
-            await new Promise((r) => setTimeout(r, backoff));
-          } else {
-            success = true; // non-retryable error, move on
+            completedBatches++;
+            onProgress?.(completedBatches, batches.length);
+            return data.results;
           }
+          return []; // non-retryable error
         } catch {
-          // Network error, retry with backoff
-          const backoff = INTER_BATCH_DELAY * Math.pow(2, attempt);
-          await new Promise((r) => setTimeout(r, backoff));
+          await new Promise((r) => setTimeout(r, BASE_DELAY * Math.pow(2, attempt)));
         }
       }
-
-      onProgress?.(bIdx + 1, batches.length);
-
-      // Delay between batches to stay under rate limits
-      if (bIdx < batches.length - 1) {
-        await new Promise((r) => setTimeout(r, INTER_BATCH_DELAY));
-      }
+      completedBatches++;
+      onProgress?.(completedBatches, batches.length);
+      return [];
     }
 
-    const aiIds = new Set(aiResults.map((r) => r.id));
-    for (const r of aiResults) {
+    // Run batches with concurrency limit
+    const allAIResults: { id: string; category: string; confidence: number }[] = [];
+    for (let i = 0; i < batches.length; i += MAX_CONCURRENT) {
+      const chunk = batches.slice(i, i + MAX_CONCURRENT);
+      const chunkResults = await Promise.all(chunk.map(processBatch));
+      allAIResults.push(...chunkResults.flat());
+    }
+
+    // Auto-learn high-confidence results
+    autoLearnFromAI(needsAI, allAIResults);
+
+    const aiIds = new Set(allAIResults.map((r) => r.id));
+    for (const r of allAIResults) {
       const item = needsAI.find((n) => n.id === r.id);
       if (item?.type === "expense" && !EXPENSE_CATEGORIES.includes(r.category as ExpenseCategory)) {
         r.category = "Other";
       }
-      results.push({
-        id: r.id,
-        category: r.category,
-        confidence: r.confidence,
-        source: "ai",
-      });
+      const result: CategorizationResult = { id: r.id, category: r.category, confidence: r.confidence, source: "ai" };
+      results.push(result);
+      if (item) sessionCache.set(cacheKey(item.description, item.type), result);
     }
 
-    // Fallback for any items not returned by AI
     for (const item of needsAI) {
       if (!aiIds.has(item.id)) {
-        results.push({
-          id: item.id,
-          category: "Other",
-          confidence: 0,
-          source: "keyword",
-        });
+        results.push({ id: item.id, category: "Other", confidence: 0, source: "keyword" });
       }
     }
   } else {
-    // No AI, fallback for remaining
     for (const item of needsAI) {
-      results.push({
-        id: item.id,
-        category: "Other",
-        confidence: 0,
-        source: "keyword",
-      });
+      results.push({ id: item.id, category: "Other", confidence: 0, source: "keyword" });
     }
   }
 
