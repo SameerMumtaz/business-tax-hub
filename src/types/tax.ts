@@ -51,6 +51,7 @@ export interface Contractor {
   tin: string;
   totalPaid: number;
   address: string;
+  payRate?: number;
 }
 
 export interface ProfitAndLoss {
