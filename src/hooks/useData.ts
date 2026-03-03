@@ -69,8 +69,12 @@ export function useBulkRemoveExpenses() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (ids: string[]) => {
-      const { error } = await supabase.from("expenses").delete().in("id", ids);
-      if (error) throw error;
+      const CHUNK = 200;
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const batch = ids.slice(i, i + CHUNK);
+        const { error } = await supabase.from("expenses").delete().in("id", batch);
+        if (error) throw error;
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["expenses"] }),
   });
@@ -158,8 +162,12 @@ export function useBulkRemoveSales() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (ids: string[]) => {
-      const { error } = await supabase.from("sales").delete().in("id", ids);
-      if (error) throw error;
+      const CHUNK = 200;
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const batch = ids.slice(i, i + CHUNK);
+        const { error } = await supabase.from("sales").delete().in("id", batch);
+        if (error) throw error;
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["sales"] }),
   });
