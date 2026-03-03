@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { ExpenseCategory } from "@/types/tax";
 import { useSales, useAddSale, useRemoveSale, useUpdateSale, useBulkRemoveSales, useExpenses } from "@/hooks/useData";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { useInvoices, useAddInvoice } from "@/hooks/useInvoices";
@@ -137,6 +138,13 @@ export default function useSalesLogic() {
       onSuccess: () => {
         toast.success("Category updated");
         setEditingCategoryId(null);
+
+        // Re-run audit with optimistic update so counts refresh immediately
+        if (auditResult) {
+          const updatedSales = sales.map(s => s.id === id ? { ...s, category: category as ExpenseCategory } : s);
+          setAuditResult(auditSales(updatedSales, expenses, matchedSaleIds));
+        }
+
         if (sale && user) {
           const updatedSales = sales.map(s => s.id === id ? { ...s, category } : s);
           const mapped = updatedSales.map(s => ({ id: s.id, vendor: s.client, category: s.category }));

@@ -128,6 +128,13 @@ export default function useExpensesLogic() {
       onSuccess: () => {
         toast.success("Category updated");
         setEditingCategoryId(null);
+
+        // Re-run audit with the optimistic update so counts refresh immediately
+        if (auditResult) {
+          const updatedExpenses = expenses.map(e => e.id === id ? { ...e, category: category as ExpenseCategory } : e);
+          setAuditResult(auditExpenses(updatedExpenses));
+        }
+
         // Check for pattern inference
         if (expense && user) {
           const updatedExpenses = expenses.map(e => e.id === id ? { ...e, category } : e);
