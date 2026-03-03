@@ -1,20 +1,22 @@
 import { useState, useCallback } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useTaxStore } from "@/store/taxStore";
-import { parseCSV, ParsedTransaction, autoCategorize } from "@/lib/csvParser";
+import { parseCSV, ParsedTransaction } from "@/lib/csvParser";
+import { categorizeTransactions } from "@/lib/categorize";
 import { formatCurrency, generateId } from "@/lib/format";
 import { EXPENSE_CATEGORIES, ExpenseCategory } from "@/types/tax";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, FileText, Landmark, Check, X, FileUp, ArrowRight } from "lucide-react";
+import { Upload, FileText, Landmark, Check, X, FileUp, ArrowRight, Sparkles, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface ReviewTransaction extends ParsedTransaction {
   id: string;
   category: ExpenseCategory;
   include: boolean;
+  catSource?: "rule" | "ai" | "keyword";
 }
 
 export default function ImportPage() {
@@ -22,6 +24,7 @@ export default function ImportPage() {
   const [transactions, setTransactions] = useState<ReviewTransaction[]>([]);
   const [step, setStep] = useState<"upload" | "review">("upload");
   const [dragOver, setDragOver] = useState(false);
+  const [categorizing, setCategorizing] = useState(false);
 
   const processFile = useCallback((file: File) => {
     if (!file.name.endsWith(".csv") && !file.name.endsWith(".tsv") && !file.name.endsWith(".txt")) {
@@ -30,7 +33,7 @@ export default function ImportPage() {
     }
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const text = e.target?.result as string;
       const parsed = parseCSV(text);
       if (parsed.length === 0) {
@@ -38,16 +41,41 @@ export default function ImportPage() {
         return;
       }
 
+      // Create initial review items with "Other" as placeholder
       const reviewed: ReviewTransaction[] = parsed.map((t) => ({
         ...t,
         id: generateId(),
-        category: t.type === "expense" ? autoCategorize(t.description) : "Other" as ExpenseCategory,
+        category: "Other" as ExpenseCategory,
         include: true,
       }));
 
       setTransactions(reviewed);
       setStep("review");
-      toast.success(`Found ${parsed.length} transactions`);
+      toast.success(`Found ${parsed.length} transactions — categorizing…`);
+
+      // Run categorization engine (rules + AI)
+      setCategorizing(true);
+      try {
+        const results = await categorizeTransactions(
+          reviewed.map((t) => ({ id: t.id, description: t.description, type: t.type }))
+        );
+        setTransactions((prev) =>
+          prev.map((t) => {
+            const match = results.find((r) => r.id === t.id);
+            if (match) {
+              return { ...t, category: match.category as ExpenseCategory, catSource: match.source };
+            }
+            return t;
+          })
+        );
+        const aiCount = results.filter((r) => r.source === "ai").length;
+        const ruleCount = results.filter((r) => r.source === "rule").length;
+        toast.success(`Categorized: ${ruleCount} by rules, ${aiCount} by AI`);
+      } catch {
+        toast.error("Categorization failed, defaulting to Other");
+      } finally {
+        setCategorizing(false);
+      }
     };
     reader.readAsText(file);
   }, []);
@@ -202,11 +230,18 @@ export default function ImportPage() {
                   <span className="font-mono text-chart-negative">{expenseCountN} ({formatCurrency(totalExpenseAmt)})</span>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
+                {categorizing && (
+                  <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    Categorizing…
+                  </span>
+                )}
                 <Button variant="outline" onClick={() => { setStep("upload"); setTransactions([]); }}>
                   Cancel
                 </Button>
-                <Button onClick={handleImport}>
+                <Button onClick={handleImport} disabled={categorizing}>
                   <ArrowRight className="h-4 w-4 mr-2" />Import {transactions.filter((t) => t.include).length} Transactions
                 </Button>
               </div>
