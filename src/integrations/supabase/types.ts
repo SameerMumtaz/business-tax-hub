@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_dismissals: {
+        Row: {
+          dismissed_at: string
+          id: string
+          issue_type: string
+          transaction_id: string
+          user_id: string
+        }
+        Insert: {
+          dismissed_at?: string
+          id?: string
+          issue_type: string
+          transaction_id: string
+          user_id: string
+        }
+        Update: {
+          dismissed_at?: string
+          id?: string
+          issue_type?: string
+          transaction_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       categorization_rules: {
         Row: {
           category: string

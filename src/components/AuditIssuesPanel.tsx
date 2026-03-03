@@ -3,27 +3,34 @@ import { AuditIssue, AuditResult } from "@/lib/audit";
 import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ShieldAlert, Ban, AlertTriangle, Info, Trash2, Eye, FileText, Zap } from "lucide-react";
+import { ShieldAlert, Ban, AlertTriangle, Info, Trash2, Eye, FileText, Zap, CheckCircle2 } from "lucide-react";
 
 interface AuditIssuesPanelProps {
   result: AuditResult;
   getItemLabel: (id: string) => { date: string; label: string; amount: number } | null;
   onDeleteItems?: (ids: string[]) => void;
   onSelectItems?: (ids: string[]) => void;
-  /** Called when user wants to create an invoice for a specific sale id */
   onCreateInvoice?: (saleId: string) => void;
-  /** Called when user wants to batch-create invoices for all unmatched sale ids */
   onBatchCreateInvoices?: (saleIds: string[]) => void;
+  /** Persistently dismiss transaction IDs for a given issue type */
+  onDismissItems?: (items: { transactionId: string; issueType: string }[]) => void;
 }
 
-export default function AuditIssuesPanel({ result, getItemLabel, onDeleteItems, onSelectItems, onCreateInvoice, onBatchCreateInvoices }: AuditIssuesPanelProps) {
-  const [dismissedIssues, setDismissedIssues] = useState<Set<number>>(new Set());
+export default function AuditIssuesPanel({ result, getItemLabel, onDeleteItems, onSelectItems, onCreateInvoice, onBatchCreateInvoices, onDismissItems }: AuditIssuesPanelProps) {
+  const [sessionDismissed, setSessionDismissed] = useState<Set<number>>(new Set());
 
-  const dismiss = (idx: number) => {
-    setDismissedIssues((prev) => new Set(prev).add(idx));
+  const dismissSession = (idx: number) => {
+    setSessionDismissed((prev) => new Set(prev).add(idx));
   };
 
-  const activeIssues = result.issues.filter((_, i) => !dismissedIssues.has(i));
+  const dismissPersistent = (issue: AuditIssue, idx: number) => {
+    if (onDismissItems && issue.affected_ids.length > 0) {
+      onDismissItems(issue.affected_ids.map((id) => ({ transactionId: id, issueType: issue.type })));
+    }
+    dismissSession(idx);
+  };
+
+  const activeIssues = result.issues.filter((_, i) => !sessionDismissed.has(i));
 
   if (result.issues.length === 0) {
     return (
@@ -58,7 +65,7 @@ export default function AuditIssuesPanel({ result, getItemLabel, onDeleteItems, 
 
       <div className="space-y-2">
         {result.issues.map((issue, idx) => {
-          if (dismissedIssues.has(idx)) return null;
+          if (sessionDismissed.has(idx)) return null;
           const SeverityIcon = issue.severity === "high" ? Ban
             : issue.severity === "medium" ? AlertTriangle : Info;
           const severityColor = issue.severity === "high" ? "text-destructive"
@@ -94,52 +101,38 @@ export default function AuditIssuesPanel({ result, getItemLabel, onDeleteItems, 
                   )}
                 </div>
                 <div className="flex gap-1 shrink-0 flex-wrap">
-                  {/* Batch create invoices button for missing_invoice issues */}
                   {issue.type === "missing_invoice" && onBatchCreateInvoices && issue.affected_ids.length > 1 && (
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="text-xs h-7"
-                      onClick={() => onBatchCreateInvoices(issue.affected_ids)}
-                    >
+                    <Button variant="default" size="sm" className="text-xs h-7" onClick={() => onBatchCreateInvoices(issue.affected_ids)}>
                       <Zap className="h-3 w-3 mr-1" /> Create All ({issue.affected_ids.length})
                     </Button>
                   )}
                   {onSelectItems && issue.affected_ids.length > 0 && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs h-7"
-                      onClick={() => onSelectItems(issue.affected_ids)}
-                    >
+                    <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => onSelectItems(issue.affected_ids)}>
                       <Eye className="h-3 w-3 mr-1" /> Select
                     </Button>
                   )}
                   {onDeleteItems && issue.affected_ids.length > 0 && (issue.suggestion === "delete" || issue.suggestion === "review") && (
                     <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs h-7 text-destructive"
-                      onClick={() => {
-                        onDeleteItems(issue.affected_ids);
-                        dismiss(idx);
-                      }}
+                      variant="outline" size="sm" className="text-xs h-7 text-destructive"
+                      onClick={() => { onDeleteItems(issue.affected_ids); dismissSession(idx); }}
                     >
                       <Trash2 className="h-3 w-3 mr-1" /> Remove
                     </Button>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-xs h-7"
-                    onClick={() => dismiss(idx)}
-                  >
+                  {onDismissItems && issue.affected_ids.length > 0 && (
+                    <Button
+                      variant="outline" size="sm" className="text-xs h-7"
+                      onClick={() => dismissPersistent(issue, idx)}
+                    >
+                      <CheckCircle2 className="h-3 w-3 mr-1" /> Not an Issue
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => dismissSession(idx)}>
                     Dismiss
                   </Button>
                 </div>
               </div>
 
-              {/* Affected items */}
               {issue.affected_ids.length > 0 && (
                 <div className="ml-7 space-y-1">
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">

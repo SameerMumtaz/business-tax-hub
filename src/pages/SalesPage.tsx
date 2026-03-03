@@ -24,11 +24,13 @@ import { Plus, Trash2, ArrowDownLeft, ArrowUpRight, Activity, Wallet, ArrowUpDow
 import { toast } from "sonner";
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { auditSales } from "@/lib/audit";
+import { useAuditDismissals } from "@/hooks/useAuditDismissals";
 import { applyRulesToUncategorized } from "@/lib/categorize";
 
 export default function SalesPage() {
   const queryClient = useQueryClient();
   const logic = useSalesLogic();
+  const { dismissedSet, dismiss: dismissAudit } = useAuditDismissals();
   const {
     sales, sorted, paginatedRows, totalPages, currentPage, setCurrentPage, totalSales,
     open, setOpen, form, setForm, handleAdd, addSale,
@@ -111,16 +113,17 @@ export default function SalesPage() {
                   await queryClient.refetchQueries({ queryKey: ["sales", user.id] });
                 }
                 const freshSales = queryClient.getQueryData<typeof sales>(["sales", user?.id]) || sales;
-                setAuditResult(auditSales(freshSales, expenses, matchedSaleIds));
+                setAuditResult(auditSales(freshSales, expenses, matchedSaleIds, dismissedSet));
               }}><ShieldAlert className="h-4 w-4 mr-2" />Quick Audit</Button>
             </div>
 
             {auditResult && (
               <AuditIssuesPanel result={auditResult} getItemLabel={(id) => { const s = sales.find((x) => x.id === id); if (!s) return null; return { date: s.date, label: `${s.client} — ${s.description}`, amount: s.amount }; }}
-                onDeleteItems={(ids) => { logic.bulkRemove.mutate(ids, { onSuccess: () => { toast.success(`Deleted ${ids.length} sale(s)`); logic.setAuditResult(auditSales(sales.filter((s) => !ids.includes(s.id)), logic.expenses, logic.matchedSaleIds)); } }); }}
+                onDeleteItems={(ids) => { logic.bulkRemove.mutate(ids, { onSuccess: () => { toast.success(`Deleted ${ids.length} sale(s)`); logic.setAuditResult(auditSales(sales.filter((s) => !ids.includes(s.id)), logic.expenses, logic.matchedSaleIds, dismissedSet)); } }); }}
                 onSelectItems={(ids) => { logic.selectItems(ids); toast.info(`Selected ${ids.length} item(s)`); }}
                 onCreateInvoice={handleInlineCreateInvoice}
                 onBatchCreateInvoices={(ids) => handleBatchCreateInvoices(ids)}
+                onDismissItems={(items) => { dismissAudit.mutate(items, { onSuccess: () => toast.success("Marked as non-issue — won't appear in future audits") }); }}
               />
             )}
 
