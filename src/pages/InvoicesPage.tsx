@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useInvoices, useAddInvoice, useUpdateInvoiceStatus, useDeleteInvoice, useMatchInvoiceToSale, useGenerateRecurringInvoice, Invoice } from "@/hooks/useInvoices";
 import { useClients } from "@/hooks/useClients";
-import { useSales } from "@/hooks/useData";
+import { useSales, useProfile } from "@/hooks/useData";
 import { formatCurrency } from "@/lib/format";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ export default function InvoicesPage() {
   const { data: invoices = [] } = useInvoices();
   const { data: sales = [] } = useSales();
   const { data: clients = [] } = useClients();
+  const { data: profile } = useProfile();
   const addInvoice = useAddInvoice();
   const updateStatus = useUpdateInvoiceStatus();
   const deleteInvoice = useDeleteInvoice();
@@ -48,7 +49,7 @@ export default function InvoicesPage() {
     issue_date: new Date().toISOString().slice(0, 10),
     due_date: "",
     notes: "",
-    tax_rate: "0",
+    tax_rate: String((profile as any)?.default_tax_rate ?? "0"),
     is_recurring: false,
     recurring_interval: "monthly",
     recurring_end_date: "",
@@ -136,7 +137,7 @@ export default function InvoicesPage() {
       })),
     }, {
       onSuccess: () => {
-        setForm({ invoice_number: "", client_name: "", client_email: "", client_id: "", issue_date: new Date().toISOString().slice(0, 10), due_date: "", notes: "", tax_rate: "0", is_recurring: false, recurring_interval: "monthly", recurring_end_date: "", line_items: [{ description: "", quantity: "1", unit_price: "" }] });
+        setForm({ invoice_number: "", client_name: "", client_email: "", client_id: "", issue_date: new Date().toISOString().slice(0, 10), due_date: "", notes: "", tax_rate: String((profile as any)?.default_tax_rate ?? "0"), is_recurring: false, recurring_interval: "monthly", recurring_end_date: "", line_items: [{ description: "", quantity: "1", unit_price: "" }] });
         setCreateOpen(false);
         setPrefillSaleId(null);
         toast.success(prefillSaleId ? "Invoice created & matched to sale" : "Invoice created");

@@ -331,7 +331,7 @@ export default function useImportLogic() {
       setImportStatus(`Importing ${i + 1} of ${included.length}…`);
       try {
         if (t.type === "expense") { await addExpenseMutation.mutateAsync({ date: t.date, vendor: t.description, description: t.originalDescription, amount: t.amount, category: t.category }); expenseCount++; }
-        else { await addSaleMutation.mutateAsync({ date: t.date, client: t.description, description: t.originalDescription, amount: t.amount, invoiceNumber: `IMP-${Date.now().toString().slice(-4)}`, category: t.category || "Other" }); saleCount++; }
+        else { await addSaleMutation.mutateAsync({ date: t.date, client: t.description, description: t.originalDescription, amount: t.amount, invoiceNumber: `IMP-${Date.now().toString().slice(-4)}`, category: t.category || "Other", taxCollected: 0 }); saleCount++; }
       } catch { errorCount++; }
     }
     setImporting(false); setImportProgress(0); setImportStatus("");

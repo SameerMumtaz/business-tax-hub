@@ -68,6 +68,7 @@ export interface Sale {
   amount: number;
   invoiceNumber: string;
   category: ExpenseCategory;
+  taxCollected: number;
 }
 
 export interface Contractor {

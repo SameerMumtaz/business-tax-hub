@@ -98,7 +98,7 @@ export default function useSalesLogic() {
 
   const handleAdd = () => {
     if (!form.date || !form.client || !form.amount) { toast.error("Please fill required fields"); return; }
-    addSale.mutate({ date: form.date, client: form.client, description: form.description, amount: parseFloat(form.amount), invoiceNumber: form.invoiceNumber || `INV-${Date.now().toString().slice(-4)}`, category: "Other" }, {
+    addSale.mutate({ date: form.date, client: form.client, description: form.description, amount: parseFloat(form.amount), invoiceNumber: form.invoiceNumber || `INV-${Date.now().toString().slice(-4)}`, category: "Other", taxCollected: 0 }, {
       onSuccess: () => { setForm({ date: "", client: "", description: "", amount: "", invoiceNumber: "" }); setOpen(false); toast.success("Sale added"); },
       onError: () => toast.error("Failed to add sale"),
     });
