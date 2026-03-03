@@ -12,9 +12,9 @@ export default function ResetPasswordPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check for recovery token in URL hash
+    // Check for recovery or invite token in URL hash
     const hash = window.location.hash;
-    if (!hash.includes("type=recovery")) {
+    if (!hash.includes("type=recovery") && !hash.includes("type=invite")) {
       toast.error("Invalid reset link");
       navigate("/auth");
     }
@@ -45,7 +45,7 @@ export default function ResetPasswordPage() {
             <Receipt className="h-8 w-8 text-primary" />
             <span className="text-2xl font-bold tracking-tight">Bookie</span>
           </div>
-          <p className="text-muted-foreground text-sm">Set your new password</p>
+          <p className="text-muted-foreground text-sm">Set your account password</p>
         </div>
         <form onSubmit={handleReset} className="space-y-4">
           <Input

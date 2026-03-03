@@ -106,9 +106,9 @@ export default function MembersContent() {
           pay_rate: parseFloat(invitePayRate) || 0,
           address: inviteAddress.trim() || null,
           state_employed: inviteState.trim() || null,
+          redirect_to: `${window.location.origin}/reset-password`,
         },
       });
-      if (res.error) throw res.error;
       const resData = res.data as any;
       if (resData?.error) { toast.error(resData.error); return; }
       toast.success(`Invitation sent to ${inviteEmail}`);
@@ -221,9 +221,9 @@ export default function MembersContent() {
           business_user_id: user.id, worker_type: member.worker_type,
           pay_rate: member.pay_rate,
           resend: true,
+          redirect_to: `${window.location.origin}/reset-password`,
         },
       });
-      if (res.error) throw res.error;
       const resData = res.data as any;
       if (resData?.error) { toast.error(resData.error); return; }
       toast.success(`Invite resent to ${member.email}`);
