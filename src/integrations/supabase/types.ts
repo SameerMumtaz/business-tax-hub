@@ -386,6 +386,7 @@ export type Database = {
       sales: {
         Row: {
           amount: number
+          category: string
           client: string
           created_at: string
           date: string
@@ -396,6 +397,7 @@ export type Database = {
         }
         Insert: {
           amount?: number
+          category?: string
           client: string
           created_at?: string
           date: string
@@ -406,6 +408,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          category?: string
           client?: string
           created_at?: string
           date?: string

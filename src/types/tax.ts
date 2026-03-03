@@ -43,6 +43,7 @@ export interface Sale {
   description: string;
   amount: number;
   invoiceNumber: string;
+  category: ExpenseCategory;
 }
 
 export interface Contractor {
