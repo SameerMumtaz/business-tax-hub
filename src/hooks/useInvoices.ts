@@ -29,6 +29,11 @@ export interface Invoice {
   share_token: string | null;
   matched_sale_id: string | null;
   client_id: string | null;
+  is_recurring: boolean;
+  recurring_interval: string | null;
+  recurring_next_date: string | null;
+  recurring_end_date: string | null;
+  recurring_parent_id: string | null;
   created_at: string;
   updated_at: string;
   line_items?: InvoiceLineItem[];
@@ -77,6 +82,10 @@ export function useAddInvoice() {
       due_date?: string;
       notes?: string;
       tax_rate?: number;
+      is_recurring?: boolean;
+      recurring_interval?: string;
+      recurring_next_date?: string;
+      recurring_end_date?: string;
       line_items: { description: string; quantity: number; unit_price: number }[];
     }) => {
       const subtotal = input.line_items.reduce((s, li) => s + li.quantity * li.unit_price, 0);
@@ -99,6 +108,10 @@ export function useAddInvoice() {
           subtotal,
           tax_amount: taxAmount,
           total,
+          is_recurring: input.is_recurring || false,
+          recurring_interval: input.is_recurring ? (input.recurring_interval || null) : null,
+          recurring_next_date: input.is_recurring ? (input.recurring_next_date || null) : null,
+          recurring_end_date: input.is_recurring ? (input.recurring_end_date || null) : null,
         })
         .select()
         .single();
@@ -155,6 +168,85 @@ export function useDeleteInvoice() {
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("invoices").delete().eq("id", id);
       if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
+  });
+}
+
+export function useGenerateRecurringInvoice() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (parentInvoice: Invoice) => {
+      if (!parentInvoice.is_recurring || !parentInvoice.recurring_interval) throw new Error("Not a recurring invoice");
+
+      const nextDate = parentInvoice.recurring_next_date || parentInvoice.issue_date;
+      const interval = parentInvoice.recurring_interval;
+
+      // Calculate new next date
+      const d = new Date(nextDate);
+      switch (interval) {
+        case "weekly": d.setDate(d.getDate() + 7); break;
+        case "monthly": d.setMonth(d.getMonth() + 1); break;
+        case "quarterly": d.setMonth(d.getMonth() + 3); break;
+        case "yearly": d.setFullYear(d.getFullYear() + 1); break;
+      }
+      const newNextDate = d.toISOString().slice(0, 10);
+
+      // Calculate due date offset
+      let dueDateStr: string | null = null;
+      if (parentInvoice.due_date && parentInvoice.issue_date) {
+        const origDiff = new Date(parentInvoice.due_date).getTime() - new Date(parentInvoice.issue_date).getTime();
+        const dueD = new Date(nextDate);
+        dueD.setTime(new Date(nextDate).getTime() + origDiff);
+        dueDateStr = dueD.toISOString().slice(0, 10);
+      }
+
+      // Create the new invoice
+      const { data, error } = await supabase
+        .from("invoices")
+        .insert({
+          user_id: user!.id,
+          invoice_number: `${parentInvoice.invoice_number}-${nextDate}`,
+          client_name: parentInvoice.client_name,
+          client_email: parentInvoice.client_email,
+          client_id: parentInvoice.client_id,
+          issue_date: nextDate,
+          due_date: dueDateStr,
+          notes: parentInvoice.notes,
+          tax_rate: parentInvoice.tax_rate,
+          subtotal: parentInvoice.subtotal,
+          tax_amount: parentInvoice.tax_amount,
+          total: parentInvoice.total,
+          recurring_parent_id: parentInvoice.id,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+
+      // Copy line items
+      if (parentInvoice.line_items && parentInvoice.line_items.length > 0) {
+        const { error: liError } = await supabase
+          .from("invoice_line_items")
+          .insert(parentInvoice.line_items.map((li, i) => ({
+            invoice_id: data.id,
+            description: li.description,
+            quantity: li.quantity,
+            unit_price: li.unit_price,
+            amount: li.amount,
+            sort_order: i,
+          })));
+        if (liError) throw liError;
+      }
+
+      // Update parent's next date (or stop if past end date)
+      const updateData: Record<string, unknown> = { recurring_next_date: newNextDate };
+      if (parentInvoice.recurring_end_date && newNextDate > parentInvoice.recurring_end_date) {
+        updateData.is_recurring = false;
+      }
+      await supabase.from("invoices").update(updateData).eq("id", parentInvoice.id);
+
+      return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
   });
