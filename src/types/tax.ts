@@ -21,6 +21,7 @@ export type ExpenseCategory =
   | "Education & Training"
   | "Commissions & Fees"
   | "Home Office"
+  | "Partner Distribution"
   | "Other";
 
 export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
@@ -46,6 +47,7 @@ export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   "Education & Training",
   "Commissions & Fees",
   "Home Office",
+  "Partner Distribution",
   "Other",
 ];
 
