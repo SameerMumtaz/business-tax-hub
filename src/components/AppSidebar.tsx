@@ -22,6 +22,7 @@ import {
   FileBarChart,
   Percent,
   Home,
+  Car,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -57,10 +58,11 @@ const links: NavItem[] = [
   },
   {
     to: "/expenses", label: "Money Out", icon: TrendingDown,
-    matchPaths: ["/expenses"],
+    matchPaths: ["/expenses", "/vehicles"],
     children: [
       { to: "/expenses", label: "Overview", icon: TrendingDown },
       { to: "/expenses?tab=trends", label: "Spending Trends", icon: AlertTriangle },
+      { to: "/vehicles", label: "Vehicles", icon: Car },
     ],
   },
   {

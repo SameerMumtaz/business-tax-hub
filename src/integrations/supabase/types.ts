@@ -1113,6 +1113,146 @@ export type Database = {
         }
         Relationships: []
       }
+      vehicle_expenses: {
+        Row: {
+          created_at: string
+          expense_id: string
+          id: string
+          vehicle_id: string
+        }
+        Insert: {
+          created_at?: string
+          expense_id: string
+          id?: string
+          vehicle_id: string
+        }
+        Update: {
+          created_at?: string
+          expense_id?: string
+          id?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_expenses_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_expenses_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_payments: {
+        Row: {
+          amount_paid: number
+          created_at: string
+          date_paid: string
+          id: string
+          interest_portion: number
+          notes: string | null
+          payment_number: number
+          principal_portion: number
+          user_id: string
+          vehicle_id: string
+        }
+        Insert: {
+          amount_paid?: number
+          created_at?: string
+          date_paid: string
+          id?: string
+          interest_portion?: number
+          notes?: string | null
+          payment_number?: number
+          principal_portion?: number
+          user_id: string
+          vehicle_id: string
+        }
+        Update: {
+          amount_paid?: number
+          created_at?: string
+          date_paid?: string
+          id?: string
+          interest_portion?: number
+          notes?: string | null
+          payment_number?: number
+          principal_portion?: number
+          user_id?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_payments_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicles: {
+        Row: {
+          created_at: string
+          id: string
+          interest_rate: number
+          loan_amount: number
+          loan_start_date: string | null
+          loan_term_months: number
+          make: string | null
+          model: string | null
+          monthly_payment: number
+          name: string
+          notes: string | null
+          purchase_price: number
+          status: string
+          user_id: string
+          vin_last6: string | null
+          year: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          interest_rate?: number
+          loan_amount?: number
+          loan_start_date?: string | null
+          loan_term_months?: number
+          make?: string | null
+          model?: string | null
+          monthly_payment?: number
+          name: string
+          notes?: string | null
+          purchase_price?: number
+          status?: string
+          user_id: string
+          vin_last6?: string | null
+          year?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          interest_rate?: number
+          loan_amount?: number
+          loan_start_date?: string | null
+          loan_term_months?: number
+          make?: string | null
+          model?: string | null
+          monthly_payment?: number
+          name?: string
+          notes?: string | null
+          purchase_price?: number
+          status?: string
+          user_id?: string
+          vin_last6?: string | null
+          year?: number | null
+        }
+        Relationships: []
+      }
       w2_income: {
         Row: {
           created_at: string
