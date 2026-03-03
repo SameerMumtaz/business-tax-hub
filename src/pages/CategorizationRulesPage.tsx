@@ -128,13 +128,12 @@ export default function CategorizationRulesPage() {
         <div className="stat-card flex items-start gap-4">
           <Sparkles className="h-5 w-5 text-primary mt-0.5 shrink-0" />
           <div className="text-sm space-y-1">
-            <p className="font-medium">How categorization works</p>
+           <p className="font-medium">How categorization works</p>
             <p className="text-muted-foreground">
-              When you import transactions, they're categorized in this order:{" "}
-              <strong>Custom rules</strong> (highest priority) →{" "}
-              <strong>AI categorization</strong> →{" "}
-              <strong>Fallback to "Other"</strong>.
-              User-created rules (priority 10) always override defaults (priority 0).
+              Transactions are matched using a <strong>built-in keyword database</strong> of 500+ vendor patterns
+              (e.g. "amazon" → Product Sales, "uber" → Travel) with confidence scores up to <strong>0.85</strong> based
+              on match quality. <strong>Your custom rules always take priority</strong> over built-in keywords.
+              Anything unmatched falls back to <strong>"Other"</strong> for you to recategorize manually.
             </p>
           </div>
         </div>
