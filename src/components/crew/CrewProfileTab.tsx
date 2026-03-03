@@ -1,0 +1,135 @@
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Save, UserCircle } from "lucide-react";
+import { toast } from "sonner";
+
+interface PersonalFields {
+  first_name: string;
+  last_name: string;
+  personal_address: string;
+  personal_city: string;
+  personal_state: string;
+  personal_zip: string;
+  ssn_last4: string;
+}
+
+const empty: PersonalFields = {
+  first_name: "",
+  last_name: "",
+  personal_address: "",
+  personal_city: "",
+  personal_state: "",
+  personal_zip: "",
+  ssn_last4: "",
+};
+
+export default function CrewProfileTab() {
+  const { user } = useAuth();
+  const [profile, setProfile] = useState<PersonalFields>(empty);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("first_name, last_name, personal_address, personal_city, personal_state, personal_zip, ssn_last4")
+        .eq("user_id", user.id)
+        .single();
+      if (data) {
+        setProfile({
+          first_name: data.first_name || "",
+          last_name: data.last_name || "",
+          personal_address: data.personal_address || "",
+          personal_city: data.personal_city || "",
+          personal_state: data.personal_state || "",
+          personal_zip: data.personal_zip || "",
+          ssn_last4: data.ssn_last4 || "",
+        });
+      }
+      setLoading(false);
+    })();
+  }, [user]);
+
+  const handleSave = async () => {
+    if (!user) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from("profiles")
+      .update(profile)
+      .eq("user_id", user.id);
+    setSaving(false);
+    if (error) {
+      toast.error("Failed to save profile");
+    } else {
+      toast.success("Profile saved");
+    }
+  };
+
+  const set = (key: keyof PersonalFields, value: string) =>
+    setProfile((p) => ({ ...p, [key]: value }));
+
+  if (loading) {
+    return <div className="text-center py-8 text-muted-foreground">Loading…</div>;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <UserCircle className="h-5 w-5" /> My Info
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>First Name</Label>
+            <Input value={profile.first_name} onChange={(e) => set("first_name", e.target.value)} />
+          </div>
+          <div>
+            <Label>Last Name</Label>
+            <Input value={profile.last_name} onChange={(e) => set("last_name", e.target.value)} />
+          </div>
+        </div>
+        <div>
+          <Label>Street Address</Label>
+          <Input value={profile.personal_address} onChange={(e) => set("personal_address", e.target.value)} />
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <Label>City</Label>
+            <Input value={profile.personal_city} onChange={(e) => set("personal_city", e.target.value)} />
+          </div>
+          <div>
+            <Label>State</Label>
+            <Input value={profile.personal_state} onChange={(e) => set("personal_state", e.target.value)} placeholder="TX" maxLength={2} />
+          </div>
+          <div>
+            <Label>ZIP</Label>
+            <Input value={profile.personal_zip} onChange={(e) => set("personal_zip", e.target.value)} maxLength={10} />
+          </div>
+        </div>
+        <div className="max-w-[200px]">
+          <Label>SSN (last 4 only)</Label>
+          <Input
+            value={profile.ssn_last4}
+            onChange={(e) => set("ssn_last4", e.target.value.replace(/\D/g, "").slice(0, 4))}
+            maxLength={4}
+            placeholder="••••"
+          />
+          <p className="text-xs text-muted-foreground mt-1">Only last 4 digits stored</p>
+        </div>
+        <Button onClick={handleSave} disabled={saving} className="w-full gap-2">
+          <Save className="h-4 w-4" />
+          {saving ? "Saving…" : "Save Profile"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}

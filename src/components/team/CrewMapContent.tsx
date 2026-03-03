@@ -38,12 +38,19 @@ export default function CrewMapContent() {
   const filtered = filterSite === "all" ? activeCheckins : activeCheckins.filter((c) => c.job_site_id === filterSite);
 
   const exportCSV = () => {
-    const headers = ["Name", "Site", "Check In Time", "Lat", "Lng", "Status"];
+    const headers = ["Name", "Site", "Check In Time", "Check Out Time", "Total Hours", "Check In Lat", "Check In Lng", "Check Out Lat", "Check Out Lng", "Status"];
     const rows = checkins.map((c) => {
       const member = memberMap.get(c.team_member_id);
       const site = c.job_site_id ? siteMap.get(c.job_site_id) : null;
-      return [member?.name || "Unknown", site?.name || "—", new Date(c.check_in_time).toLocaleString(),
-        c.check_in_lat?.toString() || "", c.check_in_lng?.toString() || "", c.status].join(",");
+      return [
+        member?.name || "Unknown", site?.name || "—",
+        new Date(c.check_in_time).toLocaleString(),
+        c.check_out_time ? new Date(c.check_out_time).toLocaleString() : "",
+        c.total_hours?.toString() || "0",
+        c.check_in_lat?.toString() || "", c.check_in_lng?.toString() || "",
+        c.check_out_lat?.toString() || "", c.check_out_lng?.toString() || "",
+        c.status,
+      ].join(",");
     });
     const csv = [headers.join(","), ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
