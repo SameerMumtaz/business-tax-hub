@@ -1,13 +1,16 @@
-import { useExpenses, useSales, useContractors } from "@/hooks/useData";
+import { useExpenses, useSales, useContractors, useProfile } from "@/hooks/useData";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { formatCurrency } from "@/lib/format";
 import StatCard from "@/components/StatCard";
 import DashboardLayout from "@/components/DashboardLayout";
 import DateRangeFilter from "@/components/DateRangeFilter";
 import ExportButton from "@/components/ExportButton";
+import SmartAlerts from "@/components/SmartAlerts";
+import OnboardingWizard from "@/components/OnboardingWizard";
+import HelpTooltip from "@/components/HelpTooltip";
 import { TrendingUp, TrendingDown, DollarSign, Users } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 const COLORS = [
   "hsl(160, 84%, 39%)",
@@ -24,10 +27,22 @@ export default function DashboardPage() {
   const { data: allExpenses = [] } = useExpenses();
   const { data: allSales = [] } = useSales();
   const { data: contractors = [] } = useContractors();
+  const { data: profile } = useProfile();
   const { filterByDate } = useDateRange();
+  const [showOnboarding, setShowOnboarding] = useState(true);
 
   const expenses = useMemo(() => filterByDate(allExpenses), [allExpenses, filterByDate]);
   const sales = useMemo(() => filterByDate(allSales), [allSales, filterByDate]);
+
+  // Determine onboarding steps completed
+  const completedSteps = useMemo(() => {
+    const steps = new Set<string>();
+    if (profile?.business_name) steps.add("profile");
+    if (allExpenses.length > 0 || allSales.length > 0) steps.add("import");
+    const uncategorized = allExpenses.filter((e) => e.category === "Other" || !e.category);
+    if (allExpenses.length > 0 && uncategorized.length < allExpenses.length * 0.5) steps.add("categorize");
+    return steps;
+  }, [profile, allExpenses, allSales]);
 
   const totalRevenue = sales.reduce((sum, s) => sum + s.amount, 0);
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
@@ -62,7 +77,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-            <p className="text-muted-foreground text-sm mt-1">Your business tax overview</p>
+            <p className="text-muted-foreground text-sm mt-1">Here's how your business is doing</p>
           </div>
           <div className="flex items-center gap-2">
             <DateRangeFilter />
@@ -79,11 +94,19 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Onboarding wizard for new users */}
+        {showOnboarding && completedSteps.size < 3 && (
+          <OnboardingWizard completedSteps={completedSteps} onDismiss={() => setShowOnboarding(false)} />
+        )}
+
+        {/* Smart action items */}
+        <SmartAlerts />
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Total Revenue" value={totalRevenue} icon={TrendingUp} variant="positive" trend={`${sales.length} invoices`} />
+          <StatCard title="Total Revenue" value={totalRevenue} icon={TrendingUp} variant="positive" trend={`${sales.length} transactions`} />
           <StatCard title="Total Expenses" value={totalExpenses} icon={TrendingDown} variant="negative" trend={`${expenses.length} transactions`} />
-          <StatCard title="Net Income" value={netIncome} icon={DollarSign} variant={netIncome >= 0 ? "positive" : "negative"} />
-          <StatCard title="1099 Contractors" value={contractors.reduce((s, c) => s + c.totalPaid, 0)} icon={Users} trend={`${contractors.length} contractors`} />
+          <StatCard title="Net Profit" value={netIncome} icon={DollarSign} variant={netIncome >= 0 ? "positive" : "negative"} />
+          <StatCard title="Contractor Payments" value={contractors.reduce((s, c) => s + c.totalPaid, 0)} icon={Users} trend={`${contractors.length} contractors`} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

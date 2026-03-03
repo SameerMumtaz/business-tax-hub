@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, CheckCircle2, Clock, Trash2 } from "lucide-react";
+import { Plus, CheckCircle2, Clock, Trash2, Scale } from "lucide-react";
 import { toast } from "sonner";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -109,8 +109,8 @@ export default function ReconciliationPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Bank Reconciliation</h1>
-            <p className="text-muted-foreground text-sm mt-1">Compare your records against bank statements to prevent double-imports.</p>
+            <h1 className="text-2xl font-bold tracking-tight">Match Transactions</h1>
+            <p className="text-muted-foreground text-sm mt-1">Compare your records against bank statements to make sure nothing's missing.</p>
           </div>
           <Button onClick={() => setShowForm(!showForm)}>
             <Plus className="h-4 w-4 mr-2" />New Period
@@ -191,7 +191,19 @@ export default function ReconciliationPage() {
                   </TableRow>
                 ))}
                 {periods.length === 0 && (
-                  <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No reconciliation periods yet.</TableCell></TableRow>
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-12">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="rounded-full bg-muted p-3">
+                          <Scale className="h-6 w-6 text-muted-foreground" />
+                        </div>
+                        <p className="font-medium">No reconciliation periods yet</p>
+                        <p className="text-sm text-muted-foreground max-w-sm">
+                          Match your bank statement to your records to make sure everything adds up. Click "New Period" to start.
+                        </p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 )}
               </TableBody>
             </Table>

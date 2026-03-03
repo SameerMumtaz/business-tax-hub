@@ -43,45 +43,45 @@ interface NavItem {
 const links: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/import", label: "Import", icon: Upload },
-  { to: "/categorization", label: "Rules", icon: Tag },
+  { to: "/categorization", label: "Auto-Sort Rules", icon: Tag },
   {
-    to: "/sales", label: "Sales", icon: TrendingUp,
+    to: "/sales", label: "Money In", icon: TrendingUp,
     matchPaths: ["/sales", "/invoices", "/clients", "/aging"],
     children: [
       { to: "/sales", label: "Overview", icon: TrendingUp },
       { to: "/invoices", label: "Invoices", icon: FileText },
       { to: "/clients", label: "Clients", icon: UserCircle },
-      { to: "/aging", label: "A/R Aging", icon: Clock },
+      { to: "/aging", label: "Unpaid Invoices", icon: Clock },
     ],
   },
   {
-    to: "/expenses", label: "Expenses", icon: TrendingDown,
+    to: "/expenses", label: "Money Out", icon: TrendingDown,
     matchPaths: ["/expenses"],
     children: [
       { to: "/expenses", label: "Overview", icon: TrendingDown },
-      { to: "/expenses?tab=trends", label: "Trends & Alerts", icon: AlertTriangle },
+      { to: "/expenses?tab=trends", label: "Spending Trends", icon: AlertTriangle },
     ],
   },
   {
     to: "/profit-loss", label: "Reports", icon: BarChart3,
     matchPaths: ["/profit-loss", "/reconciliation"],
     children: [
-      { to: "/profit-loss", label: "Profit & Loss", icon: DollarSign },
-      { to: "/profit-loss?tab=compare", label: "P&L Compare", icon: FileBarChart },
-      { to: "/reconciliation", label: "Reconciliation", icon: Scale },
+      { to: "/profit-loss", label: "Income vs Expenses", icon: DollarSign },
+      { to: "/profit-loss?tab=compare", label: "Compare Periods", icon: FileBarChart },
+      { to: "/reconciliation", label: "Match Transactions", icon: Scale },
     ],
   },
   {
-    to: "/tax-center", label: "Tax Center", icon: Calculator,
+    to: "/tax-center", label: "Taxes", icon: Calculator,
     matchPaths: ["/tax-center"],
     children: [
-      { to: "/tax-center", label: "Estimates", icon: Calculator },
+      { to: "/tax-center", label: "Tax Estimates", icon: Calculator },
       { to: "/tax-center?tab=deductions", label: "Deductions", icon: Percent },
-      { to: "/tax-center?tab=schedule-c", label: "Schedule C", icon: Home },
+      { to: "/tax-center?tab=schedule-c", label: "Tax Form Preview", icon: Home },
     ],
   },
-  { to: "/1099", label: "Employees/Contractors", icon: Users },
-  { to: "/profile", label: "Company Profile", icon: Building2 },
+  { to: "/1099", label: "Team & Contractors", icon: Users },
+  { to: "/profile", label: "Business Info", icon: Building2 },
 ];
 
 export default function AppSidebar() {
@@ -138,7 +138,7 @@ export default function AppSidebar() {
             Bookie
           </span>
         </div>
-        <p className="text-xs text-sidebar-foreground mt-1">Business Tax Filing</p>
+        <p className="text-xs text-sidebar-foreground mt-1">Your money, simplified</p>
       </div>
 
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
