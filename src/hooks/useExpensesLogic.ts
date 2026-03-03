@@ -102,7 +102,18 @@ export default function useExpensesLogic() {
 
   const handleBulkDelete = () => {
     if (selected.size === 0) return;
-    bulkRemove.mutate([...selected], { onSuccess: () => { toast.success(`Deleted ${selected.size} expense(s)`); setSelected(new Set()); }, onError: () => toast.error("Failed to delete") });
+    const deletedIds = new Set(selected);
+    bulkRemove.mutate([...selected], {
+      onSuccess: () => {
+        toast.success(`Deleted ${selected.size} expense(s)`);
+        setSelected(new Set());
+        if (auditResult) {
+          const remaining = expenses.filter(e => !deletedIds.has(e.id));
+          setAuditResult(auditExpenses(remaining));
+        }
+      },
+      onError: () => toast.error("Failed to delete"),
+    });
   };
 
   const handleBulkCategoryChange = (category: string) => {
@@ -110,8 +121,12 @@ export default function useExpensesLogic() {
     bulkUpdateCategory.mutate({ ids: [...selected], category }, {
       onSuccess: () => {
         toast.success(`Updated ${selected.size} expense(s)`);
+        const updatedExpenses = expenses.map(e => selected.has(e.id) ? { ...e, category: category as ExpenseCategory } : e);
+        // Re-run audit so fixed transactions disappear from issues
+        if (auditResult) {
+          setAuditResult(auditExpenses(updatedExpenses));
+        }
         // Check for pattern inference after bulk change
-        const updatedExpenses = expenses.map(e => selected.has(e.id) ? { ...e, category } : e);
         const firstSelected = expenses.find(e => selected.has(e.id));
         if (firstSelected && user) {
           checkForPatternAfterCategoryChange(firstSelected.vendor, category, updatedExpenses, "expense", user.id);

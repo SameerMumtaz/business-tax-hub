@@ -129,7 +129,18 @@ export default function useSalesLogic() {
 
   const handleBulkDelete = () => {
     if (selected.size === 0) return;
-    bulkRemove.mutate([...selected], { onSuccess: () => { toast.success(`Deleted ${selected.size} sale(s)`); setSelected(new Set()); }, onError: () => toast.error("Failed to delete") });
+    const deletedIds = new Set(selected);
+    bulkRemove.mutate([...selected], {
+      onSuccess: () => {
+        toast.success(`Deleted ${selected.size} sale(s)`);
+        setSelected(new Set());
+        if (auditResult) {
+          const remaining = sales.filter(s => !deletedIds.has(s.id));
+          setAuditResult(auditSales(remaining, expenses, matchedSaleIds));
+        }
+      },
+      onError: () => toast.error("Failed to delete"),
+    });
   };
 
   const handleSingleCategoryChange = (id: string, category: string) => {
