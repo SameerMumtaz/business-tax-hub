@@ -15,10 +15,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ReceiptUploadButton from "@/components/ReceiptUploadButton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import { Plus, Trash2, Filter, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Tag, Pencil, Search, ShieldAlert, Paperclip, ExternalLink } from "lucide-react";
+import { Plus, Trash2, Filter, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Tag, Pencil, Search, ShieldAlert, Paperclip, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { auditExpenses, AuditResult } from "@/lib/audit";
 import AuditIssuesPanel from "@/components/AuditIssuesPanel";
@@ -31,6 +32,8 @@ const LINE_COLORS = [
   "hsl(var(--chart-4))", "hsl(var(--chart-5))", "hsl(210 70% 50%)",
   "hsl(30 80% 55%)", "hsl(280 60% 55%)",
 ];
+
+const PAGE_SIZE = 50;
 
 type SortField = "date" | "vendor" | "description" | "category" | "amount";
 type SortDir = "asc" | "desc";
@@ -55,6 +58,11 @@ export default function ExpensesPage() {
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [auditResult, setAuditResult] = useState<AuditResult | null>(null);
+  const [currentPage, setCurrentPage] = useState(0);
+
+  // Edit dialog state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editForm, setEditForm] = useState({ id: "", date: "", vendor: "", description: "", amount: "", category: "" });
 
   const filtered = useMemo(() => {
     let result = filterCategory === "all" ? expenses : expenses.filter((e) => e.category === filterCategory);
@@ -83,9 +91,26 @@ export default function ExpensesPage() {
     });
   };
 
+  const openEditDialog = (e: typeof expenses[0]) => {
+    setEditForm({ id: e.id, date: e.date, vendor: e.vendor, description: e.description, amount: String(e.amount), category: e.category });
+    setEditDialogOpen(true);
+  };
+
+  const handleEditSave = () => {
+    if (!editForm.date || !editForm.vendor || !editForm.amount || !editForm.category) { toast.error("Please fill all required fields"); return; }
+    updateExpense.mutate({
+      id: editForm.id, date: editForm.date, vendor: editForm.vendor,
+      description: editForm.description, amount: parseFloat(editForm.amount), category: editForm.category,
+    }, {
+      onSuccess: () => { setEditDialogOpen(false); toast.success("Expense updated"); },
+      onError: () => toast.error("Failed to update"),
+    });
+  };
+
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir((d) => d === "asc" ? "desc" : "asc");
     else { setSortField(field); setSortDir("asc"); }
+    setCurrentPage(0);
   };
 
   const SortIcon = ({ field }: { field: SortField }) => {
@@ -106,6 +131,9 @@ export default function ExpensesPage() {
       return sortDir === "asc" ? cmp : -cmp;
     });
   }, [filtered, sortField, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const paginatedRows = sorted.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -153,7 +181,6 @@ export default function ExpensesPage() {
     if (selectedExpenses.length > 0) {
       const first = selectedExpenses[0].vendor.split(/\s+/)[0]?.toLowerCase() || "";
       setRuleKeyword(first);
-      // If all selected share same category, pre-fill
       const cats = new Set(selectedExpenses.map((e) => e.category));
       setRuleCategory(cats.size === 1 ? [...cats][0] : "");
     }
@@ -163,23 +190,14 @@ export default function ExpensesPage() {
   const saveBulkRule = async () => {
     if (!ruleKeyword || !ruleCategory) { toast.error("Enter keyword and category"); return; }
     const { error } = await supabase.from("categorization_rules").insert({
-      vendor_pattern: ruleKeyword,
-      category: ruleCategory,
-      type: "expense",
-      priority: 10,
-      user_id: user?.id,
+      vendor_pattern: ruleKeyword, category: ruleCategory, type: "expense", priority: 10, user_id: user?.id,
     });
     if (error) { toast.error("Failed to save rule"); return; }
     invalidateRulesCache();
     toast.success(`Rule saved: "${ruleKeyword}" → ${ruleCategory}`);
-    // Also update matching selected expenses
     const matchingIds = expenses.filter((e) => selected.has(e.id) && e.vendor.toLowerCase().includes(ruleKeyword.toLowerCase())).map((e) => e.id);
-    if (matchingIds.length > 0) {
-      bulkUpdateCategory.mutate({ ids: matchingIds, category: ruleCategory });
-    }
-    setRuleDialogOpen(false);
-    setRuleKeyword("");
-    setRuleCategory("");
+    if (matchingIds.length > 0) bulkUpdateCategory.mutate({ ids: matchingIds, category: ruleCategory });
+    setRuleDialogOpen(false); setRuleKeyword(""); setRuleCategory("");
   };
 
   /* ── Expense Trends data ── */
@@ -232,14 +250,12 @@ export default function ExpensesPage() {
               data={sorted.map((e) => ({ date: e.date, vendor: e.vendor, description: e.description, category: e.category, amount: e.amount }))}
               filename="expenses"
               columns={[
-                { key: "date", label: "Date" },
-                { key: "vendor", label: "Vendor" },
-                { key: "description", label: "Description" },
-                { key: "category", label: "Category" },
+                { key: "date", label: "Date" }, { key: "vendor", label: "Vendor" },
+                { key: "description", label: "Description" }, { key: "category", label: "Category" },
                 { key: "amount", label: "Amount" },
               ]}
             />
-            <Select value={filterCategory} onValueChange={setFilterCategory}>
+            <Select value={filterCategory} onValueChange={(v) => { setFilterCategory(v); setCurrentPage(0); }}>
               <SelectTrigger className="w-[180px]"><Filter className="h-3.5 w-3.5 mr-2" /><SelectValue placeholder="All Categories" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
@@ -266,6 +282,24 @@ export default function ExpensesPage() {
           </div>
         </div>
 
+        {/* Edit Expense Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Edit Expense</DialogTitle></DialogHeader>
+            <div className="space-y-3">
+              <Input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} />
+              <Input placeholder="Vendor" value={editForm.vendor} onChange={(e) => setEditForm({ ...editForm, vendor: e.target.value })} />
+              <Input placeholder="Description" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+              <Input type="number" placeholder="Amount" value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} />
+              <Select value={editForm.category} onValueChange={(v) => setEditForm({ ...editForm, category: v })}>
+                <SelectTrigger><SelectValue placeholder="Category" /></SelectTrigger>
+                <SelectContent>{EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              </Select>
+              <Button onClick={handleEditSave} className="w-full" disabled={updateExpense.isPending}>Save Changes</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <Tabs defaultValue="expenses">
           <TabsList>
             <TabsTrigger value="expenses">Expenses</TabsTrigger>
@@ -279,16 +313,12 @@ export default function ExpensesPage() {
                 <Input
                   placeholder="Search by vendor, description, date, or amount…"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }}
                   className="pl-9"
                 />
               </div>
-              <Button
-                variant="outline"
-                onClick={() => setAuditResult(auditExpenses(expenses))}
-              >
-                <ShieldAlert className="h-4 w-4 mr-2" />
-                Quick Audit
+              <Button variant="outline" onClick={() => setAuditResult(auditExpenses(expenses))}>
+                <ShieldAlert className="h-4 w-4 mr-2" />Quick Audit
               </Button>
             </div>
 
@@ -315,8 +345,7 @@ export default function ExpensesPage() {
                 <span className="text-sm font-medium">{selected.size} selected</span>
                 <Select onValueChange={handleBulkCategoryChange}>
                   <SelectTrigger className="h-7 text-xs w-[160px]">
-                    <Pencil className="h-3 w-3 mr-1" />
-                    <SelectValue placeholder="Set category" />
+                    <Pencil className="h-3 w-3 mr-1" /><SelectValue placeholder="Set category" />
                   </SelectTrigger>
                   <SelectContent>
                     {EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
@@ -325,12 +354,24 @@ export default function ExpensesPage() {
                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={openBulkRule}>
                   <Tag className="h-3 w-3 mr-1" /> Create Rule
                 </Button>
-                <Button variant="outline" size="sm" className="h-7 text-xs text-destructive" onClick={handleBulkDelete}>
-                  <Trash2 className="h-3 w-3 mr-1" /> Delete
-                </Button>
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelected(new Set())}>
-                  Clear
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-7 text-xs text-destructive">
+                      <Trash2 className="h-3 w-3 mr-1" /> Delete
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete {selected.size} expense(s)?</AlertDialogTitle>
+                      <AlertDialogDescription>This action cannot be undone. The selected expenses will be permanently removed.</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelected(new Set())}>Clear</Button>
               </div>
             )}
 
@@ -348,9 +389,7 @@ export default function ExpensesPage() {
                     <label className="text-xs text-muted-foreground mb-1 block">Category</label>
                     <Select value={ruleCategory} onValueChange={setRuleCategory}>
                       <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
-                      <SelectContent>
-                        {EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                      </SelectContent>
+                      <SelectContent>{EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <Button onClick={saveBulkRule} className="w-full" disabled={!ruleKeyword || !ruleCategory}>Save Rule & Apply</Button>
@@ -363,10 +402,7 @@ export default function ExpensesPage() {
                 <thead>
                   <tr>
                     <th className="w-10">
-                      <Checkbox
-                        checked={sorted.length > 0 && selected.size === sorted.length}
-                        onCheckedChange={toggleAll}
-                      />
+                      <Checkbox checked={sorted.length > 0 && selected.size === sorted.length} onCheckedChange={toggleAll} />
                     </th>
                     <th className="cursor-pointer select-none" onClick={() => toggleSort("date")}>
                       <span className="inline-flex items-center">Date<SortIcon field="date" /></span>
@@ -383,39 +419,24 @@ export default function ExpensesPage() {
                     <th className="text-right cursor-pointer select-none" onClick={() => toggleSort("amount")}>
                       <span className="inline-flex items-center justify-end">Amount<SortIcon field="amount" /></span>
                     </th>
-                    <th className="w-10"></th>
+                    <th className="w-20"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sorted.map((e) => (
+                  {paginatedRows.map((e) => (
                     <tr key={e.id} className={selected.has(e.id) ? "bg-primary/5" : ""}>
-                      <td>
-                        <Checkbox
-                          checked={selected.has(e.id)}
-                          onCheckedChange={() => toggleSelect(e.id)}
-                        />
-                      </td>
+                      <td><Checkbox checked={selected.has(e.id)} onCheckedChange={() => toggleSelect(e.id)} /></td>
                       <td className="font-mono text-xs text-muted-foreground">{e.date}</td>
                       <td className="font-medium">{e.vendor}</td>
                       <td className="text-muted-foreground">{e.description}</td>
                       <td>
                         {editingCategoryId === e.id ? (
-                          <Select
-                            value={e.category}
-                            onValueChange={(v) => handleSingleCategoryChange(e.id, v)}
-                          >
-                            <SelectTrigger className="h-7 text-xs w-[150px]">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                            </SelectContent>
+                          <Select value={e.category} onValueChange={(v) => handleSingleCategoryChange(e.id, v)}>
+                            <SelectTrigger className="h-7 text-xs w-[150px]"><SelectValue /></SelectTrigger>
+                            <SelectContent>{EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                           </Select>
                         ) : (
-                          <button
-                            onClick={() => setEditingCategoryId(e.id)}
-                            className="group flex items-center gap-1"
-                          >
+                          <button onClick={() => setEditingCategoryId(e.id)} className="group flex items-center gap-1">
                             <Badge variant="secondary" className="text-xs font-normal">{e.category}</Badge>
                             <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                           </button>
@@ -423,16 +444,51 @@ export default function ExpensesPage() {
                       </td>
                       <td className="text-right font-mono text-chart-negative">{formatCurrency(e.amount)}</td>
                       <td className="flex items-center gap-1">
-                        <ReceiptUploadButton expenseId={e.id} receiptUrl={(e as any).receipt_url} userId={user?.id} />
-                        <Button variant="ghost" size="icon" onClick={() => { removeExpense.mutate(e.id); toast.success("Removed"); }}>
-                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditDialog(e)}>
+                          <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                         </Button>
+                        <ReceiptUploadButton expenseId={e.id} receiptUrl={(e as any).receipt_url} userId={user?.id} />
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                              <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete expense?</AlertDialogTitle>
+                              <AlertDialogDescription>{e.vendor} — {formatCurrency(e.amount)} on {e.date}</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => { removeExpense.mutate(e.id); toast.success("Removed"); }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-xs text-muted-foreground">
+                  Showing {currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, sorted.length)} of {sorted.length}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => p - 1)}>
+                    <ChevronLeft className="h-4 w-4 mr-1" />Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground">Page {currentPage + 1} of {totalPages}</span>
+                  <Button variant="outline" size="sm" disabled={currentPage >= totalPages - 1} onClick={() => setCurrentPage((p) => p + 1)}>
+                    Next<ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="trends" className="space-y-8 mt-4">

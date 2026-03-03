@@ -16,6 +16,7 @@ import {
   UserCircle,
   ChevronDown,
   Clock,
+  Scale,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ const links: NavItem[] = [
     ],
   },
   { to: "/expenses", label: "Expenses", icon: TrendingDown },
+  { to: "/reconciliation", label: "Reconciliation", icon: Scale },
   { to: "/profit-loss", label: "Profit & Loss", icon: DollarSign },
   { to: "/tax-center", label: "Tax Center", icon: Calculator },
   { to: "/1099", label: "Employees/Contractors", icon: Users },

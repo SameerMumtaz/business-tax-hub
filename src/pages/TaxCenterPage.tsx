@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Calculator, Calendar, DollarSign, Landmark, FileText, Printer, Home, Car, Percent, Trash2, Plus, Check } from "lucide-react";
 import { toast } from "sonner";
 
@@ -145,6 +146,26 @@ export default function TaxCenterPage() {
     toast.success("Schedule C generated");
   };
 
+  // ── Tax Payment Reminders ──
+  const taxReminders = useMemo(() => {
+    const dueDates = [
+      { quarter: 1, date: new Date(2026, 3, 15), label: "Q1 — Apr 15, 2026" },
+      { quarter: 2, date: new Date(2026, 5, 15), label: "Q2 — Jun 15, 2026" },
+      { quarter: 3, date: new Date(2026, 8, 15), label: "Q3 — Sep 15, 2026" },
+      { quarter: 4, date: new Date(2027, 0, 15), label: "Q4 — Jan 15, 2027" },
+    ];
+    const reminders: { label: string; type: "warning" | "overdue" }[] = [];
+    const today = new Date();
+    for (const q of dueDates) {
+      const paid = paidByQuarter[q.quarter] || 0;
+      if (paid >= quarterlyPayment && quarterlyPayment > 0) continue;
+      const daysUntil = Math.ceil((q.date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysUntil < 0) reminders.push({ label: `${q.label} — OVERDUE (no payment recorded)`, type: "overdue" });
+      else if (daysUntil <= 30) reminders.push({ label: `${q.label} — due in ${daysUntil} days`, type: "warning" });
+    }
+    return reminders;
+  }, [paidByQuarter, quarterlyPayment]);
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -155,6 +176,15 @@ export default function TaxCenterPage() {
           </div>
           <DateRangeFilter />
         </div>
+
+        {/* Tax payment reminders */}
+        {taxReminders.map((r, i) => (
+          <Alert key={i} variant={r.type === "overdue" ? "destructive" : "default"} className={r.type === "warning" ? "border-yellow-500/50 bg-yellow-500/5" : ""}>
+            <Calendar className="h-4 w-4" />
+            <AlertTitle className="text-sm">{r.type === "overdue" ? "⚠️ Overdue Payment" : "📅 Upcoming Due Date"}</AlertTitle>
+            <AlertDescription className="text-xs">{r.label}</AlertDescription>
+          </Alert>
+        ))}
 
         <Tabs defaultValue="estimate">
           <TabsList>
