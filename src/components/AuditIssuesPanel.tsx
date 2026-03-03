@@ -3,7 +3,7 @@ import { AuditIssue, AuditResult } from "@/lib/audit";
 import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ShieldAlert, Ban, AlertTriangle, Info, Trash2, X, Eye } from "lucide-react";
+import { ShieldAlert, Ban, AlertTriangle, Info, Trash2, X, Eye, FileText } from "lucide-react";
 
 interface AuditIssuesPanelProps {
   result: AuditResult;
@@ -11,9 +11,11 @@ interface AuditIssuesPanelProps {
   getItemLabel: (id: string) => { date: string; label: string; amount: number } | null;
   onDeleteItems?: (ids: string[]) => void;
   onSelectItems?: (ids: string[]) => void;
+  /** Called when user wants to create an invoice for a specific sale id */
+  onCreateInvoice?: (saleId: string) => void;
 }
 
-export default function AuditIssuesPanel({ result, getItemLabel, onDeleteItems, onSelectItems }: AuditIssuesPanelProps) {
+export default function AuditIssuesPanel({ result, getItemLabel, onDeleteItems, onSelectItems, onCreateInvoice }: AuditIssuesPanelProps) {
   const [dismissedIssues, setDismissedIssues] = useState<Set<number>>(new Set());
 
   const dismiss = (idx: number) => {
@@ -121,14 +123,19 @@ export default function AuditIssuesPanel({ result, getItemLabel, onDeleteItems, 
                     {issue.affected_ids.slice(0, 8).map((id) => {
                       const item = getItemLabel(id);
                       if (!item) return null;
+                      const isInvoiceIssue = issue.type === "missing_invoice" && onCreateInvoice;
                       return (
                         <div
                           key={id}
-                          className="flex items-center gap-2 text-xs px-2 py-1 rounded hover:bg-background/60 transition-colors"
+                          className={`flex items-center gap-2 text-xs px-2 py-1 rounded transition-colors ${isInvoiceIssue ? "hover:bg-primary/10 cursor-pointer" : "hover:bg-background/60"}`}
+                          onClick={isInvoiceIssue ? () => onCreateInvoice(id) : undefined}
                         >
                           <span className="font-mono text-muted-foreground w-20 shrink-0">{item.date}</span>
                           <span className="truncate flex-1">{item.label}</span>
                           <span className="font-mono shrink-0">{formatCurrency(item.amount)}</span>
+                          {isInvoiceIssue && (
+                            <FileText className="h-3 w-3 text-primary shrink-0" />
+                          )}
                         </div>
                       );
                     })}

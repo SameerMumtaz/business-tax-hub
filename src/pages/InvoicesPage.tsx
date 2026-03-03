@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useInvoices, useAddInvoice, useUpdateInvoiceStatus, useDeleteInvoice, useMatchInvoiceToSale, useGenerateRecurringInvoice, Invoice } from "@/hooks/useInvoices";
 import { useClients } from "@/hooks/useClients";
@@ -23,6 +24,7 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
 };
 
 export default function InvoicesPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: invoices = [] } = useInvoices();
   const { data: sales = [] } = useSales();
   const { data: clients = [] } = useClients();
@@ -35,6 +37,7 @@ export default function InvoicesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [prefillSaleId, setPrefillSaleId] = useState<string | null>(null);
 
   // Create form
   const [form, setForm] = useState({
@@ -51,6 +54,29 @@ export default function InvoicesPage() {
     recurring_end_date: "",
     line_items: [{ description: "", quantity: "1", unit_price: "" }] as { description: string; quantity: string; unit_price: string }[],
   });
+
+  // Auto-open create dialog when navigating from Sales audit
+  useEffect(() => {
+    if (searchParams.get("from_sale") === "1") {
+      const clientName = searchParams.get("client_name") || "";
+      const amount = searchParams.get("amount") || "";
+      const date = searchParams.get("date") || new Date().toISOString().slice(0, 10);
+      const description = searchParams.get("description") || "";
+      const saleId = searchParams.get("sale_id") || null;
+
+      setForm((prev) => ({
+        ...prev,
+        invoice_number: `INV-${Date.now().toString().slice(-6)}`,
+        client_name: clientName,
+        issue_date: date,
+        line_items: [{ description: description || `Sale to ${clientName}`, quantity: "1", unit_price: amount }],
+      }));
+      setPrefillSaleId(saleId);
+      setCreateOpen(true);
+      // Clear params so refresh doesn't re-trigger
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const handleSelectClient = (clientId: string) => {
     const client = clients.find(c => c.id === clientId);
@@ -88,6 +114,7 @@ export default function InvoicesPage() {
       recurring_interval: form.is_recurring ? form.recurring_interval : undefined,
       recurring_next_date: form.is_recurring ? form.issue_date : undefined,
       recurring_end_date: form.is_recurring && form.recurring_end_date ? form.recurring_end_date : undefined,
+      matched_sale_id: prefillSaleId || undefined,
       line_items: form.line_items.filter(li => li.description && li.unit_price).map(li => ({
         description: li.description,
         quantity: parseFloat(li.quantity) || 1,
@@ -97,7 +124,8 @@ export default function InvoicesPage() {
       onSuccess: () => {
         setForm({ invoice_number: "", client_name: "", client_email: "", client_id: "", issue_date: new Date().toISOString().slice(0, 10), due_date: "", notes: "", tax_rate: "0", is_recurring: false, recurring_interval: "monthly", recurring_end_date: "", line_items: [{ description: "", quantity: "1", unit_price: "" }] });
         setCreateOpen(false);
-        toast.success("Invoice created");
+        setPrefillSaleId(null);
+        toast.success(prefillSaleId ? "Invoice created & matched to sale" : "Invoice created");
       },
       onError: () => toast.error("Failed to create invoice"),
     });

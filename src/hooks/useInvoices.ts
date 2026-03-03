@@ -86,6 +86,7 @@ export function useAddInvoice() {
       recurring_interval?: string;
       recurring_next_date?: string;
       recurring_end_date?: string;
+      matched_sale_id?: string;
       line_items: { description: string; quantity: number; unit_price: number }[];
     }) => {
       const subtotal = input.line_items.reduce((s, li) => s + li.quantity * li.unit_price, 0);
@@ -112,6 +113,8 @@ export function useAddInvoice() {
           recurring_interval: input.is_recurring ? (input.recurring_interval || null) : null,
           recurring_next_date: input.is_recurring ? (input.recurring_next_date || null) : null,
           recurring_end_date: input.is_recurring ? (input.recurring_end_date || null) : null,
+          matched_sale_id: input.matched_sale_id || null,
+          status: input.matched_sale_id ? "paid" : "draft",
         })
         .select()
         .single();
