@@ -461,7 +461,15 @@ export type Database = {
           business_zip: string | null
           created_at: string
           ein_last4: string | null
+          filing_status: string | null
+          first_name: string | null
           id: string
+          last_name: string | null
+          personal_address: string | null
+          personal_city: string | null
+          personal_state: string | null
+          personal_zip: string | null
+          ssn_last4: string | null
           updated_at: string
           user_id: string
         }
@@ -477,7 +485,15 @@ export type Database = {
           business_zip?: string | null
           created_at?: string
           ein_last4?: string | null
+          filing_status?: string | null
+          first_name?: string | null
           id?: string
+          last_name?: string | null
+          personal_address?: string | null
+          personal_city?: string | null
+          personal_state?: string | null
+          personal_zip?: string | null
+          ssn_last4?: string | null
           updated_at?: string
           user_id: string
         }
@@ -493,7 +509,15 @@ export type Database = {
           business_zip?: string | null
           created_at?: string
           ein_last4?: string | null
+          filing_status?: string | null
+          first_name?: string | null
           id?: string
+          last_name?: string | null
+          personal_address?: string | null
+          personal_city?: string | null
+          personal_state?: string | null
+          personal_zip?: string | null
+          ssn_last4?: string | null
           updated_at?: string
           user_id?: string
         }
