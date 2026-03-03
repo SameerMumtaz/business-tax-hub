@@ -93,8 +93,37 @@ export default function MembersContent() {
       .select("*")
       .eq("business_user_id", user.id)
       .order("created_at", { ascending: false });
-    setMembers((data || []) as TeamMember[]);
+    const teamMembers = (data || []) as TeamMember[];
+    setMembers(teamMembers);
     setLoading(false);
+
+    // Ensure contractor/employee records exist for all active members
+    const activeMembers = teamMembers.filter((m) => m.status === "active");
+    if (activeMembers.length > 0) {
+      const [{ data: contractors }, { data: employees }] = await Promise.all([
+        supabase.from("contractors").select("name").eq("user_id", user.id),
+        supabase.from("employees").select("name").eq("user_id", user.id),
+      ]);
+      const existingNames = new Set([
+        ...(contractors || []).map((c: any) => c.name),
+        ...(employees || []).map((e: any) => e.name),
+      ]);
+
+      for (const m of activeMembers) {
+        if (!existingNames.has(m.name)) {
+          if (m.worker_type === "W2") {
+            await supabase.from("employees").insert({
+              user_id: user.id, name: m.name, salary: m.pay_rate || 0,
+              federal_withholding: 0, state_withholding: 0, social_security: 0, medicare: 0,
+            });
+          } else {
+            await supabase.from("contractors").insert({
+              user_id: user.id, name: m.name, pay_rate: m.pay_rate || 0, total_paid: 0,
+            });
+          }
+        }
+      }
+    }
   };
 
   useEffect(() => { fetchMembers(); }, [user]);
