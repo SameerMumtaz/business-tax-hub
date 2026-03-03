@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { email, name, role, business_user_id, worker_type, pay_rate, address, state_employed } = await req.json();
+    const { email, name, role, business_user_id, worker_type, pay_rate, address, state_employed, resend } = await req.json();
 
     // Only business owner can invite
     if (user.id !== business_user_id) {
@@ -63,22 +63,24 @@ Deno.serve(async (req) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Check if already invited
-    const { data: existing } = await adminClient
-      .from("team_members")
-      .select("id")
-      .eq("email", email)
-      .eq("business_user_id", business_user_id)
-      .maybeSingle();
+    // Check if already invited (skip for resend)
+    if (!resend) {
+      const { data: existing } = await adminClient
+        .from("team_members")
+        .select("id")
+        .eq("email", email)
+        .eq("business_user_id", business_user_id)
+        .maybeSingle();
 
-    if (existing) {
-      return new Response(
-        JSON.stringify({ error: "This email has already been invited" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      if (existing) {
+        return new Response(
+          JSON.stringify({ error: "This email has already been invited" }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
     }
 
     // Check if user already exists in auth
@@ -107,6 +109,14 @@ Deno.serve(async (req) => {
       } else if (inviteData?.user) {
         memberUserId = inviteData.user.id;
       }
+    }
+
+    // For resend, we only needed to re-trigger the invite email above — skip record creation
+    if (resend) {
+      return new Response(
+        JSON.stringify({ success: true, message: "Invite email resent." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Create team_members row with worker_type and pay_rate
