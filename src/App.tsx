@@ -16,6 +16,7 @@ import TaxCenterPage from "./pages/TaxCenterPage";
 import ImportPage from "./pages/ImportPage";
 import CategorizationRulesPage from "./pages/CategorizationRulesPage";
 import ProfilePage from "./pages/ProfilePage";
+import InvoicesPage from "./pages/InvoicesPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,6 +36,7 @@ const App = () => (
             <Route path="/import" element={<ProtectedRoute><ImportPage /></ProtectedRoute>} />
             <Route path="/categorization" element={<ProtectedRoute><CategorizationRulesPage /></ProtectedRoute>} />
             <Route path="/sales" element={<ProtectedRoute><SalesPage /></ProtectedRoute>} />
+            <Route path="/invoices" element={<ProtectedRoute><InvoicesPage /></ProtectedRoute>} />
             <Route path="/expenses" element={<ProtectedRoute><ExpensesPage /></ProtectedRoute>} />
             <Route path="/profit-loss" element={<ProtectedRoute><ProfitLossPage /></ProtectedRoute>} />
             <Route path="/tax-center" element={<ProtectedRoute><TaxCenterPage /></ProtectedRoute>} />
