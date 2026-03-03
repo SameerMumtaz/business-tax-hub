@@ -24,6 +24,7 @@ import {
   Home,
   Car,
   ClipboardList,
+  CalendarDays,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -96,6 +97,7 @@ const links: NavItem[] = [
     ],
   },
   { to: "/1099", label: "Team & Contractors", icon: Users },
+  { to: "/booking-settings", label: "Online Booking", icon: CalendarDays },
   { to: "/profile", label: "Business Info", icon: Building2 },
 ];
 

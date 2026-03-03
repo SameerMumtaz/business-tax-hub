@@ -12,6 +12,7 @@ import SmartAlerts from "@/components/SmartAlerts";
 import OnboardingWizard from "@/components/OnboardingWizard";
 import HelpTooltip from "@/components/HelpTooltip";
 import ExpenseBreakdownDialog from "@/components/ExpenseBreakdownDialog";
+import BookingRequestsPanel from "@/components/BookingRequestsPanel";
 import { TrendingUp, TrendingDown, DollarSign, Users, Expand, ClipboardList, CreditCard } from "lucide-react";
 import { Link } from "react-router-dom";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
@@ -176,6 +177,8 @@ export default function DashboardPage() {
             </tbody>
           </table>
         </div>
+
+        <BookingRequestsPanel />
 
         <ExpenseBreakdownDialog open={showBreakdown} onOpenChange={setShowBreakdown} allExpenses={allExpenses} />
       </div>
