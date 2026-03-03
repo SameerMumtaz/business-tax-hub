@@ -105,11 +105,10 @@ export default function ExpensesPage() {
                   const total = expenseCount + salesCount;
                   if (total > 0) {
                     toast.success(`✨ ${total} transaction${total > 1 ? "s" : ""} auto-categorized with rules`);
-                    await queryClient.invalidateQueries({ queryKey: ["expenses", user.id] });
-                    await queryClient.invalidateQueries({ queryKey: ["sales", user.id] });
                   }
+                  await queryClient.refetchQueries({ queryKey: ["expenses", user.id] });
+                  await queryClient.refetchQueries({ queryKey: ["sales", user.id] });
                 }
-                // Re-read fresh expenses for audit after potential recategorization
                 const freshExpenses = queryClient.getQueryData<typeof expenses>(["expenses", user?.id]) || expenses;
                 setAuditResult(auditExpenses(freshExpenses));
               }}><ShieldAlert className="h-4 w-4 mr-2" />Quick Audit</Button>
