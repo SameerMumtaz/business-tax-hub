@@ -48,6 +48,45 @@ export function useAddExpense() {
   });
 }
 
+export function useUpdateExpense() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...data }: { id: string; category?: string; vendor?: string; description?: string; amount?: number; date?: string }) => {
+      const update: Record<string, unknown> = {};
+      if (data.category !== undefined) update.category = data.category;
+      if (data.vendor !== undefined) update.vendor = data.vendor;
+      if (data.description !== undefined) update.description = data.description;
+      if (data.amount !== undefined) update.amount = data.amount;
+      if (data.date !== undefined) update.date = data.date;
+      const { error } = await supabase.from("expenses").update(update).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["expenses"] }),
+  });
+}
+
+export function useBulkRemoveExpenses() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase.from("expenses").delete().in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["expenses"] }),
+  });
+}
+
+export function useBulkUpdateExpenseCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ ids, category }: { ids: string[]; category: string }) => {
+      const { error } = await supabase.from("expenses").update({ category }).in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["expenses"] }),
+  });
+}
+
 export function useRemoveExpense() {
   const qc = useQueryClient();
   return useMutation({
@@ -109,6 +148,17 @@ export function useRemoveSale() {
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("sales").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sales"] }),
+  });
+}
+
+export function useBulkRemoveSales() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase.from("sales").delete().in("id", ids);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["sales"] }),
