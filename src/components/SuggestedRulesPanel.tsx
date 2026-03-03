@@ -11,9 +11,10 @@ import { Link } from "react-router-dom";
 interface SuggestedRulesPanelProps {
   type: "expense" | "income";
   transactions: { id: string; vendor: string; category: string }[];
+  onRuleSaved?: () => void | Promise<void>;
 }
 
-export default function SuggestedRulesPanel({ type, transactions }: SuggestedRulesPanelProps) {
+export default function SuggestedRulesPanel({ type, transactions, onRuleSaved }: SuggestedRulesPanelProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [inferredPatterns, setInferredPatterns] = useState<InferredPattern[]>([]);
@@ -39,15 +40,18 @@ export default function SuggestedRulesPanel({ type, transactions }: SuggestedRul
 
   async function handleAccept(pattern: InferredPattern) {
     if (!user) return;
-    const { created, applied } = await saveInferredRule(pattern, user.id);
+    const { created, applied, estimatedByPattern } = await saveInferredRule(pattern, user.id);
     if (created) {
       const msg = applied > 0
-        ? `Rule created: "${pattern.keyword}" → ${pattern.category}. ${applied} "Other" transaction${applied > 1 ? "s" : ""} auto-categorized.`
+        ? `Rule created: "${pattern.keyword}" → ${pattern.category}. ${applied} transaction${applied > 1 ? "s" : ""} re-categorized with all active rules${estimatedByPattern > 0 ? ` (${estimatedByPattern} matched this new rule).` : "."}`
         : `Rule created: "${pattern.keyword}" → ${pattern.category}`;
       toast.success(msg);
       setInferredPatterns(prev => prev.filter(p => p.keyword !== pattern.keyword));
-      await queryClient.invalidateQueries({ queryKey: ["expenses"] });
-      await queryClient.invalidateQueries({ queryKey: ["sales"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["expenses", user.id] }),
+        queryClient.invalidateQueries({ queryKey: ["sales", user.id] }),
+      ]);
+      await onRuleSaved?.();
     }
   }
 
@@ -77,7 +81,8 @@ export default function SuggestedRulesPanel({ type, transactions }: SuggestedRul
                   <span className="font-mono text-sm font-medium">"{p.keyword}"</span>
                   <span className="text-muted-foreground text-sm">→</span>
                   <Badge variant="secondary" className="text-xs">{p.category}</Badge>
-                  <span className="text-xs text-muted-foreground">{p.count} transactions</span>
+                  <span className="text-xs text-muted-foreground">{p.count} categorized transaction{p.count > 1 ? "s" : ""} support this</span>
+                  <span className="text-xs text-muted-foreground">• {p.recategorizableCount} currently in Other</span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1 truncate">e.g. {p.exampleVendors.join(", ")}</p>
               </div>
