@@ -1,10 +1,11 @@
 import { create } from "zustand";
-import { Expense, Sale, Contractor } from "@/types/tax";
+import { Expense, Sale, Contractor, Employee } from "@/types/tax";
 
 interface TaxStore {
   expenses: Expense[];
   sales: Sale[];
   contractors: Contractor[];
+  employees: Employee[];
   addExpense: (expense: Expense) => void;
   removeExpense: (id: string) => void;
   updateExpenseCategory: (vendor: string, newCategory: Expense["category"]) => void;
@@ -14,6 +15,9 @@ interface TaxStore {
   addContractor: (contractor: Contractor) => void;
   removeContractor: (id: string) => void;
   updateContractor: (id: string, data: Partial<Contractor>) => void;
+  addEmployee: (employee: Employee) => void;
+  removeEmployee: (id: string) => void;
+  updateEmployee: (id: string, data: Partial<Employee>) => void;
 }
 
 // Demo data
@@ -42,10 +46,16 @@ const demoContractors: Contractor[] = [
   { id: "c3", name: "Elena Rodriguez", tin: "***-**-3294", totalPaid: 8750, address: "789 Pine Rd, Denver, CO 80202" },
 ];
 
+const demoEmployees: Employee[] = [
+  { id: "emp1", name: "Jessica Park", ssn: "***-**-6789", address: "321 Maple Dr, Seattle, WA 98101", salary: 95000, federalWithholding: 14250, stateWithholding: 4750, socialSecurity: 5890, medicare: 1377.50 },
+  { id: "emp2", name: "David Kim", ssn: "***-**-1234", address: "654 Birch Ln, Chicago, IL 60601", salary: 72000, federalWithholding: 10800, stateWithholding: 3600, socialSecurity: 4464, medicare: 1044 },
+];
+
 export const useTaxStore = create<TaxStore>((set) => ({
   expenses: demoExpenses,
   sales: demoSales,
   contractors: demoContractors,
+  employees: demoEmployees,
   addExpense: (expense) => set((s) => ({ expenses: [expense, ...s.expenses] })),
   removeExpense: (id) => set((s) => ({ expenses: s.expenses.filter((e) => e.id !== id) })),
   updateExpenseCategory: (vendor, newCategory) =>
@@ -75,5 +85,11 @@ export const useTaxStore = create<TaxStore>((set) => ({
   updateContractor: (id, data) =>
     set((s) => ({
       contractors: s.contractors.map((c) => (c.id === id ? { ...c, ...data } : c)),
+    })),
+  addEmployee: (employee) => set((s) => ({ employees: [employee, ...s.employees] })),
+  removeEmployee: (id) => set((s) => ({ employees: s.employees.filter((e) => e.id !== id) })),
+  updateEmployee: (id, data) =>
+    set((s) => ({
+      employees: s.employees.map((e) => (e.id === id ? { ...e, ...data } : e)),
     })),
 }));
