@@ -30,26 +30,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
+      setLoading(false);
 
       if (nextSession?.user?.email) {
-        await activatePendingInvite();
+        activatePendingInvite();
       }
-
-      setLoading(false);
     });
 
-    supabase.auth.getSession().then(async ({ data: { session: currentSession } }) => {
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
+      setLoading(false);
 
       if (currentSession?.user?.email) {
-        await activatePendingInvite();
+        activatePendingInvite();
       }
-
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
