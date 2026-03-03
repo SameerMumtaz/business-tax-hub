@@ -1,15 +1,16 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useTaxStore } from "@/store/taxStore";
 import { parseCSV, ParsedTransaction } from "@/lib/csvParser";
 import { categorizeTransactions } from "@/lib/categorize";
 import { formatCurrency, generateId } from "@/lib/format";
 import { EXPENSE_CATEGORIES, ExpenseCategory } from "@/types/tax";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, FileText, Landmark, Check, X, FileUp, ArrowRight, Sparkles, Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Upload, FileText, Landmark, Check, X, FileUp, ArrowRight, Sparkles, Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Lightbulb, Plus, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
 type SortField = "date" | "description" | "type" | "category" | "amount";
@@ -21,6 +22,24 @@ interface ReviewTransaction extends ParsedTransaction {
   category: ExpenseCategory;
   include: boolean;
   catSource?: "rule" | "ai" | "keyword";
+  userEdited?: boolean;
+}
+
+interface RuleSuggestion {
+  keyword: string;
+  category: string;
+  type: "expense" | "income";
+  count: number;
+  saved?: boolean;
+}
+function extractKeyword(description: string): string | null {
+  const words = description.toLowerCase().replace(/[^a-z0-9\s&]/g, "").split(/\s+/);
+  // Skip common filler words, return first meaningful word (3+ chars)
+  const stopWords = new Set(["the", "and", "for", "from", "payment", "purchase", "pos", "ach", "debit", "credit", "to", "inc", "llc", "ltd", "corp"]);
+  for (const word of words) {
+    if (word.length >= 3 && !stopWords.has(word)) return word;
+  }
+  return null;
 }
 
 export default function ImportPage() {
@@ -129,7 +148,82 @@ export default function ImportPage() {
   };
 
   const updateCategory = (id: string, category: ExpenseCategory) => {
-    setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, category, catSource: "rule" } : t)));
+    setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, category, catSource: "rule", userEdited: true } : t)));
+  };
+
+  // Generate rule suggestions from user edits and AI categorizations
+  const ruleSuggestions = useMemo<RuleSuggestion[]>(() => {
+    const map = new Map<string, { category: string; type: "expense" | "income"; count: number }>();
+    for (const t of transactions) {
+      if (!t.include) continue;
+      if (t.category === "Other") continue;
+      // Only suggest from user edits or AI results (not existing rules)
+      if (!t.userEdited && t.catSource !== "ai") continue;
+
+      // Extract a keyword from the description (first meaningful word, 3+ chars)
+      const keyword = extractKeyword(t.description);
+      if (!keyword) continue;
+
+      const key = `${keyword}|${t.category}|${t.type}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        map.set(key, { category: t.category, type: t.type, count: 1 });
+      }
+    }
+
+    return Array.from(map.entries())
+      .map(([key, val]) => {
+        const keyword = key.split("|")[0];
+        return { keyword, ...val, saved: false };
+      })
+      .sort((a, b) => b.count - a.count);
+  }, [transactions]);
+
+  const [savedRules, setSavedRules] = useState<Set<string>>(new Set());
+  const [dismissedRules, setDismissedRules] = useState<Set<string>>(new Set());
+
+  const visibleSuggestions = ruleSuggestions.filter(
+    (s) => !savedRules.has(`${s.keyword}|${s.category}`) && !dismissedRules.has(`${s.keyword}|${s.category}`)
+  );
+
+  const saveRule = async (suggestion: RuleSuggestion) => {
+    const { error } = await supabase.from("categorization_rules").insert({
+      vendor_pattern: suggestion.keyword,
+      category: suggestion.category,
+      type: suggestion.type,
+      priority: 10,
+    });
+    if (error) {
+      toast.error("Failed to save rule");
+    } else {
+      setSavedRules((prev) => new Set(prev).add(`${suggestion.keyword}|${suggestion.category}`));
+      toast.success(`Rule saved: "${suggestion.keyword}" → ${suggestion.category}`);
+    }
+  };
+
+  const dismissRule = (suggestion: RuleSuggestion) => {
+    setDismissedRules((prev) => new Set(prev).add(`${suggestion.keyword}|${suggestion.category}`));
+  };
+
+  const saveAllRules = async () => {
+    const toSave = visibleSuggestions;
+    const inserts = toSave.map((s) => ({
+      vendor_pattern: s.keyword,
+      category: s.category,
+      type: s.type,
+      priority: 10,
+    }));
+    const { error } = await supabase.from("categorization_rules").insert(inserts);
+    if (error) {
+      toast.error("Failed to save rules");
+    } else {
+      const keys = new Set(savedRules);
+      toSave.forEach((s) => keys.add(`${s.keyword}|${s.category}`));
+      setSavedRules(keys);
+      toast.success(`Saved ${toSave.length} rules`);
+    }
   };
 
   const uncategorizedItems = transactions.filter((t) => t.include && t.category === "Other" && !t.catSource);
@@ -399,6 +493,53 @@ export default function ImportPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Rule suggestions */}
+            {visibleSuggestions.length > 0 && (
+              <div className="stat-card space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="section-title flex items-center gap-2">
+                    <Lightbulb className="h-4 w-4 text-chart-warning" />
+                    Suggested Rules ({visibleSuggestions.length})
+                  </h3>
+                  <Button variant="outline" size="sm" onClick={saveAllRules}>
+                    <Plus className="h-3 w-3 mr-1" /> Save All
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Based on your edits and AI results. Save these to auto-categorize future imports.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {visibleSuggestions.map((s) => (
+                    <div
+                      key={`${s.keyword}|${s.category}`}
+                      className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 text-sm"
+                    >
+                      <span className="font-mono text-xs">{s.keyword}</span>
+                      <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                      <Badge variant="secondary" className="text-xs">{s.category}</Badge>
+                      {s.count > 1 && (
+                        <span className="text-xs text-muted-foreground">×{s.count}</span>
+                      )}
+                      <button
+                        onClick={() => saveRule(s)}
+                        className="p-0.5 text-primary hover:text-primary/80 transition-colors"
+                        title="Save rule"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => dismissRule(s)}
+                        className="p-0.5 text-muted-foreground hover:text-destructive transition-colors"
+                        title="Dismiss"
+                      >
+                        <XCircle className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
