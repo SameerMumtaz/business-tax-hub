@@ -51,6 +51,7 @@ export type Database = {
           id: string
           name: string
           pay_rate: number | null
+          state_employed: string | null
           tin_last4: string | null
           total_paid: number
           user_id: string
@@ -61,6 +62,7 @@ export type Database = {
           id?: string
           name: string
           pay_rate?: number | null
+          state_employed?: string | null
           tin_last4?: string | null
           total_paid?: number
           user_id: string
@@ -71,6 +73,7 @@ export type Database = {
           id?: string
           name?: string
           pay_rate?: number | null
+          state_employed?: string | null
           tin_last4?: string | null
           total_paid?: number
           user_id?: string
@@ -89,6 +92,7 @@ export type Database = {
           social_security: number
           ssn_last4: string | null
           start_date: string | null
+          state_employed: string | null
           state_withholding: number
           user_id: string
         }
@@ -103,6 +107,7 @@ export type Database = {
           social_security?: number
           ssn_last4?: string | null
           start_date?: string | null
+          state_employed?: string | null
           state_withholding?: number
           user_id: string
         }
@@ -117,6 +122,7 @@ export type Database = {
           social_security?: number
           ssn_last4?: string | null
           start_date?: string | null
+          state_employed?: string | null
           state_withholding?: number
           user_id?: string
         }

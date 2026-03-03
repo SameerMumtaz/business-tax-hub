@@ -52,6 +52,7 @@ export interface Contractor {
   totalPaid: number;
   address: string;
   payRate?: number;
+  stateEmployed?: string;
 }
 
 export interface Employee {
@@ -65,6 +66,7 @@ export interface Employee {
   socialSecurity: number;
   medicare: number;
   startDate?: string;
+  stateEmployed?: string;
 }
 
 export interface ProfitAndLoss {
