@@ -39,6 +39,7 @@ export default function useSalesLogic() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterCategory, setFilterCategory] = useState<string>("all");
   const [auditResult, setAuditResult] = useState<AuditResult | null>(null);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [batchCreating, setBatchCreating] = useState(false);
@@ -85,10 +86,13 @@ export default function useSalesLogic() {
   };
 
   const searchedSales = useMemo(() => {
-    if (!searchQuery.trim()) return sales;
-    const q = searchQuery.trim().toLowerCase();
-    return sales.filter((s) => s.client.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) || s.date.includes(q) || s.amount.toString().includes(q) || formatCurrency(s.amount).toLowerCase().includes(q) || (s.invoiceNumber || "").toLowerCase().includes(q));
-  }, [sales, searchQuery]);
+    let result = filterCategory === "all" ? sales : sales.filter((s) => s.category === filterCategory);
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter((s) => s.client.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) || s.date.includes(q) || s.amount.toString().includes(q) || formatCurrency(s.amount).toLowerCase().includes(q) || (s.invoiceNumber || "").toLowerCase().includes(q));
+    }
+    return result;
+  }, [sales, searchQuery, filterCategory]);
 
   const totalSales = searchedSales.reduce((sum, s) => sum + s.amount, 0);
 
@@ -198,7 +202,7 @@ export default function useSalesLogic() {
     sales, expenses, sorted, paginatedRows, totalPages, currentPage, setCurrentPage, totalSales,
     open, setOpen, form, setForm, handleAdd, addSale,
     sortField, sortDir, toggleSort, selected, toggleSelect, selectItems, toggleAll, handleBulkDelete,
-    searchQuery, setSearchQuery, auditResult, setAuditResult, persistentAudit, activeIssueCount,
+    searchQuery, setSearchQuery, filterCategory, setFilterCategory, auditResult, setAuditResult, persistentAudit, activeIssueCount,
     pendingRuleSuggestion, setPendingRuleSuggestion,
     editingCategoryId, setEditingCategoryId, batchCreating, updateSale, removeSale, bulkRemove,
     handleSingleCategoryChange,
