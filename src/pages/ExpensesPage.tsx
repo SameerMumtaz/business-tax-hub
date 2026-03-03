@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import SuggestedRulesPanel from "@/components/SuggestedRulesPanel";
 import RuleSuggestionDialog from "@/components/RuleSuggestionDialog";
@@ -30,7 +31,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 export default function ExpensesPage() {
   const queryClient = useQueryClient();
   const logic = useExpensesLogic();
-  const { dismissedSet, dismiss: dismissAudit } = useAuditDismissals();
+  const { dismissedSet, dismiss: dismissAudit, undismiss: undismissAudit } = useAuditDismissals();
   const {
     expenses, sorted, paginatedRows, totalPages, currentPage, setCurrentPage, totalFiltered,
     open, setOpen, form, setForm, handleAdd, addExpense,
@@ -45,6 +46,7 @@ export default function ExpensesPage() {
     trendFilterCat, setTrendFilterCat, categories, monthlyData, currentSpikes, visibleCats,
     user,
   } = logic;
+  const [unfilteredAuditResult, setUnfilteredAuditResult] = useState<typeof auditResult>(null);
 
   const SortIcon = ({ field }: { field: typeof sortField }) => {
     if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
@@ -118,15 +120,17 @@ export default function ExpensesPage() {
                 const freshExpenses = queryClient.getQueryData<typeof expenses>(["expenses", user?.id]) ?? expenses;
                 const freshDismissals = queryClient.getQueryData<{ transaction_id: string; issue_type: string }[]>(["audit_dismissals", user?.id]) ?? [];
                 const freshDismissedSet = new Set(freshDismissals.map((d) => `${d.transaction_id}::${d.issue_type}`));
+                setUnfilteredAuditResult(auditExpenses(freshExpenses));
                 setAuditResult(auditExpenses(freshExpenses, freshDismissedSet));
               }}><ShieldAlert className="h-4 w-4 mr-2" />Quick Audit</Button>
             </div>
 
             {auditResult && (
-              <AuditIssuesPanel result={auditResult} getItemLabel={(id) => { const e = expenses.find((x) => x.id === id); if (!e) return null; return { date: e.date, label: `${e.vendor} — ${e.description}`, amount: e.amount }; }}
+              <AuditIssuesPanel result={auditResult} unfilteredResult={unfilteredAuditResult ?? undefined} dismissedSet={dismissedSet} getItemLabel={(id) => { const e = expenses.find((x) => x.id === id); if (!e) return null; return { date: e.date, label: `${e.vendor} — ${e.description}`, amount: e.amount }; }}
                 onDeleteItems={(ids) => { bulkRemove.mutate(ids, { onSuccess: () => { toast.success(`Deleted ${ids.length} expense(s)`); const freshDismissals = queryClient.getQueryData<{ transaction_id: string; issue_type: string }[]>(["audit_dismissals", user?.id]) ?? []; const ds = new Set(freshDismissals.map((d) => `${d.transaction_id}::${d.issue_type}`)); setAuditResult(auditExpenses(expenses.filter((e) => !ids.includes(e.id)), ds)); } }); }}
                 onSelectItems={(ids) => { selectItems(ids); toast.info(`Selected ${ids.length} item(s)`); }}
                 onDismissItems={(items) => { dismissAudit.mutate(items, { onSuccess: () => toast.success("Marked as non-issue — won't appear in future audits") }); }}
+                onUndismissItems={(items) => { undismissAudit.mutate(items, { onSuccess: () => toast.success("Issue restored — will appear in future audits") }); }}
               />
             )}
 
