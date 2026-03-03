@@ -26,6 +26,9 @@ import PersonalDashboardPage from "./pages/PersonalDashboardPage";
 import PersonalIncomePage from "./pages/PersonalIncomePage";
 import PersonalExpensesPage from "./pages/PersonalExpensesPage";
 import PersonalDeductionsPage from "./pages/PersonalDeductionsPage";
+import PersonalTaxCenterPage from "./pages/PersonalTaxCenterPage";
+import Personal1040Page from "./pages/Personal1040Page";
+import PersonalProfilePage from "./pages/PersonalProfilePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -64,6 +67,9 @@ const App = () => (
             <Route path="/personal/income" element={<ProtectedRoute><PersonalIncomePage /></ProtectedRoute>} />
             <Route path="/personal/expenses" element={<ProtectedRoute><PersonalExpensesPage /></ProtectedRoute>} />
             <Route path="/personal/deductions" element={<ProtectedRoute><PersonalDeductionsPage /></ProtectedRoute>} />
+            <Route path="/personal/tax-center" element={<ProtectedRoute><PersonalTaxCenterPage /></ProtectedRoute>} />
+            <Route path="/personal/1040" element={<ProtectedRoute><Personal1040Page /></ProtectedRoute>} />
+            <Route path="/personal/profile" element={<ProtectedRoute><PersonalProfilePage /></ProtectedRoute>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

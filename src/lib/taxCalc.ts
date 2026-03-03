@@ -58,7 +58,7 @@ const FEDERAL_BRACKETS: Record<FilingStatus, [number, number][]> = {
 };
 
 // Standard deduction by filing status (2026 projected)
-const STANDARD_DEDUCTION: Record<FilingStatus, number> = {
+export const STANDARD_DEDUCTION: Record<FilingStatus, number> = {
   single: 16_150,
   married_joint: 32_300,
   married_separate: 16_150,
