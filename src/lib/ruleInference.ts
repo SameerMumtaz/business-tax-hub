@@ -251,7 +251,12 @@ export async function checkForPatternAfterCategoryChange(
 
       toast(message, {
         description: "Create a rule to auto-categorize future imports?",
-        duration: 10000,
+        duration: 15000,
+        dismissible: true,
+        cancel: {
+          label: "Dismiss",
+          onClick: () => {},
+        },
         action: {
           label: "Create Rule",
           onClick: async () => {
