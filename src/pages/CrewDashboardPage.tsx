@@ -7,12 +7,13 @@ import { getCurrentPosition, isWithinGeofence, haversineDistance } from "@/lib/g
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CheckCircle, Clock, LogOut, List, CalendarDays, MapPin as MapIcon, LogOut as SignOutIcon } from "lucide-react";
+import { CheckCircle, Clock, LogOut, List, CalendarDays, MapPin as MapIcon, LogOut as SignOutIcon, UserCircle } from "lucide-react";
 import { toast } from "sonner";
 import LinkToBusinessCard from "@/components/LinkToBusinessCard";
 import CrewJobsList, { type AssignedJob } from "@/components/crew/CrewJobsList";
 import CrewCalendarView from "@/components/crew/CrewCalendarView";
 import CrewMapView from "@/components/crew/CrewMapView";
+import CrewProfileTab from "@/components/crew/CrewProfileTab";
 
 export default function CrewDashboardPage() {
   const { user, signOut } = useAuth();
@@ -212,6 +213,9 @@ export default function CrewDashboardPage() {
               <TabsTrigger value="map" className="flex-1 gap-1.5">
                 <MapIcon className="h-4 w-4" /> Map
               </TabsTrigger>
+              <TabsTrigger value="profile" className="flex-1 gap-1.5">
+                <UserCircle className="h-4 w-4" /> Profile
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="list" className="mt-4">
               <CrewJobsList
@@ -226,6 +230,9 @@ export default function CrewDashboardPage() {
             </TabsContent>
             <TabsContent value="map" className="mt-4">
               <CrewMapView jobs={assignedJobs} />
+            </TabsContent>
+            <TabsContent value="profile" className="mt-4">
+              <CrewProfileTab />
             </TabsContent>
           </Tabs>
         )}
