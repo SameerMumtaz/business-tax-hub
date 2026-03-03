@@ -27,7 +27,7 @@ export default function PersonalDashboardLayout({ children }: { children: ReactN
             {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
           </Button>
         </div>
-        <div className="p-8 max-w-6xl">{children}</div>
+        <div className="p-8 max-w-6xl mx-auto">{children}</div>
       </main>
     </div>
   );
