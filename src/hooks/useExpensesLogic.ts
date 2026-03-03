@@ -92,6 +92,7 @@ export default function useExpensesLogic() {
   const paginatedRows = sorted.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
 
   const toggleSelect = (id: string) => setSelected((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const selectItems = (ids: string[]) => setSelected(new Set(ids));
   const toggleAll = () => { if (selected.size === sorted.length) setSelected(new Set()); else setSelected(new Set(sorted.map((e) => e.id))); };
 
   const handleBulkDelete = () => {
@@ -144,7 +145,7 @@ export default function useExpensesLogic() {
     open, setOpen, form, setForm, handleAdd, addExpense,
     editDialogOpen, setEditDialogOpen, editForm, setEditForm, handleEditSave, openEditDialog,
     filterCategory, setFilterCategory, sortField, sortDir, toggleSort,
-    selected, toggleSelect, toggleAll, handleBulkDelete, handleBulkCategoryChange,
+    selected, toggleSelect, selectItems, toggleAll, handleBulkDelete, handleBulkCategoryChange,
     editingCategoryId, setEditingCategoryId, handleSingleCategoryChange,
     searchQuery, setSearchQuery, auditResult, setAuditResult,
     ruleDialogOpen, setRuleDialogOpen, ruleKeyword, setRuleKeyword, ruleCategory, setRuleCategory,
