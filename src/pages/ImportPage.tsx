@@ -15,13 +15,15 @@ import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
 
 interface AuditIssue {
-  type: "duplicate" | "anomaly" | "balance" | "unknown" | "personal" | "date_issue";
+  type: "duplicate" | "deductibility" | "miscategorized" | "1099_compliance" | "missing_deduction" | "irs_red_flag" | "documentation" | "estimated_tax" | "anomaly" | "personal_expense" | "date_issue";
   severity: "low" | "medium" | "high";
   title: string;
   description: string;
   affected_ids: string[];
-  suggestion: "delete" | "review" | "recategorize" | "flag" | "keep";
+  suggestion: "delete" | "review" | "recategorize" | "flag" | "keep" | "add_deduction" | "document" | "file_1099";
   suggestion_detail: string;
+  tax_impact?: string;
+  irs_reference?: string;
 }
 
 type SortField = "date" | "description" | "type" | "category" | "amount";
@@ -63,6 +65,8 @@ export default function ImportPage() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [auditIssues, setAuditIssues] = useState<AuditIssue[]>([]);
   const [auditSummary, setAuditSummary] = useState<string>("");
+  const [auditRiskLevel, setAuditRiskLevel] = useState<string>("");
+  const [auditEstimatedTax, setAuditEstimatedTax] = useState<string>("");
   const [auditing, setAuditing] = useState(false);
   const [dismissedIssues, setDismissedIssues] = useState<Set<number>>(new Set());
   const [progressInfo, setProgressInfo] = useState<{ label: string; completed: number; total: number } | null>(null);
@@ -256,8 +260,10 @@ export default function ImportPage() {
     setAuditing(true);
     setAuditIssues([]);
     setAuditSummary("");
+    setAuditRiskLevel("");
+    setAuditEstimatedTax("");
     setDismissedIssues(new Set());
-    setProgressInfo({ label: "AI Auditing", completed: 0, total: 1 });
+    setProgressInfo({ label: "CPA Audit", completed: 0, total: 1 });
     try {
       const { data, error } = await supabase.functions.invoke("audit-transactions", {
         body: {
@@ -267,17 +273,20 @@ export default function ImportPage() {
             description: t.description,
             amount: t.amount,
             type: t.type,
+            category: t.category,
           })),
         },
       });
-      setProgressInfo({ label: "AI Auditing", completed: 1, total: 1 });
+      setProgressInfo({ label: "CPA Audit", completed: 1, total: 1 });
       if (error) throw error;
       setAuditIssues(data?.issues || []);
       setAuditSummary(data?.summary || "");
+      setAuditRiskLevel(data?.risk_level || "");
+      setAuditEstimatedTax(data?.estimated_quarterly_tax || "");
       if (data?.issues?.length === 0) {
         toast.success("No issues detected — your data looks clean!");
       } else {
-        toast.info(`Found ${data.issues.length} potential issue(s)`);
+        toast.info(`Found ${data.issues.length} issue(s) across ${new Set((data.issues as AuditIssue[]).map((i: AuditIssue) => i.type)).size} categories`);
       }
     } catch {
       toast.error("Audit failed");
@@ -488,7 +497,7 @@ export default function ImportPage() {
                 )}
                 <Button variant="outline" onClick={handleAudit} disabled={auditing || categorizing}>
                   <ShieldAlert className="h-4 w-4 mr-2" />
-                  {auditing ? "Auditing…" : "AI Audit"}
+                  {auditing ? "Auditing…" : "CPA Audit"}
                 </Button>
                 {uncategorizedItems.length > 0 && !categorizing && (
                   <Button variant="outline" onClick={handleAICategorize} disabled={auditing}>
@@ -508,15 +517,27 @@ export default function ImportPage() {
             {/* Audit issues — shown above table so user sees them first */}
             {auditIssues.length > 0 && (
               <div className="stat-card space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <h3 className="section-title flex items-center gap-2">
                     <ShieldAlert className="h-4 w-4 text-destructive" />
-                    Audit Results ({auditIssues.filter((_, i) => !dismissedIssues.has(i)).length} issues)
+                    CPA Audit Results ({auditIssues.filter((_, i) => !dismissedIssues.has(i)).length} issues)
                   </h3>
-                  {auditSummary && (
-                    <span className="text-xs text-muted-foreground max-w-[300px] truncate">{auditSummary}</span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {auditRiskLevel && (
+                      <Badge variant={auditRiskLevel === "high" ? "destructive" : auditRiskLevel === "medium" ? "secondary" : "outline"}>
+                        Risk: {auditRiskLevel}
+                      </Badge>
+                    )}
+                    {auditEstimatedTax && (
+                      <Badge variant="outline" className="text-xs">
+                        Est. quarterly tax: {auditEstimatedTax}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
+                {auditSummary && (
+                  <p className="text-sm text-muted-foreground bg-muted/50 rounded p-2">{auditSummary}</p>
+                )}
                 <div className="space-y-2">
                   {auditIssues.map((issue, idx) => {
                     if (dismissedIssues.has(idx)) return null;
@@ -528,24 +549,23 @@ export default function ImportPage() {
                       <div key={idx} className="flex items-start gap-3 bg-muted rounded-lg p-3">
                         <SeverityIcon className={`h-4 w-4 mt-0.5 shrink-0 ${severityColor}`} />
                         <div className="flex-1 min-w-0 space-y-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-sm font-medium">{issue.title}</span>
-                            <Badge variant="outline" className="text-[10px]">{issue.type.replace("_", " ")}</Badge>
+                            <Badge variant="outline" className="text-[10px]">{issue.type.replace(/_/g, " ")}</Badge>
                             <Badge
                               variant={issue.severity === "high" ? "destructive" : "secondary"}
                               className="text-[10px]"
                             >
                               {issue.severity}
                             </Badge>
+                            {issue.irs_reference && (
+                              <Badge variant="outline" className="text-[10px] font-mono">{issue.irs_reference}</Badge>
+                            )}
                           </div>
                           <p className="text-xs text-muted-foreground">{issue.description}</p>
-                          <p className="text-xs font-medium">
-                            💡 {issue.suggestion_detail}
-                          </p>
-                          {issue.affected_ids.length > 0 && (
-                            <p className="text-[10px] text-muted-foreground">
-                              Affects {issue.affected_ids.length} transaction(s)
-                            </p>
+                          <p className="text-xs font-medium">💡 {issue.suggestion_detail}</p>
+                          {issue.tax_impact && (
+                            <p className="text-xs text-chart-warning font-medium">💰 Tax impact: {issue.tax_impact}</p>
                           )}
                         </div>
                         <div className="flex gap-1 shrink-0">
