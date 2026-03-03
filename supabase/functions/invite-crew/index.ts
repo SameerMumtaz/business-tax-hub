@@ -83,6 +83,32 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Resend should always re-trigger invite email
+    if (resend) {
+      const { error: resendError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+        data: {
+          invited_by: business_user_id,
+          team_role: role,
+          display_name: name,
+        },
+      });
+
+      if (resendError) {
+        return new Response(
+          JSON.stringify({ error: resendError.message }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, message: "Invite email resent." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Check if user already exists in auth
     const { data: existingUsers } = await adminClient.auth.admin.listUsers();
     const existingUser = existingUsers?.users?.find(
@@ -92,9 +118,8 @@ Deno.serve(async (req) => {
     let memberUserId = existingUser?.id || null;
     let memberStatus = existingUser ? "active" : "invited";
 
-    // If user doesn't exist, send an invite email via Supabase Auth
+    // If user doesn't exist, send an invite email via Auth
     if (!existingUser) {
-      const siteUrl = Deno.env.get("SUPABASE_URL")?.replace('.supabase.co', '').replace('https://api-', 'https://') || supabaseUrl;
       const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
         data: {
           invited_by: business_user_id,
@@ -109,14 +134,6 @@ Deno.serve(async (req) => {
       } else if (inviteData?.user) {
         memberUserId = inviteData.user.id;
       }
-    }
-
-    // For resend, we only needed to re-trigger the invite email above — skip record creation
-    if (resend) {
-      return new Response(
-        JSON.stringify({ success: true, message: "Invite email resent." }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
     }
 
     // Create team_members row with worker_type and pay_rate
