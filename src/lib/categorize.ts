@@ -41,19 +41,27 @@ function matchRule(
   type: string,
   rules: { vendor_pattern: string; category: string; type: string }[]
 ): string | null {
-  // Clean the description the same way we clean for keyword matching
   const cleaned = cleanForMatching(description);
+  const fuzzy = normalizeForFuzzy(cleaned);
   const lower = description.toLowerCase();
+
   for (const rule of rules) {
     if (rule.type !== type) continue;
     const pattern = rule.vendor_pattern.toLowerCase().trim();
     if (!pattern) continue;
-    // Match against both the raw lowercase AND the cleaned version
-    if (lower.includes(pattern) || cleaned.includes(pattern)) {
+
+    // Match against raw, cleaned, and fuzzy versions
+    if (lower.includes(pattern) || cleaned.includes(pattern) || fuzzy.includes(pattern)) {
       return rule.category;
     }
-    // Also try word-boundary-style matching for short patterns
-    // e.g. pattern "qt" should match "qt outside pay" but not "equity"
+
+    // Try pattern with punctuation normalized too
+    const fuzzyPattern = pattern.replace(/[-'*_.\/\\]/g, " ").replace(/\s+/g, " ").trim();
+    if (fuzzyPattern !== pattern && (fuzzy.includes(fuzzyPattern) || cleaned.includes(fuzzyPattern))) {
+      return rule.category;
+    }
+
+    // Word-boundary matching for short patterns to avoid false positives
     if (pattern.length <= 3) {
       const wordRegex = new RegExp(`\\b${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
       if (wordRegex.test(lower) || wordRegex.test(cleaned)) {
@@ -354,43 +362,112 @@ const INCOME_KEYWORDS: Record<string, string[]> = {
   ],
 };
 
+/**
+ * Aggressively clean bank descriptions for matching.
+ * Strips transaction prefixes, merchant platform prefixes, trailing
+ * location info, reference numbers, and normalizes punctuation.
+ */
 function cleanForMatching(description: string): string {
-  return description
-    .toLowerCase()
-    .replace(/\d{10,}/g, "")
-    .replace(/#\d+/g, "")
-    .replace(/\bxxxx+\w*/gi, "")
-    .replace(/\bckcd\s*\d*/gi, "")
-    .replace(/\b\d{4}\s+\d{4}\s+\d{4}\s+\d{4}\b/g, "")
-    .replace(/\bconfirmation#?\s*\S+/gi, "")
-    .replace(/\bconf#?\s*\S+/gi, "")
-    .replace(/\bID:\s*\S+/gi, "")
-    .replace(/\bCO\s*ID:\S+/gi, "")
-    .replace(/\bINDN:\S+/gi, "")
-    .replace(/\bDES:\S+/gi, "")
-    .replace(/\bPPD\b|\bCCD\b|\bCTX\b/gi, "")
+  let s = description.toLowerCase();
+
+  // Strip common transaction type prefixes
+  s = s.replace(/^(pos\s*(purchase|debit|refund|withdrawal)?|debit\s*card\s*(purchase)?|visa\s*(purchase)?|mastercard\s*(purchase)?|ach\s*(payment|debit|credit|transfer)?|wire\s*(transfer)?|check\s*\d*|electronic\s*(payment|transfer)?|recurring\s*(payment)?|autopay\s*(payment)?|online\s*(payment|transfer)?|mobile\s*(payment)?|bill\s*pay(ment)?|pre-?auth(orized)?)\s*/i, "");
+
+  // Strip merchant platform prefixes (SQ *, TST*, SP *, PAYPAL *, etc.)
+  s = s.replace(/^(sq\s*\*|tst\s*\*|sp\s*\*|paypal\s*\*|pp\s*\*|amzn\s*\*|amazon\s*\*|google\s*\*|apple\s*\*|msft\s*\*|shopify\s*\*|stripe\s*\*|venmo\s*\*|zelle\s*\*|cash\s*app\s*\*|chk?\s*card\s*)\s*/i, "");
+
+  // Strip trailing location info (city, state, zip patterns)
+  s = s.replace(/\s+[A-Z]{2}\s*\d{5}(-\d{4})?\s*$/i, "");
+  s = s.replace(/\s+(#\d+\s+)?[a-z]{2,20}\s+[a-z]{2}\s*$/i, "");
+
+  // Strip reference/card numbers and banking codes
+  s = s.replace(/\d{10,}/g, "");
+  s = s.replace(/#\s*\d+/g, "");
+  s = s.replace(/\bxxxx+\w*/gi, "");
+  s = s.replace(/\bx{4,}\d*/gi, "");
+  s = s.replace(/\bckcd\s*\d*/gi, "");
+  s = s.replace(/\b\d{4}\s+\d{4}\s+\d{4}\s+\d{4}\b/g, "");
+  s = s.replace(/\bconfirmation#?\s*\S+/gi, "");
+  s = s.replace(/\bconf#?\s*\S+/gi, "");
+  s = s.replace(/\bref#?\s*\S+/gi, "");
+  s = s.replace(/\btrace#?\s*\S+/gi, "");
+  s = s.replace(/\bauth#?\s*\S+/gi, "");
+  s = s.replace(/\bID:\s*\S+/gi, "");
+  s = s.replace(/\bCO\s*ID:\S+/gi, "");
+  s = s.replace(/\bINDN:\S+/gi, "");
+  s = s.replace(/\bDES:\S+/gi, "");
+  s = s.replace(/\bSEC:\S+/gi, "");
+  s = s.replace(/\bPPD\b|\bCCD\b|\bCTX\b|\bWEB\b|\bTEL\b/gi, "");
+  s = s.replace(/\bcard\s*\d+/gi, "");
+
+  // Normalize punctuation: replace * - _ / with spaces
+  s = s.replace(/[*_\/\\]+/g, " ");
+  s = s.replace(/-{2,}/g, " ");
+
+  // Collapse whitespace
+  s = s.replace(/\s+/g, " ").trim();
+
+  return s;
+}
+
+/**
+ * Also produce a "normalized" version with all punctuation
+ * removed and hyphens converted to spaces for fuzzy matching.
+ */
+function normalizeForFuzzy(cleaned: string): string {
+  return cleaned
+    .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
+// Pre-build flat keyword maps for O(1)-ish lookup (built once, reused)
+let expenseKeywordList: { keyword: string; category: string }[] | null = null;
+let incomeKeywordList: { keyword: string; category: string }[] | null = null;
+
+function getKeywordList(type: string): { keyword: string; category: string }[] {
+  if (type === "expense") {
+    if (!expenseKeywordList) {
+      expenseKeywordList = [];
+      for (const [cat, kws] of Object.entries(EXPENSE_KEYWORDS)) {
+        for (const kw of kws) expenseKeywordList.push({ keyword: kw, category: cat });
+      }
+      // Sort by keyword length descending so longest match wins first
+      expenseKeywordList.sort((a, b) => b.keyword.length - a.keyword.length);
+    }
+    return expenseKeywordList;
+  }
+  if (!incomeKeywordList) {
+    incomeKeywordList = [];
+    for (const [cat, kws] of Object.entries(INCOME_KEYWORDS)) {
+      for (const kw of kws) incomeKeywordList.push({ keyword: kw, category: cat });
+    }
+    incomeKeywordList.sort((a, b) => b.keyword.length - a.keyword.length);
+  }
+  return incomeKeywordList;
+}
+
 function matchKeyword(description: string, type: string): { category: string; confidence: number } | null {
-  const lower = cleanForMatching(description);
-  const dict = type === "expense" ? EXPENSE_KEYWORDS : INCOME_KEYWORDS;
+  const cleaned = cleanForMatching(description);
+  const fuzzy = normalizeForFuzzy(cleaned);
+  const kwList = getKeywordList(type);
 
-  let bestMatch: { category: string; matchLen: number } | null = null;
-
-  for (const [category, keywords] of Object.entries(dict)) {
-    for (const kw of keywords) {
-      if (lower.includes(kw) && (!bestMatch || kw.length > bestMatch.matchLen)) {
-        bestMatch = { category, matchLen: kw.length };
+  for (const { keyword, category } of kwList) {
+    // Try against cleaned version first, then fuzzy (no punctuation)
+    if (cleaned.includes(keyword) || fuzzy.includes(keyword)) {
+      const confidence = Math.min(0.85, 0.6 + keyword.length * 0.02);
+      return { category, confidence };
+    }
+    // For multi-word keywords, also try with hyphens removed from source
+    if (keyword.includes("-") || keyword.includes("'")) {
+      const altKw = keyword.replace(/[-']/g, " ").replace(/\s+/g, " ");
+      if (fuzzy.includes(altKw)) {
+        const confidence = Math.min(0.85, 0.6 + keyword.length * 0.02);
+        return { category, confidence };
       }
     }
   }
 
-  if (bestMatch) {
-    const confidence = Math.min(0.85, 0.6 + bestMatch.matchLen * 0.02);
-    return { category: bestMatch.category, confidence };
-  }
   return null;
 }
 
