@@ -37,9 +37,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { email, name, role, business_user_id, worker_type, pay_rate, address, state_employed, resend } = await req.json();
+    const { email, name, role, business_user_id, worker_type, pay_rate, address, state_employed, resend, redirect_to } = await req.json();
 
-    // Only business owner can invite
+    const inviteRedirectTo = redirect_to || `${req.headers.get("origin") || ""}/reset-password`;
     if (user.id !== business_user_id) {
       const adminClient = createClient(supabaseUrl, serviceRoleKey);
       const { data: membership } = await adminClient
@@ -91,6 +91,7 @@ Deno.serve(async (req) => {
           team_role: role,
           display_name: name,
         },
+        redirectTo: inviteRedirectTo,
       });
 
       if (resendError) {
@@ -126,6 +127,7 @@ Deno.serve(async (req) => {
           team_role: role,
           display_name: name,
         },
+        redirectTo: inviteRedirectTo,
       });
 
       if (inviteError) {

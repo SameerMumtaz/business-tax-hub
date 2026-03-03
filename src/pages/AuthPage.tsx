@@ -39,15 +39,6 @@ export default function AuthPage() {
       if (isLogin) {
         const { error, data } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        // Check if this user has a pending invite to activate
-        if (data.user) {
-          await supabase
-            .from("team_members")
-            .update({ member_user_id: data.user.id, status: "active", accepted_at: new Date().toISOString() })
-            .eq("email", email)
-            .eq("status", "invited")
-            .is("member_user_id", null);
-        }
         toast.success("Welcome back!");
       } else {
         const { error } = await supabase.auth.signUp({
