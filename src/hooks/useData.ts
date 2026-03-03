@@ -126,6 +126,7 @@ export function useSales() {
         amount: Number(r.amount),
         invoiceNumber: r.invoice_number || "",
         category: (r.category || "Other") as ExpenseCategory,
+        taxCollected: Number((r as any).tax_collected ?? 0),
       })) as Sale[];
     },
   });
@@ -144,7 +145,8 @@ export function useAddSale() {
         amount: sale.amount,
         invoice_number: sale.invoiceNumber,
         category: sale.category || "Other",
-      });
+        tax_collected: sale.taxCollected || 0,
+      } as any);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["sales"] }),
@@ -154,8 +156,11 @@ export function useAddSale() {
 export function useUpdateSale() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (update: { id: string; category?: string }) => {
-      const { error } = await supabase.from("sales").update({ category: update.category }).eq("id", update.id);
+    mutationFn: async (update: { id: string; category?: string; tax_collected?: number }) => {
+      const updateData: Record<string, unknown> = {};
+      if (update.category !== undefined) updateData.category = update.category;
+      if (update.tax_collected !== undefined) updateData.tax_collected = update.tax_collected;
+      const { error } = await supabase.from("sales").update(updateData).eq("id", update.id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["sales"] }),

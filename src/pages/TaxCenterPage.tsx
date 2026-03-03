@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Calculator, Calendar, DollarSign, Landmark, FileText, Printer, Home, Car, Percent, Trash2, Plus, Check } from "lucide-react";
+import SalesTaxTab from "@/components/SalesTaxTab";
 import { toast } from "sonner";
 
 const SE_RATE = 0.153;
@@ -202,6 +203,7 @@ export default function TaxCenterPage() {
           <TabsList>
             <TabsTrigger value="estimate">Tax Estimate</TabsTrigger>
             <TabsTrigger value="deductions">Deductions</TabsTrigger>
+            <TabsTrigger value="sales-tax">Sales Tax</TabsTrigger>
             <TabsTrigger value="schedule-c">Schedule C</TabsTrigger>
           </TabsList>
 
@@ -437,6 +439,11 @@ export default function TaxCenterPage() {
                 </div>
               </div>
             </div>
+          </TabsContent>
+
+          {/* ── Sales Tax Tab ── */}
+          <TabsContent value="sales-tax" className="mt-4">
+            <SalesTaxTab />
           </TabsContent>
 
           {/* ── Schedule C Tab ── */}

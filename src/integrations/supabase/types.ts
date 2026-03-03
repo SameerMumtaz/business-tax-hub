@@ -936,6 +936,7 @@ export type Database = {
           business_type: string | null
           business_zip: string | null
           created_at: string
+          default_tax_rate: number
           ein_last4: string | null
           filing_status: string | null
           first_name: string | null
@@ -961,6 +962,7 @@ export type Database = {
           business_type?: string | null
           business_zip?: string | null
           created_at?: string
+          default_tax_rate?: number
           ein_last4?: string | null
           filing_status?: string | null
           first_name?: string | null
@@ -986,6 +988,7 @@ export type Database = {
           business_type?: string | null
           business_zip?: string | null
           created_at?: string
+          default_tax_rate?: number
           ein_last4?: string | null
           filing_status?: string | null
           first_name?: string | null
@@ -1209,6 +1212,7 @@ export type Database = {
           description: string | null
           id: string
           invoice_number: string | null
+          tax_collected: number
           user_id: string
         }
         Insert: {
@@ -1220,6 +1224,7 @@ export type Database = {
           description?: string | null
           id?: string
           invoice_number?: string | null
+          tax_collected?: number
           user_id: string
         }
         Update: {
@@ -1231,6 +1236,40 @@ export type Database = {
           description?: string | null
           id?: string
           invoice_number?: string | null
+          tax_collected?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      sales_tax_filings: {
+        Row: {
+          created_at: string
+          filed_at: string | null
+          id: string
+          period_end: string
+          period_label: string
+          period_start: string
+          tax_collected: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          filed_at?: string | null
+          id?: string
+          period_end: string
+          period_label: string
+          period_start: string
+          tax_collected?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          filed_at?: string | null
+          id?: string
+          period_end?: string
+          period_label?: string
+          period_start?: string
+          tax_collected?: number
           user_id?: string
         }
         Relationships: []

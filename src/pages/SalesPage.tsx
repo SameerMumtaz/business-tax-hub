@@ -57,11 +57,11 @@ export default function SalesPage() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Sales</h1>
-            <p className="text-muted-foreground text-sm mt-1">{filterCategory !== "all" && <span>{filterCategory} — </span>}Total: <span className="font-mono text-chart-positive">{formatCurrency(totalSales)}</span></p>
+            <p className="text-muted-foreground text-sm mt-1">{filterCategory !== "all" && <span>{filterCategory} — </span>}Total: <span className="font-mono text-chart-positive">{formatCurrency(totalSales)}</span> · Tax: <span className="font-mono">{formatCurrency(sorted.reduce((s, r) => s + (r.taxCollected || 0), 0))}</span></p>
           </div>
           <div className="flex items-center gap-2">
             <DateRangeFilter />
-            <ExportButton data={sorted.map((s) => ({ date: s.date, client: s.client, description: s.description, invoice: s.invoiceNumber, category: s.category, amount: s.amount }))} filename="sales" columns={[{ key: "date", label: "Date" }, { key: "client", label: "Client" }, { key: "description", label: "Description" }, { key: "invoice", label: "Invoice #" }, { key: "category", label: "Category" }, { key: "amount", label: "Amount" }]} />
+            <ExportButton data={sorted.map((s) => ({ date: s.date, client: s.client, description: s.description, invoice: s.invoiceNumber, category: s.category, amount: s.amount, tax_collected: s.taxCollected }))} filename="sales" columns={[{ key: "date", label: "Date" }, { key: "client", label: "Client" }, { key: "description", label: "Description" }, { key: "invoice", label: "Invoice #" }, { key: "category", label: "Category" }, { key: "amount", label: "Amount" }, { key: "tax_collected", label: "Tax Collected" }]} />
             <Select value={filterCategory} onValueChange={(v) => { setFilterCategory(v); setCurrentPage(0); }}>
               <SelectTrigger className="w-[180px]"><Filter className="h-3.5 w-3.5 mr-2" /><SelectValue placeholder="All Categories" /></SelectTrigger>
               <SelectContent><SelectItem value="all">All Categories</SelectItem>{EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
@@ -169,6 +169,7 @@ export default function SalesPage() {
                     <th className="cursor-pointer select-none" onClick={() => toggleSort("description")}><span className="inline-flex items-center">Description<SortIcon field="description" /></span></th>
                     <th className="cursor-pointer select-none" onClick={() => toggleSort("category")}><span className="inline-flex items-center">Category<SortIcon field="category" /></span></th>
                     <th className="text-right cursor-pointer select-none" onClick={() => toggleSort("amount")}><span className="inline-flex items-center justify-end">Amount<SortIcon field="amount" /></span></th>
+                    <th className="text-right">Tax</th>
                     <th className="w-10"></th>
                   </tr>
                 </thead>
@@ -194,6 +195,19 @@ export default function SalesPage() {
                         )}
                       </td>
                       <td className="text-right font-mono text-chart-positive">{formatCurrency(s.amount)}</td>
+                      <td className="text-right font-mono text-xs">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          className="h-7 w-20 text-xs text-right ml-auto"
+                          value={s.taxCollected || ""}
+                          placeholder="0"
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            updateSale.mutate({ id: s.id, tax_collected: val });
+                          }}
+                        />
+                      </td>
                       <td>
                         <AlertDialog>
                           <AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-3.5 w-3.5 text-muted-foreground" /></Button></AlertDialogTrigger>

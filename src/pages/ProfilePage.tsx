@@ -22,6 +22,7 @@ interface Profile {
   business_phone: string;
   business_email: string;
   bookie_id: string;
+  default_tax_rate: string;
 }
 
 const emptyProfile: Profile = {
@@ -35,6 +36,7 @@ const emptyProfile: Profile = {
   business_phone: "",
   business_email: "",
   bookie_id: "",
+  default_tax_rate: "0",
 };
 
 export default function ProfilePage() {
@@ -65,6 +67,7 @@ export default function ProfilePage() {
           business_phone: data.business_phone || "",
           business_email: data.business_email || "",
           bookie_id: (data as any).bookie_id || "",
+          default_tax_rate: String((data as any).default_tax_rate ?? "0"),
         });
       }
       setLoading(false);
@@ -79,9 +82,10 @@ export default function ProfilePage() {
       const digits = einFull.replace(/\D/g, "");
       ein_last4 = digits.slice(-4);
     }
+    const { default_tax_rate, ...profileRest } = profile;
     const { error } = await supabase
       .from("profiles")
-      .update({ ...profile, ein_last4 })
+      .update({ ...profileRest, ein_last4, default_tax_rate: parseFloat(default_tax_rate) || 0 } as any)
       .eq("user_id", user.id);
     if (error) {
       toast.error("Failed to save profile");
@@ -178,6 +182,13 @@ export default function ProfilePage() {
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">Business Email</label>
                 <Input type="email" value={profile.business_email} onChange={(e) => setProfile({ ...profile, business_email: e.target.value })} placeholder="info@yourbusiness.com" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Default Sales Tax Rate %</label>
+                <Input type="number" step="0.01" value={profile.default_tax_rate} onChange={(e) => setProfile({ ...profile, default_tax_rate: e.target.value })} placeholder="0.00" />
+                <p className="text-xs text-muted-foreground mt-1">Pre-fills on new invoices</p>
               </div>
             </div>
           </div>

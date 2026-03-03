@@ -2,9 +2,12 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useExpenses, useSales } from "@/hooks/useData";
 import { useInvoices } from "@/hooks/useInvoices";
+import { useAuth } from "@/hooks/useAuth";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, CheckCircle2, Clock, Tag, Upload, FileText } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Tag, Upload, FileText, Receipt } from "lucide-react";
 
 interface SmartAlert {
   id: string;
@@ -20,7 +23,20 @@ export default function SmartAlerts() {
   const { data: expenses = [] } = useExpenses();
   const { data: sales = [] } = useSales();
   const { data: invoices = [] } = useInvoices();
+  const { user } = useAuth();
   const navigate = useNavigate();
+
+  const { data: taxFilings = [] } = useQuery({
+    queryKey: ["sales-tax-filings", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("sales_tax_filings" as any)
+        .select("*")
+        .eq("user_id", user!.id);
+      return (data || []) as any[];
+    },
+  });
 
   const alerts = useMemo(() => {
     const result: SmartAlert[] = [];
@@ -109,8 +125,45 @@ export default function SmartAlerts() {
       });
     }
 
+    // Sales tax filing reminder
+    const quarterDueDates = [
+      { quarter: 1, label: "Q1 2026", due: new Date(2026, 3, 30), start: "2026-01-01", end: "2026-03-31" },
+      { quarter: 2, label: "Q2 2026", due: new Date(2026, 6, 31), start: "2026-04-01", end: "2026-06-30" },
+      { quarter: 3, label: "Q3 2026", due: new Date(2026, 9, 31), start: "2026-07-01", end: "2026-09-30" },
+      { quarter: 4, label: "Q4 2026", due: new Date(2027, 0, 31), start: "2026-10-01", end: "2026-12-31" },
+    ];
+    for (const q of quarterDueDates) {
+      const filed = taxFilings.some((f: any) => f.period_label === q.label && f.filed_at);
+      if (filed) continue;
+      const qSales = sales.filter((s) => s.date >= q.start && s.date <= q.end);
+      const taxCollected = qSales.reduce((s, r) => s + (r.taxCollected || 0), 0);
+      if (taxCollected <= 0) continue;
+      const daysUntilDue = Math.ceil((q.due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysUntilDue <= 30 && daysUntilDue > 0) {
+        result.push({
+          id: `sales-tax-${q.quarter}`,
+          severity: daysUntilDue <= 7 ? "urgent" : "warning",
+          icon: Receipt,
+          title: `${q.label} sales tax not filed — due in ${daysUntilDue} days`,
+          description: `${formatCurrency(taxCollected)} in sales tax collected needs to be filed.`,
+          actionLabel: "View Sales Tax",
+          actionPath: "/tax-center?tab=sales-tax",
+        });
+      } else if (daysUntilDue < 0) {
+        result.push({
+          id: `sales-tax-${q.quarter}`,
+          severity: "urgent",
+          icon: Receipt,
+          title: `${q.label} sales tax filing OVERDUE`,
+          description: `${formatCurrency(taxCollected)} in sales tax was due ${q.due.toLocaleDateString()}.`,
+          actionLabel: "View Sales Tax",
+          actionPath: "/tax-center?tab=sales-tax",
+        });
+      }
+    }
+
     return result;
-  }, [expenses, sales, invoices]);
+  }, [expenses, sales, invoices, taxFilings]);
 
   if (alerts.length === 0) {
     return (
