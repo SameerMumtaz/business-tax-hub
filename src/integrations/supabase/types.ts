@@ -1147,6 +1147,10 @@ export type Database = {
         Returns: string[]
       }
       get_business_job_ids: { Args: { _user_id: string }; Returns: string[] }
+      get_business_timesheet_ids: {
+        Args: { _user_id: string }
+        Returns: string[]
+      }
       get_team_role: {
         Args: { _business_id: string; _user_id: string }
         Returns: string

@@ -132,6 +132,25 @@ export function useTimesheets() {
     const calc = computePay(entry, effectiveRate);
     const { error } = await supabase.from("timesheet_entries").insert({ ...entry, pay_rate: effectiveRate, ...calc });
     if (error) { toast.error(error.message); return; }
+
+    // Auto-create job_assignment if a job is selected so crew members can see assigned work
+    if (entry.job_id) {
+      const { data: existing } = await supabase
+        .from("job_assignments")
+        .select("id")
+        .eq("job_id", entry.job_id)
+        .eq("worker_id", entry.worker_id)
+        .maybeSingle();
+      if (!existing) {
+        await supabase.from("job_assignments").insert({
+          job_id: entry.job_id,
+          worker_id: entry.worker_id,
+          worker_name: entry.worker_name,
+          worker_type: entry.worker_type,
+        });
+      }
+    }
+
     fetchAll();
   };
 
