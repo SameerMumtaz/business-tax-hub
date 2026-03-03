@@ -495,6 +495,80 @@ export default function ImportPage() {
               </div>
             </div>
 
+            {/* Audit issues — shown above table so user sees them first */}
+            {auditIssues.length > 0 && (
+              <div className="stat-card space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="section-title flex items-center gap-2">
+                    <ShieldAlert className="h-4 w-4 text-destructive" />
+                    Audit Results ({auditIssues.filter((_, i) => !dismissedIssues.has(i)).length} issues)
+                  </h3>
+                  {auditSummary && (
+                    <span className="text-xs text-muted-foreground max-w-[300px] truncate">{auditSummary}</span>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {auditIssues.map((issue, idx) => {
+                    if (dismissedIssues.has(idx)) return null;
+                    const SeverityIcon = issue.severity === "high" ? Ban
+                      : issue.severity === "medium" ? AlertTriangle : Info;
+                    const severityColor = issue.severity === "high" ? "text-destructive"
+                      : issue.severity === "medium" ? "text-chart-warning" : "text-chart-info";
+                    return (
+                      <div key={idx} className="flex items-start gap-3 bg-muted rounded-lg p-3">
+                        <SeverityIcon className={`h-4 w-4 mt-0.5 shrink-0 ${severityColor}`} />
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">{issue.title}</span>
+                            <Badge variant="outline" className="text-[10px]">{issue.type.replace("_", " ")}</Badge>
+                            <Badge
+                              variant={issue.severity === "high" ? "destructive" : "secondary"}
+                              className="text-[10px]"
+                            >
+                              {issue.severity}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{issue.description}</p>
+                          <p className="text-xs font-medium">
+                            💡 {issue.suggestion_detail}
+                          </p>
+                          {issue.affected_ids.length > 0 && (
+                            <p className="text-[10px] text-muted-foreground">
+                              Affects {issue.affected_ids.length} transaction(s)
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          {(issue.suggestion === "delete" || issue.suggestion === "review" || issue.suggestion === "flag") && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-xs h-7"
+                              onClick={() => applyIssueSuggestion(issue, idx)}
+                            >
+                              {issue.suggestion === "delete" ? (
+                                <><Trash2 className="h-3 w-3 mr-1" /> Delete</>
+                              ) : (
+                                <><X className="h-3 w-3 mr-1" /> Exclude</>
+                              )}
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs h-7"
+                            onClick={() => dismissIssue(idx)}
+                          >
+                            Dismiss
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Transaction review table */}
             <div className="stat-card overflow-x-auto">
               <table className="data-table">
@@ -581,80 +655,6 @@ export default function ImportPage() {
                 </tbody>
               </table>
             </div>
-
-            {/* Audit issues */}
-            {auditIssues.length > 0 && (
-              <div className="stat-card space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="section-title flex items-center gap-2">
-                    <ShieldAlert className="h-4 w-4 text-destructive" />
-                    Audit Results ({auditIssues.filter((_, i) => !dismissedIssues.has(i)).length} issues)
-                  </h3>
-                  {auditSummary && (
-                    <span className="text-xs text-muted-foreground max-w-[300px] truncate">{auditSummary}</span>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  {auditIssues.map((issue, idx) => {
-                    if (dismissedIssues.has(idx)) return null;
-                    const SeverityIcon = issue.severity === "high" ? Ban
-                      : issue.severity === "medium" ? AlertTriangle : Info;
-                    const severityColor = issue.severity === "high" ? "text-destructive"
-                      : issue.severity === "medium" ? "text-chart-warning" : "text-chart-info";
-                    return (
-                      <div key={idx} className="flex items-start gap-3 bg-muted rounded-lg p-3">
-                        <SeverityIcon className={`h-4 w-4 mt-0.5 shrink-0 ${severityColor}`} />
-                        <div className="flex-1 min-w-0 space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">{issue.title}</span>
-                            <Badge variant="outline" className="text-[10px]">{issue.type.replace("_", " ")}</Badge>
-                            <Badge
-                              variant={issue.severity === "high" ? "destructive" : "secondary"}
-                              className="text-[10px]"
-                            >
-                              {issue.severity}
-                            </Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground">{issue.description}</p>
-                          <p className="text-xs font-medium">
-                            💡 {issue.suggestion_detail}
-                          </p>
-                          {issue.affected_ids.length > 0 && (
-                            <p className="text-[10px] text-muted-foreground">
-                              Affects {issue.affected_ids.length} transaction(s)
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex gap-1 shrink-0">
-                          {(issue.suggestion === "delete" || issue.suggestion === "review" || issue.suggestion === "flag") && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-xs h-7"
-                              onClick={() => applyIssueSuggestion(issue, idx)}
-                            >
-                              {issue.suggestion === "delete" ? (
-                                <><Trash2 className="h-3 w-3 mr-1" /> Delete</>
-                              ) : (
-                                <><X className="h-3 w-3 mr-1" /> Exclude</>
-                              )}
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-xs h-7"
-                            onClick={() => dismissIssue(idx)}
-                          >
-                            Dismiss
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
             {/* Rule suggestions */}
             {visibleSuggestions.length > 0 && (
