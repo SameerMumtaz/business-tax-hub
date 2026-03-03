@@ -33,9 +33,9 @@ serve(async (req) => {
       const batch = pages.slice(i, i + BATCH_SIZE);
       const pageRange = `pages ${i + 1}-${Math.min(i + BATCH_SIZE, pages.length)}`;
 
-      const imageContent = batch.map((pageBase64, idx) => ({
+      const imageContent = batch.map((pageBase64) => ({
         type: "image_url" as const,
-        image_url: { url: pageBase64, detail: "high" as const },
+        image_url: { url: pageBase64, detail: "low" as const },
       }));
 
       const response = await fetch(
@@ -47,7 +47,7 @@ serve(async (req) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "google/gemini-2.5-pro",
+            model: "google/gemini-2.5-flash",
             messages: [
               {
                 role: "system",
