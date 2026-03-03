@@ -81,6 +81,33 @@ export function useTimesheets() {
     return data;
   };
 
+  const getEffectiveRate = async (workerName: string, workerType: string, weekStart: string, defaultRate: number): Promise<number> => {
+    // Look up if there's a scheduled rate change that's now effective
+    // Find the most recent pay_rate_change for this worker that's effective on or before the timesheet week
+    if (!user) return defaultRate;
+    
+    // Get team member by name
+    const { data: tm } = await supabase
+      .from("team_members")
+      .select("id, pay_rate")
+      .eq("business_user_id", user.id)
+      .eq("name", workerName)
+      .maybeSingle();
+    if (!tm) return defaultRate;
+
+    // Check for the most recent effective rate change
+    const { data: rateChange } = await supabase
+      .from("pay_rate_changes")
+      .select("new_rate, effective_date")
+      .eq("team_member_id", tm.id)
+      .lte("effective_date", weekStart)
+      .order("effective_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    return rateChange ? rateChange.new_rate : tm.pay_rate;
+  };
+
   const addEntry = async (entry: {
     timesheet_id: string;
     worker_id: string;
@@ -96,8 +123,14 @@ export function useTimesheets() {
     sun_hours: number;
     job_id: string | null;
   }) => {
-    const calc = computePay(entry, entry.pay_rate);
-    const { error } = await supabase.from("timesheet_entries").insert({ ...entry, ...calc });
+    // Get the timesheet's week_start to determine effective rate
+    const ts = timesheets.find((t) => t.id === entry.timesheet_id);
+    const effectiveRate = ts
+      ? await getEffectiveRate(entry.worker_name, entry.worker_type, ts.week_start, entry.pay_rate)
+      : entry.pay_rate;
+    
+    const calc = computePay(entry, effectiveRate);
+    const { error } = await supabase.from("timesheet_entries").insert({ ...entry, pay_rate: effectiveRate, ...calc });
     if (error) { toast.error(error.message); return; }
     fetchAll();
   };
