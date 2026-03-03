@@ -82,6 +82,19 @@ export default function CategorizationRulesPage() {
     }
   }
 
+  async function updateRuleCategory(id: string, category: string) {
+    const { error } = await supabase
+      .from("categorization_rules")
+      .update({ category })
+      .eq("id", id);
+    if (error) {
+      toast.error("Failed to update rule");
+    } else {
+      toast.success(`Category updated to ${category}`);
+      setRules((prev) => prev.map((r) => r.id === id ? { ...r, category } : r));
+    }
+  }
+
   const categories = newType === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
   const expenseRules = rules.filter((r) => r.type === "expense");
   const incomeRules = rules.filter((r) => r.type === "income");
@@ -175,10 +188,19 @@ export default function CategorizationRulesPage() {
                   {expenseRules.map((r) => (
                     <tr key={r.id}>
                       <td className="font-mono text-sm">{r.vendor_pattern}</td>
-                      <td><Badge variant="secondary">{r.category}</Badge></td>
+                      <td>
+                        <Select value={r.category} onValueChange={(v) => updateRuleCategory(r.id, v)}>
+                          <SelectTrigger className="h-8 w-[180px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {EXPENSE_CATEGORIES.map((c) => (
+                              <SelectItem key={c} value={c}>{c}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>
                       <td>
                         <Badge variant={r.priority > 0 ? "default" : "outline"} className="text-xs">
-                          {r.priority > 0 ? "Custom" : "Default"}
+                          {r.priority >= 10 ? "Custom" : r.priority >= 5 ? "AI Learned" : "Default"}
                         </Badge>
                       </td>
                       <td>
@@ -216,10 +238,19 @@ export default function CategorizationRulesPage() {
                   {incomeRules.map((r) => (
                     <tr key={r.id}>
                       <td className="font-mono text-sm">{r.vendor_pattern}</td>
-                      <td><Badge variant="secondary">{r.category}</Badge></td>
+                      <td>
+                        <Select value={r.category} onValueChange={(v) => updateRuleCategory(r.id, v)}>
+                          <SelectTrigger className="h-8 w-[180px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {INCOME_CATEGORIES.map((c) => (
+                              <SelectItem key={c} value={c}>{c}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>
                       <td>
                         <Badge variant={r.priority > 0 ? "default" : "outline"} className="text-xs">
-                          {r.priority > 0 ? "Custom" : "Default"}
+                          {r.priority >= 10 ? "Custom" : r.priority >= 5 ? "AI Learned" : "Default"}
                         </Badge>
                       </td>
                       <td>
