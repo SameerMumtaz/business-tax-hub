@@ -244,9 +244,14 @@ export type Database = {
           due_date: string | null
           id: string
           invoice_number: string
+          is_recurring: boolean
           issue_date: string
           matched_sale_id: string | null
           notes: string | null
+          recurring_end_date: string | null
+          recurring_interval: string | null
+          recurring_next_date: string | null
+          recurring_parent_id: string | null
           share_token: string | null
           status: string
           subtotal: number
@@ -264,9 +269,14 @@ export type Database = {
           due_date?: string | null
           id?: string
           invoice_number: string
+          is_recurring?: boolean
           issue_date: string
           matched_sale_id?: string | null
           notes?: string | null
+          recurring_end_date?: string | null
+          recurring_interval?: string | null
+          recurring_next_date?: string | null
+          recurring_parent_id?: string | null
           share_token?: string | null
           status?: string
           subtotal?: number
@@ -284,9 +294,14 @@ export type Database = {
           due_date?: string | null
           id?: string
           invoice_number?: string
+          is_recurring?: boolean
           issue_date?: string
           matched_sale_id?: string | null
           notes?: string | null
+          recurring_end_date?: string | null
+          recurring_interval?: string | null
+          recurring_next_date?: string | null
+          recurring_parent_id?: string | null
           share_token?: string | null
           status?: string
           subtotal?: number
@@ -309,6 +324,13 @@ export type Database = {
             columns: ["matched_sale_id"]
             isOneToOne: false
             referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_recurring_parent_id_fkey"
+            columns: ["recurring_parent_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
         ]

@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { useInvoices, useAddInvoice, useUpdateInvoiceStatus, useDeleteInvoice, useMatchInvoiceToSale, Invoice } from "@/hooks/useInvoices";
+import { useInvoices, useAddInvoice, useUpdateInvoiceStatus, useDeleteInvoice, useMatchInvoiceToSale, useGenerateRecurringInvoice, Invoice } from "@/hooks/useInvoices";
 import { useClients } from "@/hooks/useClients";
 import { useSales } from "@/hooks/useData";
 import { formatCurrency } from "@/lib/format";
@@ -11,7 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Send, FileText, Link2, CheckCircle2, AlertCircle, Clock, X } from "lucide-react";
+import { Plus, Trash2, Send, FileText, Link2, CheckCircle2, AlertCircle, Clock, X, RefreshCw, Repeat } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof Clock }> = {
@@ -29,6 +30,7 @@ export default function InvoicesPage() {
   const updateStatus = useUpdateInvoiceStatus();
   const deleteInvoice = useDeleteInvoice();
   const matchToSale = useMatchInvoiceToSale();
+  const generateRecurring = useGenerateRecurringInvoice();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
@@ -44,6 +46,9 @@ export default function InvoicesPage() {
     due_date: "",
     notes: "",
     tax_rate: "0",
+    is_recurring: false,
+    recurring_interval: "monthly",
+    recurring_end_date: "",
     line_items: [{ description: "", quantity: "1", unit_price: "" }] as { description: string; quantity: string; unit_price: string }[],
   });
 
@@ -79,6 +84,10 @@ export default function InvoicesPage() {
       due_date: form.due_date || undefined,
       notes: form.notes || undefined,
       tax_rate: parseFloat(form.tax_rate) || 0,
+      is_recurring: form.is_recurring,
+      recurring_interval: form.is_recurring ? form.recurring_interval : undefined,
+      recurring_next_date: form.is_recurring ? form.issue_date : undefined,
+      recurring_end_date: form.is_recurring && form.recurring_end_date ? form.recurring_end_date : undefined,
       line_items: form.line_items.filter(li => li.description && li.unit_price).map(li => ({
         description: li.description,
         quantity: parseFloat(li.quantity) || 1,
@@ -86,7 +95,7 @@ export default function InvoicesPage() {
       })),
     }, {
       onSuccess: () => {
-        setForm({ invoice_number: "", client_name: "", client_email: "", client_id: "", issue_date: new Date().toISOString().slice(0, 10), due_date: "", notes: "", tax_rate: "0", line_items: [{ description: "", quantity: "1", unit_price: "" }] });
+        setForm({ invoice_number: "", client_name: "", client_email: "", client_id: "", issue_date: new Date().toISOString().slice(0, 10), due_date: "", notes: "", tax_rate: "0", is_recurring: false, recurring_interval: "monthly", recurring_end_date: "", line_items: [{ description: "", quantity: "1", unit_price: "" }] });
         setCreateOpen(false);
         toast.success("Invoice created");
       },
@@ -245,6 +254,40 @@ ${inv.notes ? `\nNotes: ${inv.notes}` : ""}
 
                   <Textarea placeholder="Notes (optional)" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
 
+                  {/* Recurring toggle */}
+                  <div className="border-t pt-3 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="is_recurring"
+                        checked={form.is_recurring}
+                        onCheckedChange={(checked) => setForm({ ...form, is_recurring: !!checked })}
+                      />
+                      <label htmlFor="is_recurring" className="text-sm font-medium cursor-pointer flex items-center gap-1.5">
+                        <Repeat className="h-3.5 w-3.5" /> Make this a recurring invoice
+                      </label>
+                    </div>
+                    {form.is_recurring && (
+                      <div className="grid grid-cols-2 gap-3 pl-6">
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Interval</label>
+                          <Select value={form.recurring_interval} onValueChange={v => setForm({ ...form, recurring_interval: v })}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="weekly">Weekly</SelectItem>
+                              <SelectItem value="monthly">Monthly</SelectItem>
+                              <SelectItem value="quarterly">Quarterly</SelectItem>
+                              <SelectItem value="yearly">Yearly</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">End Date (optional)</label>
+                          <Input type="date" value={form.recurring_end_date} onChange={e => setForm({ ...form, recurring_end_date: e.target.value })} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="border-t pt-3 space-y-1 text-sm">
                     <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span className="font-mono">{formatCurrency(formSubtotal)}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground">Tax ({form.tax_rate}%)</span><span className="font-mono">{formatCurrency(formTax)}</span></div>
@@ -285,7 +328,15 @@ ${inv.notes ? `\nNotes: ${inv.notes}` : ""}
                     const Icon = cfg.icon;
                     return (
                       <tr key={inv.id}>
-                        <td className="font-medium">{inv.invoice_number}</td>
+                        <td className="font-medium">
+                          <span>{inv.invoice_number}</span>
+                          {inv.is_recurring && (
+                            <Badge variant="secondary" className="ml-2 text-xs gap-1"><Repeat className="h-3 w-3" />{inv.recurring_interval}</Badge>
+                          )}
+                          {inv.recurring_parent_id && (
+                            <Badge variant="outline" className="ml-1 text-xs">auto</Badge>
+                          )}
+                        </td>
                         <td>{inv.client_name}</td>
                         <td className="font-mono text-xs text-muted-foreground">{inv.issue_date}</td>
                         <td className="font-mono text-xs text-muted-foreground">{inv.due_date || "—"}</td>
@@ -325,6 +376,16 @@ ${inv.notes ? `\nNotes: ${inv.notes}` : ""}
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { deleteInvoice.mutate(inv.id); toast.success("Deleted"); }} title="Delete">
                               <Trash2 className="h-3.5 w-3.5 text-destructive" />
                             </Button>
+                            {inv.is_recurring && (
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
+                                generateRecurring.mutate(inv, {
+                                  onSuccess: () => toast.success("Recurring invoice generated"),
+                                  onError: () => toast.error("Failed to generate"),
+                                });
+                              }} title="Generate Next Invoice">
+                                <RefreshCw className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                           </div>
                         </td>
                       </tr>
