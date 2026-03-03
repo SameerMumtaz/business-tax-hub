@@ -27,7 +27,7 @@ const PERSONAL_RX = /\b(netflix|hulu|disney\+?|spotify|apple music|gym|fitness|p
 
 const SEVERITY_WEIGHT: Record<string, number> = { high: 3, medium: 2, low: 1 };
 
-export function auditExpenses(expenses: Expense[]): AuditResult {
+export function auditExpenses(expenses: Expense[], dismissedSet?: Set<string>): AuditResult {
   const issues: AuditIssue[] = [];
 
   // 1. Duplicates
@@ -137,10 +137,10 @@ export function auditExpenses(expenses: Expense[]): AuditResult {
     });
   }
 
-  return buildResult(issues);
+  return buildResult(issues, dismissedSet);
 }
 
-export function auditSales(sales: Sale[], expenses: Expense[], matchedSaleIds?: Set<string>): AuditResult {
+export function auditSales(sales: Sale[], expenses: Expense[], matchedSaleIds?: Set<string>, dismissedSet?: Set<string>): AuditResult {
   const issues: AuditIssue[] = [];
 
   // 1. Duplicate sales
@@ -230,14 +230,28 @@ export function auditSales(sales: Sale[], expenses: Expense[], matchedSaleIds?: 
     });
   }
 
-  return buildResult(issues);
+  return buildResult(issues, dismissedSet);
 }
 
 function formatDollar(n: number): string {
   return `$${n.toLocaleString()}`;
 }
 
-function buildResult(issues: AuditIssue[]): AuditResult {
+function buildResult(issues: AuditIssue[], dismissedSet?: Set<string>): AuditResult {
+  // Filter out issues where ALL affected_ids have been dismissed for that issue type
+  if (dismissedSet && dismissedSet.size > 0) {
+    for (const issue of issues) {
+      issue.affected_ids = issue.affected_ids.filter(
+        (id) => !dismissedSet.has(`${id}::${issue.type}`)
+      );
+    }
+    // Remove issues that have no remaining affected transactions
+    issues = issues.filter((issue) => {
+      // Keep issues with no affected_ids (like estimated_tax) unless explicitly dismissed
+      if (issue.affected_ids.length === 0 && issue.type !== "estimated_tax") return false;
+      return true;
+    });
+  }
   // Sort by severity weight × dollar impact (highest first)
   issues.sort((a, b) => {
     const scoreA = (SEVERITY_WEIGHT[a.severity] || 1) * a.dollarImpact;

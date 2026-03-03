@@ -12,6 +12,7 @@ import AuditIssuesPanel from "@/components/AuditIssuesPanel";
 import { formatCurrency } from "@/lib/format";
 import { EXPENSE_CATEGORIES } from "@/types/tax";
 import { auditExpenses } from "@/lib/audit";
+import { useAuditDismissals } from "@/hooks/useAuditDismissals";
 import { applyRulesToUncategorized } from "@/lib/categorize";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 export default function ExpensesPage() {
   const queryClient = useQueryClient();
   const logic = useExpensesLogic();
+  const { dismissedSet, dismiss: dismissAudit } = useAuditDismissals();
   const {
     expenses, sorted, paginatedRows, totalPages, currentPage, setCurrentPage, totalFiltered,
     open, setOpen, form, setForm, handleAdd, addExpense,
@@ -113,14 +115,15 @@ export default function ExpensesPage() {
                 }
                 // Use fresh data from cache after refetch completes
                 const freshExpenses = queryClient.getQueryData<typeof expenses>(["expenses", user?.id]) ?? expenses;
-                setAuditResult(auditExpenses(freshExpenses));
+                setAuditResult(auditExpenses(freshExpenses, dismissedSet));
               }}><ShieldAlert className="h-4 w-4 mr-2" />Quick Audit</Button>
             </div>
 
             {auditResult && (
               <AuditIssuesPanel result={auditResult} getItemLabel={(id) => { const e = expenses.find((x) => x.id === id); if (!e) return null; return { date: e.date, label: `${e.vendor} — ${e.description}`, amount: e.amount }; }}
-                onDeleteItems={(ids) => { bulkRemove.mutate(ids, { onSuccess: () => { toast.success(`Deleted ${ids.length} expense(s)`); setAuditResult(auditExpenses(expenses.filter((e) => !ids.includes(e.id)))); } }); }}
+                onDeleteItems={(ids) => { bulkRemove.mutate(ids, { onSuccess: () => { toast.success(`Deleted ${ids.length} expense(s)`); setAuditResult(auditExpenses(expenses.filter((e) => !ids.includes(e.id)), dismissedSet)); } }); }}
                 onSelectItems={(ids) => { selectItems(ids); toast.info(`Selected ${ids.length} item(s)`); }}
+                onDismissItems={(items) => { dismissAudit.mutate(items, { onSuccess: () => toast.success("Marked as non-issue — won't appear in future audits") }); }}
               />
             )}
 
