@@ -35,6 +35,8 @@ import TeamPage from "./pages/TeamPage";
 import CrewDashboardPage from "./pages/CrewDashboardPage";
 import CrewMapPage from "./pages/CrewMapPage";
 import VehiclesPage from "./pages/VehiclesPage";
+import QuotesPage from "./pages/QuotesPage";
+import PublicQuotePage from "./pages/PublicQuotePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -58,6 +60,7 @@ const App = () => (
             <Route path="/import" element={<ProtectedRoute><ImportPage /></ProtectedRoute>} />
             <Route path="/categorization" element={<ProtectedRoute><CategorizationRulesPage /></ProtectedRoute>} />
             <Route path="/sales" element={<ProtectedRoute><SalesPage /></ProtectedRoute>} />
+            <Route path="/quotes" element={<ProtectedRoute><QuotesPage /></ProtectedRoute>} />
             <Route path="/invoices" element={<ProtectedRoute><InvoicesPage /></ProtectedRoute>} />
             <Route path="/clients" element={<ProtectedRoute><ClientsPage /></ProtectedRoute>} />
             <Route path="/expenses" element={<ProtectedRoute><ExpensesPage /></ProtectedRoute>} />
@@ -87,6 +90,7 @@ const App = () => (
             <Route path="/personal/1040" element={<ProtectedRoute><Personal1040Page /></ProtectedRoute>} />
             <Route path="/personal/profile" element={<ProtectedRoute><PersonalProfilePage /></ProtectedRoute>} />
 
+            <Route path="/q/:token" element={<PublicQuotePage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

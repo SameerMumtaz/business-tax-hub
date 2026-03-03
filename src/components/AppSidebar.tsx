@@ -23,6 +23,7 @@ import {
   Percent,
   Home,
   Car,
+  ClipboardList,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -48,9 +49,10 @@ const links: NavItem[] = [
   { to: "/categorization", label: "Auto-Sort Rules", icon: Tag },
   {
     to: "/sales", label: "Money In", icon: TrendingUp,
-    matchPaths: ["/sales", "/invoices", "/clients", "/aging"],
+    matchPaths: ["/sales", "/invoices", "/clients", "/aging", "/quotes"],
     children: [
       { to: "/sales", label: "Overview", icon: TrendingUp },
+      { to: "/quotes", label: "Quotes", icon: ClipboardList },
       { to: "/invoices", label: "Invoices", icon: FileText },
       { to: "/clients", label: "Clients", icon: UserCircle },
       { to: "/aging", label: "Unpaid Invoices", icon: Clock },
