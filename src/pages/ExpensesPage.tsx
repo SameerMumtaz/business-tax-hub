@@ -14,8 +14,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import { Plus, Trash2, Filter, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Tag, Pencil, Search } from "lucide-react";
+import { Plus, Trash2, Filter, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Tag, Pencil, Search, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
+import { auditExpenses, AuditResult } from "@/lib/audit";
+import AuditIssuesPanel from "@/components/AuditIssuesPanel";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from "recharts";
@@ -46,6 +48,7 @@ export default function ExpensesPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [auditResult, setAuditResult] = useState<AuditResult | null>(null);
 
   const filtered = useMemo(() => {
     let result = filterCategory === "all" ? expenses : expenses.filter((e) => e.category === filterCategory);
@@ -252,15 +255,42 @@ export default function ExpensesPage() {
           </TabsList>
 
           <TabsContent value="expenses" className="mt-4 space-y-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by vendor, description, date, or amount…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by vendor, description, date, or amount…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setAuditResult(auditExpenses(expenses))}
+              >
+                <ShieldAlert className="h-4 w-4 mr-2" />
+                Quick Audit
+              </Button>
             </div>
+
+            {auditResult && (
+              <AuditIssuesPanel
+                result={auditResult}
+                getItemLabel={(id) => {
+                  const e = expenses.find((x) => x.id === id);
+                  if (!e) return null;
+                  return { date: e.date, label: `${e.vendor} — ${e.description}`, amount: e.amount };
+                }}
+                onDeleteItems={(ids) => {
+                  bulkRemove.mutate(ids, {
+                    onSuccess: () => { toast.success(`Deleted ${ids.length} expense(s)`); setAuditResult(auditExpenses(expenses.filter((e) => !ids.includes(e.id)))); },
+                  });
+                }}
+                onSelectItems={(ids) => setSelected(new Set(ids))}
+              />
+            )}
+
             {/* Bulk actions bar */}
             {selected.size > 0 && (
               <div className="flex items-center gap-3 bg-muted rounded-lg px-4 py-2 flex-wrap">
