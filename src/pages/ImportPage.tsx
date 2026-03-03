@@ -99,78 +99,70 @@ export default function ImportPage() {
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       const totalPages = Math.min(pdf.numPages, 50);
 
-      // Phase 1: Render all pages to JPEG (fast, CPU-bound)
-      setPdfStatus(`Rendering ${totalPages} pages…`);
-      const pageImages: string[] = [];
+      // Phase 1: Extract text from all pages (instant, no AI needed)
+      setPdfStatus(`Extracting text from ${totalPages} pages…`);
+      const pageTexts: string[] = [];
       for (let p = 1; p <= totalPages; p++) {
-        setPdfProgress(Math.round((p / totalPages) * 15));
+        setPdfProgress(Math.round((p / totalPages) * 30));
         const page = await pdf.getPage(p);
-        const viewport = page.getViewport({ scale: 1.0 });
-        const canvas = document.createElement("canvas");
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        const ctx = canvas.getContext("2d")!;
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        pageImages.push(canvas.toDataURL("image/jpeg", 0.5));
-        canvas.remove();
-      }
-
-      // Phase 2: Extract transactions via parallel AI calls (2 pages per call, 4 concurrent)
-      const PAGES_PER_CALL = 2;
-      const CONCURRENCY = 4;
-      const allTransactions: any[] = [];
-      let completedChunks = 0;
-
-      // Build chunks of page images
-      const chunks: { images: string[]; label: string }[] = [];
-      for (let i = 0; i < pageImages.length; i += PAGES_PER_CALL) {
-        const imgs = pageImages.slice(i, i + PAGES_PER_CALL);
-        chunks.push({ images: imgs, label: `pages ${i + 1}–${Math.min(i + PAGES_PER_CALL, totalPages)}` });
-      }
-      const totalChunks = chunks.length;
-
-      const processChunk = async (chunk: { images: string[]; label: string }) => {
-        for (let attempt = 1; attempt <= 2; attempt++) {
-          try {
-            const { data, error } = await supabase.functions.invoke("parse-pdf", {
-              body: { pages: chunk.images },
-            });
-            if (!error && data?.transactions?.length) {
-              return data.transactions;
+        const content = await page.getTextContent();
+        const lines: string[] = [];
+        let lastY: number | null = null;
+        for (const item of content.items) {
+          if ("str" in item && item.str) {
+            const y = Math.round((item as any).transform?.[5] ?? 0);
+            if (lastY !== null && Math.abs(y - lastY) > 5) {
+              lines.push("\n");
             }
-            if (!error) return [];
-            console.error(`${chunk.label} attempt ${attempt} failed:`, error);
-          } catch (e) {
-            console.error(`${chunk.label} attempt ${attempt} error:`, e);
+            lines.push(item.str + " ");
+            lastY = y;
           }
-          if (attempt < 2) await new Promise((r) => setTimeout(r, 500));
         }
-        return [];
-      };
-
-      // Run with concurrency limit
-      setPdfStatus(`AI extracting ${totalPages} pages (${CONCURRENCY} parallel)…`);
-      const pending: Promise<void>[] = [];
-      let chunkIdx = 0;
-
-      const launchNext = (): Promise<void> | null => {
-        if (chunkIdx >= totalChunks) return null;
-        const idx = chunkIdx++;
-        const chunk = chunks[idx];
-        return processChunk(chunk).then((txns) => {
-          if (txns.length) allTransactions.push(...txns);
-          completedChunks++;
-          setPdfProgress(15 + Math.round((completedChunks / totalChunks) * 75));
-          setPdfStatus(`Extracted ${completedChunks}/${totalChunks} chunks (${allTransactions.length} txns)…`);
-        });
-      };
-
-      // Seed the pool
-      for (let i = 0; i < Math.min(CONCURRENCY, totalChunks); i++) {
-        const p = launchNext();
-        if (p) pending.push(p.then(async () => { while (chunkIdx < totalChunks) { const next = launchNext(); if (next) await next; } }));
+        pageTexts.push(lines.join(""));
       }
-      await Promise.all(pending);
+
+      const fullText = pageTexts.join("\n\n--- PAGE BREAK ---\n\n");
+      setPdfStatus("AI structuring transactions…");
+      setPdfProgress(40);
+
+      // Phase 2: Send text to AI for structuring (single call, very fast)
+      // Split into chunks if text is very long (>50k chars)
+      const CHUNK_SIZE = 50000;
+      const textChunks: string[] = [];
+      if (fullText.length <= CHUNK_SIZE) {
+        textChunks.push(fullText);
+      } else {
+        // Split on page breaks to keep context
+        let current = "";
+        for (const pageText of pageTexts) {
+          if (current.length + pageText.length > CHUNK_SIZE && current.length > 0) {
+            textChunks.push(current);
+            current = "";
+          }
+          current += pageText + "\n\n--- PAGE BREAK ---\n\n";
+        }
+        if (current.trim()) textChunks.push(current);
+      }
+
+      const allTransactions: any[] = [];
+      for (let i = 0; i < textChunks.length; i++) {
+        if (textChunks.length > 1) {
+          setPdfStatus(`AI extracting chunk ${i + 1}/${textChunks.length}…`);
+        }
+        setPdfProgress(40 + Math.round(((i + 1) / textChunks.length) * 50));
+
+        const { data, error } = await supabase.functions.invoke("parse-pdf", {
+          body: { text: textChunks[i] },
+        });
+
+        if (error) {
+          console.error(`Text chunk ${i + 1} failed:`, error);
+          continue;
+        }
+        if (data?.transactions?.length) {
+          allTransactions.push(...data.transactions);
+        }
+      }
 
       if (allTransactions.length === 0) {
         toast.error("No transactions found in the PDF");

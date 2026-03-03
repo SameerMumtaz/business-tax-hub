@@ -6,116 +6,16 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type PageImage = {
-  type: "image_url";
-  image_url: { url: string; detail: "low" | "high" };
-};
-
-async function extractTransactionsWithModel(params: {
-  apiKey: string;
-  model: string;
-  detail: "low" | "high";
-  pageRange: string;
-  batch: string[];
-}) {
-  const { apiKey, model, detail, pageRange, batch } = params;
-
-  const imageContent: PageImage[] = batch.map((pageBase64) => ({
-    type: "image_url",
-    image_url: { url: pageBase64, detail },
-  }));
-
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are an expert bank statement OCR parser. Extract ONLY ledger transactions rows. Skip opening/closing/running balances, headers, footers, summaries, totals, and account metadata. Return date (YYYY-MM-DD), description, positive amount, and type (income|expense).",
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Extract all transaction rows from ${pageRange}. Do not include balance lines.`,
-            },
-            ...imageContent,
-          ],
-        },
-      ],
-      tools: [
-        {
-          type: "function",
-          function: {
-            name: "report_transactions",
-            description: "Report extracted transactions",
-            parameters: {
-              type: "object",
-              properties: {
-                transactions: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      date: { type: "string" },
-                      description: { type: "string" },
-                      amount: { type: "number" },
-                      type: { type: "string", enum: ["income", "expense"] },
-                    },
-                    required: ["date", "description", "amount", "type"],
-                    additionalProperties: false,
-                  },
-                },
-                page_info: { type: "string" },
-              },
-              required: ["transactions", "page_info"],
-              additionalProperties: false,
-            },
-          },
-        },
-      ],
-      tool_choice: {
-        type: "function",
-        function: { name: "report_transactions" },
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    return { errorStatus: response.status, errorText: errText, transactions: [] as any[] };
-  }
-
-  const data = await response.json();
-  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-  if (!toolCall) return { errorStatus: 0, errorText: "No tool call", transactions: [] as any[] };
-
-  try {
-    const parsed = JSON.parse(toolCall.function.arguments);
-    const txns = Array.isArray(parsed.transactions) ? parsed.transactions : [];
-    return { errorStatus: 0, errorText: "", transactions: txns, pageInfo: parsed.page_info || "" };
-  } catch (e) {
-    return { errorStatus: 0, errorText: `parse error: ${String(e)}`, transactions: [] as any[] };
-  }
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { pages } = (await req.json()) as { pages: string[] };
+    const { text } = (await req.json()) as { text: string };
 
-    if (!pages?.length) {
-      return new Response(JSON.stringify({ error: "No pages provided" }), {
+    if (!text?.trim()) {
+      return new Response(JSON.stringify({ error: "No text provided" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -124,81 +24,130 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const BATCH_SIZE = 4;
-    const allTransactions: any[] = [];
+    // Truncate to ~60k chars to stay within token limits
+    const truncated = text.length > 60000 ? text.substring(0, 60000) : text;
 
-    for (let i = 0; i < pages.length; i += BATCH_SIZE) {
-      const batch = pages.slice(i, i + BATCH_SIZE);
-      const pageRange = `pages ${i + 1}-${Math.min(i + BATCH_SIZE, pages.length)}`;
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          {
+            role: "system",
+            content: `You are an expert bank statement parser. You receive raw text extracted from a PDF bank statement. Extract every individual transaction.
 
-      // Fast path first
-      const fast = await extractTransactionsWithModel({
-        apiKey: LOVABLE_API_KEY,
-        model: "google/gemini-2.5-flash-lite",
-        detail: "low",
-        pageRange,
-        batch,
-      });
+Rules:
+- Extract ONLY actual transactions (debits, credits, deposits, withdrawals, payments, transfers, checkcard purchases)
+- SKIP: opening/closing/beginning/ending balances, account summaries, totals, headers, footers, legal text, marketing text, page numbers
+- SKIP: "Balance forward", "Total deposits", "Total withdrawals", "Service fees" summary lines
+- Date format: YYYY-MM-DD (if year is shown as 2-digit like "02/03/26", interpret as 2026)
+- Amount: always positive number
+- Type: "income" for deposits/credits/refunds, "expense" for withdrawals/debits/payments/purchases
+- Description: the original transaction description text
+- Multi-line descriptions: combine into one description
+- Card transactions (CHECKCARD): these are expenses
+- Zelle payments out: expenses. Zelle received: income
+- Mobile deposits (BKOFAMERICA MOBILE): income
+- Wire OUT: expense. Wire IN: income
+- TRANSFER out: expense. Online transfer in: income`,
+          },
+          {
+            role: "user",
+            content: `Extract all transactions from this bank statement text:\n\n${truncated}`,
+          },
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "report_transactions",
+              description: "Report extracted transactions from bank statement text",
+              parameters: {
+                type: "object",
+                properties: {
+                  transactions: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        date: { type: "string", description: "YYYY-MM-DD" },
+                        description: { type: "string" },
+                        amount: { type: "number", description: "Positive number" },
+                        type: { type: "string", enum: ["income", "expense"] },
+                      },
+                      required: ["date", "description", "amount", "type"],
+                      additionalProperties: false,
+                    },
+                  },
+                  summary: { type: "string", description: "Brief summary of what was extracted" },
+                },
+                required: ["transactions", "summary"],
+                additionalProperties: false,
+              },
+            },
+          },
+        ],
+        tool_choice: {
+          type: "function",
+          function: { name: "report_transactions" },
+        },
+      }),
+    });
 
-      if (fast.errorStatus === 429) {
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("AI error:", response.status, errText);
+
+      if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again shortly." }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (fast.errorStatus === 402) {
+      if (response.status === 402) {
         return new Response(JSON.stringify({ error: "AI credits exhausted." }), {
           status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      let batchTransactions = fast.transactions;
-
-      // Fallback 1: stronger OCR
-      if (!batchTransactions.length) {
-        const mid = await extractTransactionsWithModel({
-          apiKey: LOVABLE_API_KEY,
-          model: "google/gemini-2.5-flash",
-          detail: "high",
-          pageRange,
-          batch,
-        });
-        batchTransactions = mid.transactions;
-      }
-
-      // Fallback 2: max quality, only when still empty
-      if (!batchTransactions.length) {
-        const strong = await extractTransactionsWithModel({
-          apiKey: LOVABLE_API_KEY,
-          model: "google/gemini-2.5-pro",
-          detail: "high",
-          pageRange,
-          batch,
-        });
-        batchTransactions = strong.transactions;
-      }
-
-      if (batchTransactions.length) {
-        allTransactions.push(...batchTransactions);
-      }
-
-      console.log(`${pageRange}: ${batchTransactions.length} transactions extracted`);
+      return new Response(JSON.stringify({ error: "AI extraction failed", transactions: [] }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
+    const data = await response.json();
+    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+
+    if (!toolCall) {
+      return new Response(JSON.stringify({ transactions: [], summary: "No data extracted" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const parsed = JSON.parse(toolCall.function.arguments);
+    const transactions = Array.isArray(parsed.transactions) ? parsed.transactions : [];
+
+    // Deduplicate
     const seen = new Set<string>();
-    const unique = allTransactions.filter((t) => {
+    const unique = transactions.filter((t: any) => {
       const key = `${t.date}|${t.amount}|${(t.description || "").substring(0, 30)}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
 
+    console.log(`Extracted ${unique.length} transactions from ${text.length} chars of text`);
+
     return new Response(
       JSON.stringify({
         transactions: unique,
-        total_pages: pages.length,
-        total_extracted: unique.length,
+        summary: parsed.summary || `Extracted ${unique.length} transactions`,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
