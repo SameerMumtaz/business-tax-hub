@@ -337,7 +337,7 @@ export default function ImportPage() {
       setCategorizing(true);
       try {
         const results = await categorizeTransactions(
-          reviewed.map((t) => ({ id: t.id, description: t.description, type: t.type })),
+          reviewed.map((t) => ({ id: t.id, description: t.description, originalDescription: t.originalDescription, type: t.type })),
         );
         setTransactions((prev) =>
           prev.map((t) => {
@@ -400,7 +400,7 @@ export default function ImportPage() {
       setCategorizing(true);
       try {
         const results = await categorizeTransactions(
-          reviewed.map((t) => ({ id: t.id, description: t.description, type: t.type })),
+          reviewed.map((t) => ({ id: t.id, description: t.description, originalDescription: t.originalDescription, type: t.type })),
         );
         setTransactions((prev) =>
           prev.map((t) => {
