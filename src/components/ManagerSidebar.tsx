@@ -13,15 +13,21 @@ import { Button } from "@/components/ui/button";
 
 const links = [
   { to: "/invoices", label: "Invoices", icon: FileText },
-  { to: "/jobs", label: "Job Scheduler", icon: Calendar },
-  { to: "/timesheets", label: "Timesheets", icon: Clock },
-  { to: "/team", label: "Team", icon: Users },
-  { to: "/crew-map", label: "Crew Map", icon: MapPin },
+  { to: "/team", label: "Members", icon: Users },
+  { to: "/team?tab=scheduler", label: "Job Scheduler", icon: Calendar },
+  { to: "/team?tab=timesheets", label: "Timesheets", icon: Clock },
+  { to: "/team?tab=crew-map", label: "Crew Map", icon: MapPin },
 ];
 
 export default function ManagerSidebar() {
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const currentFull = location.pathname + location.search;
+
+  const isActive = (to: string) => {
+    if (to.includes("?")) return currentFull === to || currentFull.startsWith(to + "&");
+    return location.pathname === to && !location.search;
+  };
 
   return (
     <aside className="w-64 min-h-screen bg-sidebar border-r border-sidebar-border flex flex-col">
@@ -36,23 +42,20 @@ export default function ManagerSidebar() {
       </div>
 
       <nav className="flex-1 p-3 space-y-0.5">
-        {links.map((item) => {
-          const isActive = location.pathname === item.to;
-          return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                isActive
-                  ? "bg-sidebar-accent text-sidebar-primary"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              }`}
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </NavLink>
-          );
-        })}
+        {links.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              isActive(item.to)
+                ? "bg-sidebar-accent text-sidebar-primary"
+                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            }`}
+          >
+            <item.icon className="h-4 w-4" />
+            {item.label}
+          </NavLink>
+        ))}
       </nav>
 
       <div className="p-4 border-t border-sidebar-border space-y-3">
