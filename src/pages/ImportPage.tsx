@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useRef } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useTaxStore } from "@/store/taxStore";
 import { parseCSV, parseExcel, ParsedTransaction } from "@/lib/csvParser";
-import { categorizeTransactions } from "@/lib/categorize";
+import { categorizeTransactions, invalidateRulesCache } from "@/lib/categorize";
 import { formatCurrency, generateId } from "@/lib/format";
 import { EXPENSE_CATEGORIES, ExpenseCategory } from "@/types/tax";
 import { supabase } from "@/integrations/supabase/client";
@@ -386,6 +386,7 @@ export default function ImportPage() {
     if (error) {
       toast.error("Failed to save rule");
     } else {
+      invalidateRulesCache();
       setSavedRules((prev) => new Set(prev).add(`${suggestion.keyword}|${suggestion.category}`));
       toast.success(`Rule saved: "${suggestion.keyword}" → ${suggestion.category}`);
     }
@@ -407,6 +408,7 @@ export default function ImportPage() {
     if (error) {
       toast.error("Failed to save rules");
     } else {
+      invalidateRulesCache();
       const keys = new Set(savedRules);
       toSave.forEach((s) => keys.add(`${s.keyword}|${s.category}`));
       setSavedRules(keys);

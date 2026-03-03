@@ -17,12 +17,25 @@ interface CategorizeInput {
 /**
  * Fetch user-defined rules from the database.
  */
+let cachedRules: { vendor_pattern: string; category: string; type: string }[] | null = null;
+let rulesCacheTime = 0;
+const RULES_CACHE_TTL = 60_000; // 1 minute
+
 async function fetchRules() {
+  if (cachedRules && Date.now() - rulesCacheTime < RULES_CACHE_TTL) return cachedRules;
   const { data } = await supabase
     .from("categorization_rules")
     .select("*")
     .order("priority", { ascending: false });
-  return data || [];
+  cachedRules = data || [];
+  rulesCacheTime = Date.now();
+  return cachedRules;
+}
+
+/** Invalidate rule cache (call after saving new rules) */
+export function invalidateRulesCache() {
+  cachedRules = null;
+  rulesCacheTime = 0;
 }
 
 /**
@@ -54,6 +67,9 @@ const EXPENSE_KEYWORDS: Record<string, string[]> = {
     "dry erase", "clipboard", "notebook", "stationery", "stamps", "usps", "fedex office",
     "ups store", "shipping supplies", "bubble wrap", "packing", "copy paper", "laminator",
     "paper shredder", "rubber bands", "paper clips", "scissors", "glue", "marker",
+    "wal-mart", "walmart", "wm supercenter", "sam's club", "sams club",
+    "dollar general", "dollar tree", "family dollar", "five below", "target",
+    "action cleaning", "cleaning systems", "cleaning supplies", "janitorial",
   ],
    "Travel": [
     "airline", "airbnb", "hotel", "marriott", "hilton", "hyatt", "sheraton", "westin",
@@ -329,8 +345,31 @@ const INCOME_KEYWORDS: Record<string, string[]> = {
   ],
 };
 
+/**
+ * Clean a transaction description for better keyword matching.
+ * Strips card numbers, store numbers, locations, and noise.
+ */
+function cleanForMatching(description: string): string {
+  return description
+    .toLowerCase()
+    .replace(/\d{10,}/g, "")                    // long card/ref numbers
+    .replace(/#\d+/g, "")                        // store numbers
+    .replace(/\bxxxx+\w*/gi, "")                 // masked card XXXX
+    .replace(/\bckcd\s*\d*/gi, "")               // CKCD codes
+    .replace(/\b\d{4}\s+\d{4}\s+\d{4}\s+\d{4}\b/g, "") // card patterns
+    .replace(/\bconfirmation#?\s*\S+/gi, "")
+    .replace(/\bconf#?\s*\S+/gi, "")
+    .replace(/\bID:\s*\S+/gi, "")
+    .replace(/\bCO\s*ID:\S+/gi, "")
+    .replace(/\bINDN:\S+/gi, "")
+    .replace(/\bDES:\S+/gi, "")
+    .replace(/\bPPD\b|\bCCD\b|\bCTX\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function matchKeyword(description: string, type: string): { category: string; confidence: number } | null {
-  const lower = description.toLowerCase();
+  const lower = cleanForMatching(description);
   const dict = type === "expense" ? EXPENSE_KEYWORDS : INCOME_KEYWORDS;
 
   let bestMatch: { category: string; matchLen: number } | null = null;
@@ -344,7 +383,6 @@ function matchKeyword(description: string, type: string): { category: string; co
   }
 
   if (bestMatch) {
-    // Longer keyword matches = higher confidence
     const confidence = Math.min(0.85, 0.6 + bestMatch.matchLen * 0.02);
     return { category: bestMatch.category, confidence };
   }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
+import { invalidateRulesCache } from "@/lib/categorize";
 import { EXPENSE_CATEGORIES, ExpenseCategory } from "@/types/tax";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,6 +64,7 @@ export default function CategorizationRulesPage() {
     if (error) {
       toast.error("Failed to add rule");
     } else {
+      invalidateRulesCache();
       toast.success(`Rule added: "${newPattern}" → ${newCategory}`);
       setNewPattern("");
       fetchRules();
