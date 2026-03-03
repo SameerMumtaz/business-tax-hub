@@ -101,30 +101,47 @@ export default function ImportPage() {
       const totalPages = Math.min(pdf.numPages, 50);
       setPdfStatus(`Rendering ${totalPages} pages…`);
 
-      // Render each page to a canvas and extract as base64
+      // Render each page to a canvas and extract as compressed JPEG
       const pageImages: string[] = [];
       for (let p = 1; p <= totalPages; p++) {
-        setPdfProgress(Math.round((p / totalPages) * 40)); // 0-40% for rendering
+        setPdfProgress(Math.round((p / totalPages) * 30)); // 0-30% for rendering
         const page = await pdf.getPage(p);
-        const viewport = page.getViewport({ scale: 2.0 }); // Higher res for AI
+        const viewport = page.getViewport({ scale: 1.5 }); // Balance quality vs size
         const canvas = document.createElement("canvas");
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         const ctx = canvas.getContext("2d")!;
         await page.render({ canvasContext: ctx, viewport }).promise;
-        pageImages.push(canvas.toDataURL("image/png", 0.9));
+        pageImages.push(canvas.toDataURL("image/jpeg", 0.65));
         canvas.remove();
       }
 
-      setPdfStatus(`Extracting transactions with AI (${totalPages} pages)…`);
-      setPdfProgress(50);
+      // Send pages in batches of 4 to avoid payload size limits
+      const BATCH = 4;
+      const allTransactions: any[] = [];
+      const totalBatches = Math.ceil(pageImages.length / BATCH);
 
-      const { data, error } = await supabase.functions.invoke("parse-pdf", {
-        body: { pages: pageImages },
-      });
+      for (let i = 0; i < pageImages.length; i += BATCH) {
+        const batchNum = Math.floor(i / BATCH) + 1;
+        const batch = pageImages.slice(i, i + BATCH);
+        setPdfStatus(`AI extracting batch ${batchNum}/${totalBatches} (pages ${i + 1}–${Math.min(i + BATCH, totalPages)})…`);
+        setPdfProgress(30 + Math.round((batchNum / totalBatches) * 60)); // 30-90%
 
-      if (error) throw error;
-      if (!data?.transactions?.length) {
+        const { data, error } = await supabase.functions.invoke("parse-pdf", {
+          body: { pages: batch },
+        });
+
+        if (error) {
+          console.error(`Batch ${batchNum} failed:`, error);
+          toast.error(`Batch ${batchNum} failed — continuing with remaining pages`);
+          continue;
+        }
+        if (data?.transactions?.length) {
+          allTransactions.push(...data.transactions);
+        }
+      }
+
+      if (allTransactions.length === 0) {
         toast.error("No transactions found in the PDF");
         return;
       }
@@ -133,7 +150,7 @@ export default function ImportPage() {
       setPdfStatus("Processing results…");
 
       // Convert to ReviewTransaction format
-      const reviewed: ReviewTransaction[] = data.transactions.map((t: any) => ({
+      const reviewed: ReviewTransaction[] = allTransactions.map((t: any) => ({
         date: t.date || "",
         description: t.description || "",
         originalDescription: t.description || "",
