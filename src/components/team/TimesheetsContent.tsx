@@ -35,6 +35,16 @@ interface Job {
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+/** Given a week_start date string (YYYY-MM-DD), return labels like "Mon 3/3" for each day */
+function getDayLabelsWithDates(weekStart: string): string[] {
+  const start = new Date(weekStart + "T12:00:00"); // noon to avoid DST issues
+  return DAY_LABELS.map((label, i) => {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    return `${label} ${d.getMonth() + 1}/${d.getDate()}`;
+  });
+}
+
 export default function TimesheetsContent() {
   const { user } = useAuth();
   const {
@@ -341,8 +351,8 @@ export default function TimesheetsContent() {
                             <TableHead className="min-w-[140px]">Worker</TableHead>
                             <TableHead className="min-w-[120px]">Job</TableHead>
                             <TableHead className="text-right">Rate</TableHead>
-                            {DAY_LABELS.map((d) => (
-                              <TableHead key={d} className="text-center w-16">{d}</TableHead>
+                            {getDayLabelsWithDates(ts.week_start).map((d, i) => (
+                              <TableHead key={DAYS[i]} className="text-center w-16 text-xs">{d}</TableHead>
                             ))}
                             <TableHead className="text-right">Total</TableHead>
                             <TableHead className="text-right">OT</TableHead>
