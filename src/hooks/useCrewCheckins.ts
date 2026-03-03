@@ -123,6 +123,7 @@ export function useCrewCheckins() {
     const checkInTime = new Date(checkin.check_in_time);
     const totalHours =
       (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
+    const roundedHours = Math.round(totalHours * 100) / 100;
 
     const { error } = await supabase
       .from("crew_checkins")
@@ -130,7 +131,7 @@ export function useCrewCheckins() {
         check_out_time: checkOutTime.toISOString(),
         check_out_lat: lat,
         check_out_lng: lng,
-        total_hours: Math.round(totalHours * 100) / 100,
+        total_hours: roundedHours,
         status: "checked_out",
       })
       .eq("id", checkinId);
@@ -138,6 +139,59 @@ export function useCrewCheckins() {
     if (error) {
       toast.error("Check-out failed: " + error.message);
       return;
+    }
+
+    // Auto-update total_paid on the contractor/employee record
+    if (teamMemberId && businessUserId) {
+      try {
+        const { data: tm } = await supabase
+          .from("team_members")
+          .select("name, pay_rate, worker_type")
+          .eq("id", teamMemberId)
+          .single();
+
+        if (tm && tm.pay_rate) {
+          const sessionPay = Math.round(roundedHours * tm.pay_rate * 100) / 100;
+
+          if (tm.worker_type === "1099" || tm.worker_type === "contractor") {
+            // Get current total_paid, then increment
+            const { data: contractor } = await supabase
+              .from("contractors")
+              .select("total_paid")
+              .eq("user_id", businessUserId)
+              .eq("name", tm.name)
+              .maybeSingle();
+
+            if (contractor) {
+              const newTotal = (contractor.total_paid || 0) + sessionPay;
+              await supabase
+                .from("contractors")
+                .update({ total_paid: newTotal })
+                .eq("user_id", businessUserId)
+                .eq("name", tm.name);
+            }
+          } else {
+            // For W2 employees, increment salary as total earned
+            const { data: employee } = await supabase
+              .from("employees")
+              .select("salary")
+              .eq("user_id", businessUserId)
+              .eq("name", tm.name)
+              .maybeSingle();
+
+            if (employee) {
+              const newSalary = (employee.salary || 0) + sessionPay;
+              await supabase
+                .from("employees")
+                .update({ salary: newSalary })
+                .eq("user_id", businessUserId)
+                .eq("name", tm.name);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to update total_paid:", err);
+      }
     }
 
     toast.success(
