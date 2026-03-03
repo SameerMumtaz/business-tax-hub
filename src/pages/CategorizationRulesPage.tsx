@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
-import { invalidateRulesCache } from "@/lib/categorize";
+import { invalidateRulesCache, applyRulesToUncategorized } from "@/lib/categorize";
 import { useAuth } from "@/hooks/useAuth";
 import { EXPENSE_CATEGORIES, ExpenseCategory } from "@/types/tax";
 import { Button } from "@/components/ui/button";
@@ -85,6 +85,15 @@ export default function CategorizationRulesPage() {
       const updated = data || [];
       setRules(updated);
       applyRulesToStore(updated);
+
+      // Auto-apply to uncategorized transactions
+      if (user) {
+        const { expenseCount, salesCount } = await applyRulesToUncategorized(user.id);
+        const total = expenseCount + salesCount;
+        if (total > 0) {
+          toast.success(`✨ ${total} transaction${total > 1 ? "s" : ""} auto-categorized (${expenseCount} expense${expenseCount !== 1 ? "s" : ""}, ${salesCount} sale${salesCount !== 1 ? "s" : ""})`);
+        }
+      }
     }
   }
 

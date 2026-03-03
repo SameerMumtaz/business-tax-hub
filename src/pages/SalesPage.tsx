@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import DashboardLayout from "@/components/DashboardLayout";
 import useSalesLogic, { PAGE_SIZE } from "@/hooks/useSalesLogic";
 import DateRangeFilter from "@/components/DateRangeFilter";
@@ -20,8 +21,10 @@ import { Plus, Trash2, ArrowDownLeft, ArrowUpRight, Activity, Wallet, ArrowUpDow
 import { toast } from "sonner";
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { auditSales } from "@/lib/audit";
+import { applyRulesToUncategorized } from "@/lib/categorize";
 
 export default function SalesPage() {
+  const queryClient = useQueryClient();
   const logic = useSalesLogic();
   const {
     sales, sorted, paginatedRows, totalPages, currentPage, setCurrentPage, totalSales,
@@ -32,6 +35,7 @@ export default function SalesPage() {
     ruleDialogOpen, setRuleDialogOpen, ruleKeyword, setRuleKeyword, ruleCategory, setRuleCategory,
     openBulkRule, saveBulkRule, handleBatchCreateInvoices, handleInlineCreateInvoice,
     chartData, totalInflows, totalOutflows, netCashFlow, currentBalance, expenses, matchedSaleIds,
+    user,
   } = logic;
 
   const SortIcon = ({ field }: { field: typeof sortField }) => {
@@ -87,7 +91,19 @@ export default function SalesPage() {
           <TabsContent value="sales" className="mt-4 space-y-3">
             <div className="flex gap-2">
               <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search…" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-9" /></div>
-              <Button variant="outline" onClick={() => setAuditResult(persistentAudit || auditSales(sales, expenses, matchedSaleIds))}><ShieldAlert className="h-4 w-4 mr-2" />Quick Audit</Button>
+              <Button variant="outline" onClick={async () => {
+                if (user) {
+                  const { expenseCount, salesCount } = await applyRulesToUncategorized(user.id);
+                  const total = expenseCount + salesCount;
+                  if (total > 0) {
+                    toast.success(`✨ ${total} transaction${total > 1 ? "s" : ""} auto-categorized with rules`);
+                    await queryClient.invalidateQueries({ queryKey: ["expenses", user.id] });
+                    await queryClient.invalidateQueries({ queryKey: ["sales", user.id] });
+                  }
+                }
+                const freshSales = queryClient.getQueryData<typeof sales>(["sales", user?.id]) || sales;
+                setAuditResult(auditSales(freshSales, expenses, matchedSaleIds));
+              }}><ShieldAlert className="h-4 w-4 mr-2" />Quick Audit</Button>
             </div>
 
             {auditResult && (

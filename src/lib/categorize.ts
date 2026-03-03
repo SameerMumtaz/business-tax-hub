@@ -523,3 +523,56 @@ export async function categorizeTransactions(
 
   return results;
 }
+
+/**
+ * Apply all rules + keyword dictionary to uncategorized ("Other") transactions in the DB.
+ * Returns the count of transactions that were re-categorized.
+ */
+export async function applyRulesToUncategorized(userId: string): Promise<{ expenseCount: number; salesCount: number }> {
+  invalidateRulesCache();
+  
+  // Fetch all "Other" expenses and sales for this user
+  const [{ data: otherExpenses }, { data: otherSales }] = await Promise.all([
+    supabase.from("expenses").select("id, vendor, description").eq("user_id", userId).eq("category", "Other"),
+    supabase.from("sales").select("id, client, description").eq("user_id", userId).eq("category", "Other"),
+  ]);
+
+  let expenseCount = 0;
+  let salesCount = 0;
+
+  // Re-categorize expenses
+  if (otherExpenses && otherExpenses.length > 0) {
+    const items: CategorizeInput[] = otherExpenses.map((e: any) => ({
+      id: e.id,
+      description: e.vendor || e.description || "",
+      originalDescription: e.description || "",
+      type: "expense" as const,
+    }));
+    const results = await categorizeTransactions(items);
+    for (const r of results) {
+      if (r.category !== "Other") {
+        await supabase.from("expenses").update({ category: r.category }).eq("id", r.id);
+        expenseCount++;
+      }
+    }
+  }
+
+  // Re-categorize sales
+  if (otherSales && otherSales.length > 0) {
+    const items: CategorizeInput[] = otherSales.map((s: any) => ({
+      id: s.id,
+      description: s.client || s.description || "",
+      originalDescription: s.description || "",
+      type: "income" as const,
+    }));
+    const results = await categorizeTransactions(items);
+    for (const r of results) {
+      if (r.category !== "Other") {
+        await supabase.from("sales").update({ category: r.category }).eq("id", r.id);
+        salesCount++;
+      }
+    }
+  }
+
+  return { expenseCount, salesCount };
+}

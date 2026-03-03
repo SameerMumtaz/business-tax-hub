@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import DashboardLayout from "@/components/DashboardLayout";
 import useExpensesLogic, { PAGE_SIZE } from "@/hooks/useExpensesLogic";
 import { LINE_COLORS } from "@/lib/chartTheme";
@@ -8,6 +9,7 @@ import AuditIssuesPanel from "@/components/AuditIssuesPanel";
 import { formatCurrency } from "@/lib/format";
 import { EXPENSE_CATEGORIES } from "@/types/tax";
 import { auditExpenses } from "@/lib/audit";
+import { applyRulesToUncategorized } from "@/lib/categorize";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +24,7 @@ import { toast } from "sonner";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 
 export default function ExpensesPage() {
+  const queryClient = useQueryClient();
   const logic = useExpensesLogic();
   const {
     expenses, sorted, paginatedRows, totalPages, currentPage, setCurrentPage, totalFiltered,
@@ -94,7 +97,20 @@ export default function ExpensesPage() {
           <TabsContent value="expenses" className="mt-4 space-y-3">
             <div className="flex gap-2">
               <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search…" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-9" /></div>
-              <Button variant="outline" onClick={() => setAuditResult(auditExpenses(expenses))}><ShieldAlert className="h-4 w-4 mr-2" />Quick Audit</Button>
+              <Button variant="outline" onClick={async () => {
+                if (user) {
+                  const { expenseCount, salesCount } = await applyRulesToUncategorized(user.id);
+                  const total = expenseCount + salesCount;
+                  if (total > 0) {
+                    toast.success(`✨ ${total} transaction${total > 1 ? "s" : ""} auto-categorized with rules`);
+                    await queryClient.invalidateQueries({ queryKey: ["expenses", user.id] });
+                    await queryClient.invalidateQueries({ queryKey: ["sales", user.id] });
+                  }
+                }
+                // Re-read fresh expenses for audit after potential recategorization
+                const freshExpenses = queryClient.getQueryData<typeof expenses>(["expenses", user?.id]) || expenses;
+                setAuditResult(auditExpenses(freshExpenses));
+              }}><ShieldAlert className="h-4 w-4 mr-2" />Quick Audit</Button>
             </div>
 
             {auditResult && (
