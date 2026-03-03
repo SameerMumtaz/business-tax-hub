@@ -634,6 +634,47 @@ export type Database = {
           },
         ]
       }
+      pay_rate_changes: {
+        Row: {
+          created_at: string
+          effective_date: string
+          id: string
+          new_rate: number
+          previous_rate: number
+          reason: string | null
+          team_member_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          effective_date: string
+          id?: string
+          new_rate?: number
+          previous_rate?: number
+          reason?: string | null
+          team_member_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          effective_date?: string
+          id?: string
+          new_rate?: number
+          previous_rate?: number
+          reason?: string | null
+          team_member_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pay_rate_changes_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       personal_deductions: {
         Row: {
           amount: number
