@@ -31,7 +31,7 @@ export default function SalesPage() {
     open, setOpen, form, setForm, handleAdd, addSale,
     sortField, sortDir, toggleSort, selected, toggleSelect, toggleAll, handleBulkDelete,
     searchQuery, setSearchQuery, auditResult, setAuditResult, persistentAudit, activeIssueCount,
-    editingCategoryId, setEditingCategoryId, updateSale, removeSale,
+    editingCategoryId, setEditingCategoryId, updateSale, removeSale, handleSingleCategoryChange,
     ruleDialogOpen, setRuleDialogOpen, ruleKeyword, setRuleKeyword, ruleCategory, setRuleCategory,
     openBulkRule, saveBulkRule, handleBatchCreateInvoices, handleInlineCreateInvoice,
     chartData, totalInflows, totalOutflows, netCashFlow, currentBalance, expenses, matchedSaleIds,
@@ -163,7 +163,7 @@ export default function SalesPage() {
                       <td className="text-muted-foreground">{s.description}</td>
                       <td>
                         {editingCategoryId === s.id ? (
-                          <Select value={s.category} onValueChange={(v) => { updateSale.mutate({ id: s.id, category: v }, { onSuccess: () => { toast.success("Category updated"); setEditingCategoryId(null); } }); }}>
+                          <Select value={s.category} onValueChange={(v) => handleSingleCategoryChange(s.id, v)}>
                             <SelectTrigger className="h-7 text-xs w-[150px]"><SelectValue /></SelectTrigger>
                             <SelectContent>{EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                           </Select>

@@ -7,6 +7,7 @@ import { formatCurrency } from "@/lib/format";
 import { EXPENSE_CATEGORIES, ExpenseCategory } from "@/types/tax";
 import { invalidateRulesCache } from "@/lib/categorize";
 import { auditExpenses, AuditResult } from "@/lib/audit";
+import { checkForPatternAfterCategoryChange } from "@/lib/ruleInference";
 import { toast } from "sonner";
 
 type SortField = "date" | "vendor" | "description" | "category" | "amount";
@@ -106,11 +107,35 @@ export default function useExpensesLogic() {
 
   const handleBulkCategoryChange = (category: string) => {
     if (selected.size === 0) return;
-    bulkUpdateCategory.mutate({ ids: [...selected], category }, { onSuccess: () => { toast.success(`Updated ${selected.size} expense(s)`); setSelected(new Set()); }, onError: () => toast.error("Failed to update") });
+    bulkUpdateCategory.mutate({ ids: [...selected], category }, {
+      onSuccess: () => {
+        toast.success(`Updated ${selected.size} expense(s)`);
+        // Check for pattern inference after bulk change
+        const updatedExpenses = expenses.map(e => selected.has(e.id) ? { ...e, category } : e);
+        const firstSelected = expenses.find(e => selected.has(e.id));
+        if (firstSelected && user) {
+          checkForPatternAfterCategoryChange(firstSelected.vendor, category, updatedExpenses, "expense", user.id);
+        }
+        setSelected(new Set());
+      },
+      onError: () => toast.error("Failed to update"),
+    });
   };
 
   const handleSingleCategoryChange = (id: string, category: string) => {
-    updateExpense.mutate({ id, category }, { onSuccess: () => { toast.success("Category updated"); setEditingCategoryId(null); }, onError: () => toast.error("Failed to update") });
+    const expense = expenses.find(e => e.id === id);
+    updateExpense.mutate({ id, category }, {
+      onSuccess: () => {
+        toast.success("Category updated");
+        setEditingCategoryId(null);
+        // Check for pattern inference
+        if (expense && user) {
+          const updatedExpenses = expenses.map(e => e.id === id ? { ...e, category } : e);
+          checkForPatternAfterCategoryChange(expense.vendor, category, updatedExpenses, "expense", user.id);
+        }
+      },
+      onError: () => toast.error("Failed to update"),
+    });
   };
 
   const openBulkRule = () => {
