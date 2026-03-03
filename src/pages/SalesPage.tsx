@@ -111,15 +111,18 @@ export default function SalesPage() {
                   }
                   await queryClient.refetchQueries({ queryKey: ["expenses", user.id] });
                   await queryClient.refetchQueries({ queryKey: ["sales", user.id] });
+                  await queryClient.refetchQueries({ queryKey: ["audit_dismissals", user.id] });
                 }
                 const freshSales = queryClient.getQueryData<typeof sales>(["sales", user?.id]) || sales;
-                setAuditResult(auditSales(freshSales, expenses, matchedSaleIds, dismissedSet));
+                const freshDismissals = queryClient.getQueryData<{ transaction_id: string; issue_type: string }[]>(["audit_dismissals", user?.id]) ?? [];
+                const freshDismissedSet = new Set(freshDismissals.map((d) => `${d.transaction_id}::${d.issue_type}`));
+                setAuditResult(auditSales(freshSales, expenses, matchedSaleIds, freshDismissedSet));
               }}><ShieldAlert className="h-4 w-4 mr-2" />Quick Audit</Button>
             </div>
 
             {auditResult && (
               <AuditIssuesPanel result={auditResult} getItemLabel={(id) => { const s = sales.find((x) => x.id === id); if (!s) return null; return { date: s.date, label: `${s.client} — ${s.description}`, amount: s.amount }; }}
-                onDeleteItems={(ids) => { logic.bulkRemove.mutate(ids, { onSuccess: () => { toast.success(`Deleted ${ids.length} sale(s)`); logic.setAuditResult(auditSales(sales.filter((s) => !ids.includes(s.id)), logic.expenses, logic.matchedSaleIds, dismissedSet)); } }); }}
+                onDeleteItems={(ids) => { logic.bulkRemove.mutate(ids, { onSuccess: () => { toast.success(`Deleted ${ids.length} sale(s)`); const freshDismissals = queryClient.getQueryData<{ transaction_id: string; issue_type: string }[]>(["audit_dismissals", user?.id]) ?? []; const ds = new Set(freshDismissals.map((d) => `${d.transaction_id}::${d.issue_type}`)); logic.setAuditResult(auditSales(sales.filter((s) => !ids.includes(s.id)), logic.expenses, logic.matchedSaleIds, ds)); } }); }}
                 onSelectItems={(ids) => { logic.selectItems(ids); toast.info(`Selected ${ids.length} item(s)`); }}
                 onCreateInvoice={handleInlineCreateInvoice}
                 onBatchCreateInvoices={(ids) => handleBatchCreateInvoices(ids)}
