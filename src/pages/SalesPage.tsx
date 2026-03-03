@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import SuggestedRulesPanel from "@/components/SuggestedRulesPanel";
+import { extractVendorName } from "@/lib/ruleInference";
 import DashboardLayout from "@/components/DashboardLayout";
 import useSalesLogic, { PAGE_SIZE } from "@/hooks/useSalesLogic";
 import DateRangeFilter from "@/components/DateRangeFilter";
@@ -161,7 +162,7 @@ export default function SalesPage() {
                       <td><Checkbox checked={selected.has(s.id)} onCheckedChange={() => toggleSelect(s.id)} /></td>
                       <td className="font-mono text-xs text-muted-foreground">{s.date}</td>
                       <td className="font-mono text-xs">{s.invoiceNumber}</td>
-                      <td className="font-medium">{s.client}</td>
+                      <td className="font-medium" title={s.client}>{extractVendorName(s.client) || s.client}</td>
                       <td className="text-muted-foreground">{s.description}</td>
                       <td>
                         {editingCategoryId === s.id ? (
