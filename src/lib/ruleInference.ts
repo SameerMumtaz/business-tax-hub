@@ -14,9 +14,26 @@ export interface InferredPattern {
  * Extract common keywords from a vendor string (first meaningful word, lowercased).
  */
 function extractKeywords(vendor: string): string[] {
-  const noise = new Set(["the", "of", "and", "a", "an", "inc", "llc", "ltd", "corp", "co", "pos", "debit", "purchase", "payment", "check", "card", "visa", "mastercard", "amex"]);
-  const words = vendor.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(w => w.length >= 3 && !noise.has(w));
-  // Return individual words and bigrams
+  const noise = new Set([
+    "the", "of", "and", "a", "an", "inc", "llc", "ltd", "corp", "co",
+    "pos", "debit", "purchase", "payment", "check", "card", "visa",
+    "mastercard", "amex", "ach", "wire", "txn", "ref", "num", "trn",
+    "seq", "pmt", "chk", "wdl", "dbt", "crd", "tran", "transaction",
+    "online", "electronic", "recurring", "autopay", "bill", "pay",
+    "transfer", "deposit", "withdrawal", "fee", "charge", "pending",
+  ]);
+
+  const words = vendor
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, " ")          // strip ALL digits and special chars
+    .split(/\s+/)
+    .filter(w => {
+      if (w.length < 3) return false;     // too short
+      if (noise.has(w)) return false;     // noise word
+      if (/^[^a-z]*$/.test(w)) return false; // no letters at all
+      return true;
+    });
+
   const keywords: string[] = [...words];
   for (let i = 0; i < words.length - 1; i++) {
     keywords.push(`${words[i]} ${words[i + 1]}`);
