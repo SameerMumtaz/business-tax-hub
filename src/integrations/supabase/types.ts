@@ -747,6 +747,7 @@ export type Database = {
       profiles: {
         Row: {
           account_type: string | null
+          bookie_id: string | null
           business_address: string | null
           business_city: string | null
           business_email: string | null
@@ -771,6 +772,7 @@ export type Database = {
         }
         Insert: {
           account_type?: string | null
+          bookie_id?: string | null
           business_address?: string | null
           business_city?: string | null
           business_email?: string | null
@@ -795,6 +797,7 @@ export type Database = {
         }
         Update: {
           account_type?: string | null
+          bookie_id?: string | null
           business_address?: string | null
           business_city?: string | null
           business_email?: string | null

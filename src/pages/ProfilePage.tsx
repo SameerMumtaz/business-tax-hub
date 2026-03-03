@@ -6,7 +6,7 @@ import { useProfileGate } from "@/components/ProtectedRoute";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Building2, Save, Download, Loader2 } from "lucide-react";
+import { Building2, Save, Download, Loader2, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 
 const BUSINESS_TYPES = ["Sole Proprietor", "LLC", "S-Corp", "C-Corp", "Partnership", "Nonprofit"];
@@ -21,6 +21,7 @@ interface Profile {
   business_type: string;
   business_phone: string;
   business_email: string;
+  bookie_id: string;
 }
 
 const emptyProfile: Profile = {
@@ -33,6 +34,7 @@ const emptyProfile: Profile = {
   business_type: "",
   business_phone: "",
   business_email: "",
+  bookie_id: "",
 };
 
 export default function ProfilePage() {
@@ -62,6 +64,7 @@ export default function ProfilePage() {
           business_type: data.business_type || "",
           business_phone: data.business_phone || "",
           business_email: data.business_email || "",
+          bookie_id: (data as any).bookie_id || "",
         });
       }
       setLoading(false);
@@ -117,6 +120,11 @@ export default function ProfilePage() {
             This information is used on generated 1099-NEC and W-2 forms
           </p>
         </div>
+
+        {/* Bookie ID Banner */}
+        {profile.bookie_id && (
+          <BookieIdBanner bookieId={profile.bookie_id} />
+        )}
 
         <div className="stat-card space-y-5">
           <h2 className="section-title flex items-center gap-2">
@@ -191,6 +199,33 @@ export default function ProfilePage() {
         <FullAccountExport userId={user?.id} />
       </div>
     </DashboardLayout>
+  );
+}
+
+// ── Bookie ID Banner ──
+function BookieIdBanner({ bookieId }: { bookieId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(bookieId).then(() => {
+      setCopied(true);
+      toast.success("Bookie ID copied!");
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 flex items-center justify-between">
+      <div>
+        <p className="text-xs text-muted-foreground font-medium mb-1">Your Bookie ID</p>
+        <p className="text-xl font-bold font-mono tracking-widest text-primary">{bookieId}</p>
+        <p className="text-xs text-muted-foreground mt-1">Share this code so team members can link to your business</p>
+      </div>
+      <Button variant="outline" size="sm" onClick={handleCopy} className="gap-1.5 shrink-0">
+        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        {copied ? "Copied" : "Copy"}
+      </Button>
+    </div>
   );
 }
 
