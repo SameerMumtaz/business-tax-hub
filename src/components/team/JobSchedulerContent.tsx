@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useJobs, type Job, type JobSite } from "@/hooks/useJobs";
+import { useJobPhotos } from "@/hooks/useJobPhotos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,8 +13,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, MapPin, Briefcase, Loader2, Pencil, Trash2 } from "lucide-react";
+import { Plus, MapPin, Briefcase, Loader2, Pencil, Trash2, Camera } from "lucide-react";
 import { toast } from "sonner";
+import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 
 export default function JobSchedulerContent() {
   const { sites, jobs, loading, createSite, updateSite, deleteSite, createJob, updateJob, deleteJob } = useJobs();
@@ -59,6 +61,9 @@ export default function JobSchedulerContent() {
   const [editJobEnd, setEditJobEnd] = useState("");
   const [editJobInterval, setEditJobInterval] = useState("");
   const [editJobDesc, setEditJobDesc] = useState("");
+
+  // Photos dialog state
+  const [photosJobId, setPhotosJobId] = useState<string | null>(null);
 
   const geocodeAddress = useCallback(async (address: string, city: string, state: string, setLat: (v: string) => void, setLng: (v: string) => void) => {
     const query = [address, city, state].filter(Boolean).join(", ");
@@ -344,6 +349,7 @@ export default function JobSchedulerContent() {
                       <TableHead>Type</TableHead>
                       <TableHead>Start</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Photos</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -365,6 +371,17 @@ export default function JobSchedulerContent() {
                               <SelectItem value="cancelled">Cancelled</SelectItem>
                             </SelectContent>
                           </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1 text-xs"
+                            onClick={() => setPhotosJobId(j.id)}
+                          >
+                            <Camera className="h-3.5 w-3.5" />
+                            📷
+                          </Button>
                         </TableCell>
                         <TableCell className="text-right space-x-1">
                           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEditJob(j)}>
@@ -455,6 +472,18 @@ export default function JobSchedulerContent() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Photos Dialog */}
+      <Dialog open={!!photosJobId} onOpenChange={(open) => { if (!open) setPhotosJobId(null); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Job Photos — {photosJobId ? jobs.find(j => j.id === photosJobId)?.title : ""}
+            </DialogTitle>
+          </DialogHeader>
+          {photosJobId && <JobPhotosPanel jobId={photosJobId} />}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
