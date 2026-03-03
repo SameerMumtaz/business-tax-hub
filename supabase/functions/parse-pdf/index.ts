@@ -6,6 +6,146 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+type TxType = "income" | "expense";
+
+interface ParsedTx {
+  date: string;
+  description: string;
+  amount: number;
+  type: TxType;
+}
+
+const normalizeDate = (mmddyy: string): string => {
+  const [mm, dd, yy] = mmddyy.split("/");
+  const year = Number(yy) < 70 ? `20${yy}` : `19${yy}`;
+  return `${year}-${mm}-${dd}`;
+};
+
+const parseAmount = (raw: string): { value: number; negative: boolean } => {
+  const trimmed = raw.trim();
+  const negative = trimmed.startsWith("-");
+  const numeric = Number(trimmed.replace(/[^\d.]/g, ""));
+  return { value: Number.isFinite(numeric) ? numeric : 0, negative };
+};
+
+const inferSectionHint = (fullText: string, index: number): TxType | null => {
+  const start = Math.max(0, index - 3500);
+  const lookback = fullText.slice(start, index).toLowerCase();
+  const dep = lookback.lastIndexOf("deposits and other credits");
+  const wit = lookback.lastIndexOf("withdrawals and other debits");
+  if (wit > dep) return "expense";
+  if (dep > wit) return "income";
+  return null;
+};
+
+const inferType = (description: string, negative: boolean, sectionHint: TxType | null): TxType => {
+  if (negative) return "expense";
+
+  const d = description.toLowerCase();
+  if (/(checkcard|purchase|payment to|wire out|zelle recurring payment to|zelle payment to|withdrawal|debit|service fee|shell|qt\s|walmart|home depot|autozone|lowe|motel|love's|7-eleven)/i.test(d)) {
+    return "expense";
+  }
+  if (/(deposit|bkofamerica mobile|wire in|online transfer from|counter credit|refund|payment received|ach credit|square inc|payables|zelle received|zelle from)/i.test(d)) {
+    return "income";
+  }
+  if (sectionHint) return sectionHint;
+  return "expense";
+};
+
+const cleanDescription = (raw: string): string =>
+  raw
+    .replace(/\s+/g, " ")
+    .replace(/\bcontinued on the next page\b/gi, "")
+    .replace(/\bPage\s+\d+\s+of\s+\d+\b/gi, "")
+    .trim();
+
+const parseTransactionsFromText = (text: string): ParsedTx[] => {
+  const transactions: ParsedTx[] = [];
+  const lines = text.split(/\r?\n/);
+
+  let pending: { date: string; descriptionParts: string[]; amountRaw?: string; startIndex: number } | null = null;
+  let consumedChars = 0;
+
+  const finalizePending = () => {
+    if (!pending?.amountRaw) return;
+
+    const description = cleanDescription(pending.descriptionParts.join(" "));
+    const { value, negative } = parseAmount(pending.amountRaw);
+    if (!description || !value) {
+      pending = null;
+      return;
+    }
+
+    const sectionHint = inferSectionHint(text, pending.startIndex);
+    const type = inferType(description, negative, sectionHint);
+
+    transactions.push({
+      date: normalizeDate(pending.date),
+      description,
+      amount: value,
+      type,
+    });
+
+    pending = null;
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    consumedChars += rawLine.length + 1;
+
+    if (!line) continue;
+
+    // Skip known non-transaction lines
+    if (/^(Page\s+\d+\s+of\s+\d+|continued on the next page|Date\s+Description\s+Amount)$/i.test(line)) {
+      continue;
+    }
+
+    const dateStart = line.match(/^(\d{2}\/\d{2}\/\d{2})\b\s*(.*)$/);
+    if (dateStart) {
+      // New transaction starts, close previous if complete
+      finalizePending();
+
+      const [, date, remainder] = dateStart;
+      pending = { date, descriptionParts: [], startIndex: consumedChars };
+
+      if (remainder) {
+        const amountAtEnd = remainder.match(/(-?\$?\d{1,3}(?:,\d{3})*\.\d{2})\s*$/);
+        if (amountAtEnd) {
+          pending.amountRaw = amountAtEnd[1];
+          const descWithoutAmount = remainder.replace(/(-?\$?\d{1,3}(?:,\d{3})*\.\d{2})\s*$/, "").trim();
+          if (descWithoutAmount) pending.descriptionParts.push(descWithoutAmount);
+          finalizePending();
+        } else {
+          pending.descriptionParts.push(remainder);
+        }
+      }
+      continue;
+    }
+
+    if (!pending) continue;
+
+    const amountOnly = line.match(/^(-?\$?\d{1,3}(?:,\d{3})*\.\d{2})$/);
+    if (amountOnly) {
+      pending.amountRaw = amountOnly[1];
+      finalizePending();
+      continue;
+    }
+
+    // Non-amount continuation line for current description
+    pending.descriptionParts.push(line);
+  }
+
+  finalizePending();
+
+  const seen = new Set<string>();
+  return transactions.filter((t) => {
+    const key = `${t.date}|${t.amount}|${t.description.toLowerCase().slice(0, 60)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -21,133 +161,18 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const truncated = text.length > 250000 ? text.slice(0, 250000) : text;
+    const transactions = parseTransactionsFromText(truncated);
 
-    // Truncate to ~60k chars to stay within token limits
-    const truncated = text.length > 60000 ? text.substring(0, 60000) : text;
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert bank statement parser. You receive raw text extracted from a PDF bank statement. Extract every individual transaction.
-
-Rules:
-- Extract ONLY actual transactions (debits, credits, deposits, withdrawals, payments, transfers, checkcard purchases)
-- SKIP: opening/closing/beginning/ending balances, account summaries, totals, headers, footers, legal text, marketing text, page numbers
-- SKIP: "Balance forward", "Total deposits", "Total withdrawals", "Service fees" summary lines
-- Date format: YYYY-MM-DD (if year is shown as 2-digit like "02/03/26", interpret as 2026)
-- Amount: always positive number
-- Type: "income" for deposits/credits/refunds, "expense" for withdrawals/debits/payments/purchases
-- Description: the original transaction description text
-- Multi-line descriptions: combine into one description
-- Card transactions (CHECKCARD): these are expenses
-- Zelle payments out: expenses. Zelle received: income
-- Mobile deposits (BKOFAMERICA MOBILE): income
-- Wire OUT: expense. Wire IN: income
-- TRANSFER out: expense. Online transfer in: income`,
-          },
-          {
-            role: "user",
-            content: `Extract all transactions from this bank statement text:\n\n${truncated}`,
-          },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "report_transactions",
-              description: "Report extracted transactions from bank statement text",
-              parameters: {
-                type: "object",
-                properties: {
-                  transactions: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        date: { type: "string", description: "YYYY-MM-DD" },
-                        description: { type: "string" },
-                        amount: { type: "number", description: "Positive number" },
-                        type: { type: "string", enum: ["income", "expense"] },
-                      },
-                      required: ["date", "description", "amount", "type"],
-                      additionalProperties: false,
-                    },
-                  },
-                  summary: { type: "string", description: "Brief summary of what was extracted" },
-                },
-                required: ["transactions", "summary"],
-                additionalProperties: false,
-              },
-            },
-          },
-        ],
-        tool_choice: {
-          type: "function",
-          function: { name: "report_transactions" },
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("AI error:", response.status, errText);
-
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again shortly." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      return new Response(JSON.stringify({ error: "AI extraction failed", transactions: [] }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-
-    if (!toolCall) {
-      return new Response(JSON.stringify({ transactions: [], summary: "No data extracted" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const parsed = JSON.parse(toolCall.function.arguments);
-    const transactions = Array.isArray(parsed.transactions) ? parsed.transactions : [];
-
-    // Deduplicate
-    const seen = new Set<string>();
-    const unique = transactions.filter((t: any) => {
-      const key = `${t.date}|${t.amount}|${(t.description || "").substring(0, 30)}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    console.log(`Extracted ${unique.length} transactions from ${text.length} chars of text`);
+    console.log(`Rule parser extracted ${transactions.length} transactions from ${truncated.length} chars`);
 
     return new Response(
       JSON.stringify({
-        transactions: unique,
-        summary: parsed.summary || `Extracted ${unique.length} transactions`,
+        transactions,
+        summary:
+          transactions.length > 0
+            ? `Extracted ${transactions.length} transactions using fast rule parsing`
+            : "No transactions detected from the provided statement text",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

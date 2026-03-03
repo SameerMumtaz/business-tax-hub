@@ -145,6 +145,7 @@ export default function ImportPage() {
       }
 
       const allTransactions: any[] = [];
+      const chunkErrors: string[] = [];
       for (let i = 0; i < textChunks.length; i++) {
         if (textChunks.length > 1) {
           setPdfStatus(`AI extracting chunk ${i + 1}/${textChunks.length}…`);
@@ -156,16 +157,23 @@ export default function ImportPage() {
         });
 
         if (error) {
+          const msg = (error as { message?: string }).message || "Chunk extraction failed";
+          chunkErrors.push(`Chunk ${i + 1}: ${msg}`);
           console.error(`Text chunk ${i + 1} failed:`, error);
           continue;
         }
+
         if (data?.transactions?.length) {
           allTransactions.push(...data.transactions);
         }
       }
 
       if (allTransactions.length === 0) {
-        toast.error("No transactions found in the PDF");
+        if (chunkErrors.length === textChunks.length) {
+          toast.error(chunkErrors[0] || "PDF extraction failed");
+        } else {
+          toast.error("No transactions found in the PDF");
+        }
         return;
       }
 
