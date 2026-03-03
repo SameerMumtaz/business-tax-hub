@@ -103,9 +103,18 @@ export default function ProfilePage() {
     );
   }
 
+  const isIncomplete = !profile.business_name?.trim();
+
   return (
     <DashboardLayout>
       <div className="space-y-6 max-w-2xl">
+        {isIncomplete && (
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+            <p className="text-sm font-medium">
+              👋 Welcome! Please complete your company profile before continuing. This info is needed for tax form generation.
+            </p>
+          </div>
+        )}
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Company Profile</h1>
           <p className="text-muted-foreground text-sm mt-1">
