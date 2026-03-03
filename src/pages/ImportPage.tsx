@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, memo } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useTaxStore } from "@/store/taxStore";
 import { parseCSV, parseExcel, ParsedTransaction } from "@/lib/csvParser";
@@ -54,6 +54,65 @@ function extractKeyword(description: string): string | null {
   }
   return null;
 }
+
+const TransactionRow = memo(function TransactionRow({
+  t,
+  onToggle,
+  onDelete,
+  onUpdateCategory,
+}: {
+  t: ReviewTransaction;
+  onToggle: (id: string) => void;
+  onDelete: (id: string) => void;
+  onUpdateCategory: (id: string, category: ExpenseCategory) => void;
+}) {
+  return (
+    <tr className={!t.include ? "opacity-40" : ""}>
+      <td>
+        <button onClick={() => onToggle(t.id)} className="p-1">
+          {t.include ? (
+            <Check className="h-4 w-4 text-chart-positive" />
+          ) : (
+            <X className="h-4 w-4 text-muted-foreground" />
+          )}
+        </button>
+      </td>
+      <td className="font-mono text-xs text-muted-foreground">{t.date}</td>
+      <td className="max-w-[250px] truncate">{t.description}</td>
+      <td>
+        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+          t.type === "income" ? "bg-accent text-accent-foreground" : "bg-destructive/10 text-destructive"
+        }`}>
+          {t.type === "income" ? "Income" : "Expense"}
+        </span>
+      </td>
+      <td>
+        {t.type === "expense" ? (
+          <Select value={t.category} onValueChange={(v) => onUpdateCategory(t.id, v as ExpenseCategory)}>
+            <SelectTrigger className="h-8 text-xs w-[160px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {EXPENSE_CATEGORIES.map((c) => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className={`text-right font-mono ${t.type === "income" ? "text-chart-positive" : "text-chart-negative"}`}>
+        {t.type === "income" ? "+" : "-"}{formatCurrency(t.amount)}
+      </td>
+      <td>
+        <button onClick={() => onDelete(t.id)} className="p-1 hover:text-destructive text-muted-foreground transition-colors">
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </td>
+    </tr>
+  );
+});
 
 export default function ImportPage() {
   const { addExpense, addSale } = useTaxStore();
@@ -326,6 +385,7 @@ export default function ImportPage() {
       setSortField(field);
       setSortDir("asc");
     }
+    setCurrentPage(0);
   };
 
   const SortIcon = ({ field }: { field: SortField }) => {
@@ -475,7 +535,7 @@ export default function ImportPage() {
     setDismissedIssues((prev) => new Set(prev).add(issueIdx));
   };
 
-  const uncategorizedItems = transactions.filter((t) => t.include && t.category === "Other" && !t.catSource);
+  const uncategorizedItems = useMemo(() => transactions.filter((t) => t.include && t.category === "Other" && !t.catSource), [transactions]);
 
   const handleAICategorize = async () => {
     const targets = uncategorizedItems;
@@ -542,10 +602,38 @@ export default function ImportPage() {
     setStep("upload");
   };
 
-  const incomeCount = transactions.filter((t) => t.include && t.type === "income").length;
-  const expenseCountN = transactions.filter((t) => t.include && t.type === "expense").length;
-  const totalIncome = transactions.filter((t) => t.include && t.type === "income").reduce((s, t) => s + t.amount, 0);
-  const totalExpenseAmt = transactions.filter((t) => t.include && t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const [currentPage, setCurrentPage] = useState(0);
+  const PAGE_SIZE = 50;
+
+  const { incomeCount, expenseCountN, totalIncome, totalExpenseAmt } = useMemo(() => {
+    let ic = 0, ec = 0, ti = 0, te = 0;
+    for (const t of transactions) {
+      if (!t.include) continue;
+      if (t.type === "income") { ic++; ti += t.amount; }
+      else { ec++; te += t.amount; }
+    }
+    return { incomeCount: ic, expenseCountN: ec, totalIncome: ti, totalExpenseAmt: te };
+  }, [transactions]);
+
+  const sortedTransactions = useMemo(() => {
+    return [...transactions].sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case "date": cmp = a.date.localeCompare(b.date); break;
+        case "description": cmp = a.description.localeCompare(b.description); break;
+        case "type": cmp = a.type.localeCompare(b.type); break;
+        case "category": cmp = a.category.localeCompare(b.category); break;
+        case "amount": cmp = a.amount - b.amount; break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [transactions, sortField, sortDir]);
+
+  const totalPages = Math.ceil(sortedTransactions.length / PAGE_SIZE);
+  const pagedTransactions = useMemo(
+    () => sortedTransactions.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE),
+    [sortedTransactions, currentPage]
+  );
 
   return (
     <DashboardLayout>
@@ -828,66 +916,67 @@ export default function ImportPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {[...transactions]
-                    .sort((a, b) => {
-                      let cmp = 0;
-                      switch (sortField) {
-                        case "date": cmp = a.date.localeCompare(b.date); break;
-                        case "description": cmp = a.description.localeCompare(b.description); break;
-                        case "type": cmp = a.type.localeCompare(b.type); break;
-                        case "category": cmp = a.category.localeCompare(b.category); break;
-                        case "amount": cmp = a.amount - b.amount; break;
-                      }
-                      return sortDir === "asc" ? cmp : -cmp;
-                    })
-                    .map((t) => (
-                    <tr key={t.id} className={!t.include ? "opacity-40" : ""}>
-                      <td>
-                        <button onClick={() => toggleInclude(t.id)} className="p-1">
-                          {t.include ? (
-                            <Check className="h-4 w-4 text-chart-positive" />
-                          ) : (
-                            <X className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </button>
-                      </td>
-                      <td className="font-mono text-xs text-muted-foreground">{t.date}</td>
-                      <td className="max-w-[250px] truncate">{t.description}</td>
-                      <td>
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                          t.type === "income" ? "bg-accent text-accent-foreground" : "bg-destructive/10 text-destructive"
-                        }`}>
-                          {t.type === "income" ? "Income" : "Expense"}
-                        </span>
-                      </td>
-                      <td>
-                        {t.type === "expense" ? (
-                          <Select value={t.category} onValueChange={(v) => updateCategory(t.id, v as ExpenseCategory)}>
-                            <SelectTrigger className="h-8 text-xs w-[160px]">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {EXPENSE_CATEGORIES.map((c) => (
-                                <SelectItem key={c} value={c}>{c}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className={`text-right font-mono ${t.type === "income" ? "text-chart-positive" : "text-chart-negative"}`}>
-                        {t.type === "income" ? "+" : "-"}{formatCurrency(t.amount)}
-                      </td>
-                      <td>
-                        <button onClick={() => deleteTransaction(t.id)} className="p-1 hover:text-destructive text-muted-foreground transition-colors">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
+                  {pagedTransactions.map((t) => (
+                    <TransactionRow
+                      key={t.id}
+                      t={t}
+                      onToggle={toggleInclude}
+                      onDelete={deleteTransaction}
+                      onUpdateCategory={updateCategory}
+                    />
                   ))}
                 </tbody>
               </table>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between pt-3 border-t">
+                  <span className="text-xs text-muted-foreground">
+                    Showing {currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, sortedTransactions.length)} of {sortedTransactions.length}
+                  </span>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={currentPage === 0}
+                      onClick={() => setCurrentPage(0)}
+                    >
+                      First
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={currentPage === 0}
+                      onClick={() => setCurrentPage((p) => p - 1)}
+                    >
+                      Prev
+                    </Button>
+                    <span className="flex items-center px-2 text-xs text-muted-foreground">
+                      Page {currentPage + 1} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={currentPage >= totalPages - 1}
+                      onClick={() => setCurrentPage((p) => p + 1)}
+                    >
+                      Next
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={currentPage >= totalPages - 1}
+                      onClick={() => setCurrentPage(totalPages - 1)}
+                    >
+                      Last
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Rule suggestions */}
