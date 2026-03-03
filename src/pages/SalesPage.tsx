@@ -20,7 +20,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, ArrowDownLeft, ArrowUpRight, Activity, Wallet, ArrowUpDown, ArrowUp, ArrowDown, Tag, Search, ShieldAlert, Pencil, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Trash2, ArrowDownLeft, ArrowUpRight, Activity, Wallet, ArrowUpDown, ArrowUp, ArrowDown, Tag, Search, ShieldAlert, Pencil, AlertTriangle, ChevronLeft, ChevronRight, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { auditSales } from "@/lib/audit";
@@ -33,7 +33,7 @@ export default function SalesPage() {
     sales, sorted, paginatedRows, totalPages, currentPage, setCurrentPage, totalSales,
     open, setOpen, form, setForm, handleAdd, addSale,
     sortField, sortDir, toggleSort, selected, toggleSelect, toggleAll, handleBulkDelete,
-    searchQuery, setSearchQuery, auditResult, setAuditResult, persistentAudit, activeIssueCount,
+    searchQuery, setSearchQuery, filterCategory, setFilterCategory, auditResult, setAuditResult, persistentAudit, activeIssueCount,
     pendingRuleSuggestion, setPendingRuleSuggestion,
     editingCategoryId, setEditingCategoryId, updateSale, removeSale, handleSingleCategoryChange,
     ruleDialogOpen, setRuleDialogOpen, ruleKeyword, setRuleKeyword, ruleCategory, setRuleCategory,
@@ -53,11 +53,15 @@ export default function SalesPage() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Sales</h1>
-            <p className="text-muted-foreground text-sm mt-1">Total: <span className="font-mono text-chart-positive">{formatCurrency(totalSales)}</span></p>
+            <p className="text-muted-foreground text-sm mt-1">{filterCategory !== "all" && <span>{filterCategory} — </span>}Total: <span className="font-mono text-chart-positive">{formatCurrency(totalSales)}</span></p>
           </div>
           <div className="flex items-center gap-2">
             <DateRangeFilter />
             <ExportButton data={sorted.map((s) => ({ date: s.date, client: s.client, description: s.description, invoice: s.invoiceNumber, category: s.category, amount: s.amount }))} filename="sales" columns={[{ key: "date", label: "Date" }, { key: "client", label: "Client" }, { key: "description", label: "Description" }, { key: "invoice", label: "Invoice #" }, { key: "category", label: "Category" }, { key: "amount", label: "Amount" }]} />
+            <Select value={filterCategory} onValueChange={(v) => { setFilterCategory(v); setCurrentPage(0); }}>
+              <SelectTrigger className="w-[180px]"><Filter className="h-3.5 w-3.5 mr-2" /><SelectValue placeholder="All Categories" /></SelectTrigger>
+              <SelectContent><SelectItem value="all">All Categories</SelectItem>{EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+            </Select>
           </div>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-2" />Add Sale</Button></DialogTrigger>

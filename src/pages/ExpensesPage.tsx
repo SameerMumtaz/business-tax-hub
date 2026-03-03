@@ -111,7 +111,8 @@ export default function ExpensesPage() {
                   await queryClient.refetchQueries({ queryKey: ["expenses", user.id] });
                   await queryClient.refetchQueries({ queryKey: ["sales", user.id] });
                 }
-                const freshExpenses = queryClient.getQueryData<typeof expenses>(["expenses", user?.id]) || expenses;
+                // Use fresh data from cache after refetch completes
+                const freshExpenses = queryClient.getQueryData<typeof expenses>(["expenses", user?.id]) ?? expenses;
                 setAuditResult(auditExpenses(freshExpenses));
               }}><ShieldAlert className="h-4 w-4 mr-2" />Quick Audit</Button>
             </div>
