@@ -58,13 +58,68 @@ Deno.serve(async (req) => {
       updateQuery = updateQuery.eq("business_user_id", invitedBy);
     }
 
-    const { data, error } = await updateQuery.select("id, business_user_id, role");
+    const { data, error } = await updateQuery.select("id, business_user_id, role, name, worker_type");
 
     if (error) {
       return new Response(JSON.stringify({ error: error.message }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Pre-populate crew member's profile with admin-provided info
+    if (data && data.length > 0) {
+      for (const tm of data) {
+        const nameParts = (tm.name || "").trim().split(/\s+/);
+        const firstName = nameParts[0] || "";
+        const lastName = nameParts.slice(1).join(" ") || "";
+
+        // Get address info from contractor/employee records
+        let address: string | null = null;
+        let stateEmployed: string | null = null;
+        let ssnLast4: string | null = null;
+
+        if (tm.worker_type === "1099") {
+          const { data: contractor } = await adminClient
+            .from("contractors")
+            .select("address, state_employed, tin_last4")
+            .eq("user_id", tm.business_user_id)
+            .eq("name", tm.name)
+            .maybeSingle();
+          if (contractor) {
+            address = contractor.address;
+            stateEmployed = contractor.state_employed;
+            ssnLast4 = contractor.tin_last4;
+          }
+        } else {
+          const { data: employee } = await adminClient
+            .from("employees")
+            .select("address, state_employed, ssn_last4")
+            .eq("user_id", tm.business_user_id)
+            .eq("name", tm.name)
+            .maybeSingle();
+          if (employee) {
+            address = employee.address;
+            stateEmployed = employee.state_employed;
+            ssnLast4 = employee.ssn_last4;
+          }
+        }
+
+        // Update the crew member's profile with available info
+        const profileUpdate: Record<string, string | null> = {};
+        if (firstName) profileUpdate.first_name = firstName;
+        if (lastName) profileUpdate.last_name = lastName;
+        if (address) profileUpdate.personal_address = address;
+        if (stateEmployed) profileUpdate.personal_state = stateEmployed;
+        if (ssnLast4) profileUpdate.ssn_last4 = ssnLast4;
+
+        if (Object.keys(profileUpdate).length > 0) {
+          await adminClient
+            .from("profiles")
+            .update(profileUpdate)
+            .eq("user_id", user.id);
+        }
+      }
     }
 
     return new Response(
