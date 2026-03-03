@@ -148,11 +148,13 @@ function isContractorComplete(c: Contractor): boolean {
 }
 
 export default function Report1099Page() {
-  const { contractors, addContractor, removeContractor } = useTaxStore();
+  const { contractors, addContractor, removeContractor, updateContractor } = useTaxStore();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", tin: "", totalPaid: "", address: "" });
+  const [form, setForm] = useState({ name: "", tin: "", totalPaid: "", address: "", payRate: "" });
   const [payerInfo, setPayerInfo] = useState({ name: "", tin: "", address: "" });
   const [payerOpen, setPayerOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", tin: "", totalPaid: "", address: "", payRate: "" });
 
   const handleAdd = () => {
     if (!form.name || !form.tin || !form.totalPaid) {
@@ -165,16 +167,43 @@ export default function Report1099Page() {
       tin: form.tin,
       totalPaid: parseFloat(form.totalPaid),
       address: form.address,
+      payRate: form.payRate ? parseFloat(form.payRate) : undefined,
     });
-    setForm({ name: "", tin: "", totalPaid: "", address: "" });
+    setForm({ name: "", tin: "", totalPaid: "", address: "", payRate: "" });
     setOpen(false);
     toast.success("Contractor added");
   };
 
+  const startEdit = (c: Contractor) => {
+    setEditId(c.id);
+    setEditForm({
+      name: c.name,
+      tin: c.tin,
+      totalPaid: String(c.totalPaid),
+      address: c.address,
+      payRate: c.payRate ? String(c.payRate) : "",
+    });
+  };
+
+  const saveEdit = () => {
+    if (!editId) return;
+    updateContractor(editId, {
+      name: editForm.name,
+      tin: editForm.tin,
+      totalPaid: parseFloat(editForm.totalPaid) || 0,
+      address: editForm.address,
+      payRate: editForm.payRate ? parseFloat(editForm.payRate) : undefined,
+    });
+    setEditId(null);
+    toast.success("Contractor updated");
+  };
+
+  const cancelEdit = () => setEditId(null);
+
   const handleExport = () => {
     const csv = [
-      "Name,TIN,Total Paid,Address",
-      ...contractors.map((c) => `"${c.name}","${c.tin}",${c.totalPaid},"${c.address}"`),
+      "Name,TIN,Total Paid,Pay Rate,Address",
+      ...contractors.map((c) => `"${c.name}","${c.tin}",${c.totalPaid},${c.payRate ?? ""},"${c.address}"`),
     ].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -242,6 +271,7 @@ export default function Report1099Page() {
                   <Input placeholder="Contractor name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                   <Input placeholder="TIN / SSN" value={form.tin} onChange={(e) => setForm({ ...form, tin: e.target.value })} />
                   <Input type="number" placeholder="Total paid" value={form.totalPaid} onChange={(e) => setForm({ ...form, totalPaid: e.target.value })} />
+                  <Input type="number" placeholder="Pay rate ($/hr, optional)" value={form.payRate} onChange={(e) => setForm({ ...form, payRate: e.target.value })} />
                   <Input placeholder="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
                   <Button onClick={handleAdd} className="w-full">Add Contractor</Button>
                 </div>
@@ -264,6 +294,7 @@ export default function Report1099Page() {
                 <th>Contractor</th>
                 <th>TIN</th>
                 <th>Address</th>
+                <th className="text-right">Pay Rate</th>
                 <th className="text-right">Total Paid</th>
                 <th>1099 Required</th>
                 <th></th>
@@ -271,15 +302,38 @@ export default function Report1099Page() {
             </thead>
             <tbody>
               {contractors.map((c) => {
+                const isEditing = editId === c.id;
                 const complete = isContractorComplete(c);
                 const missing = c.totalPaid >= 600 && !complete
                   ? [!c.tin.trim() && "TIN", !c.address.trim() && "address"].filter(Boolean).join(", ")
                   : "";
+
+                if (isEditing) {
+                  return (
+                    <tr key={c.id} className="bg-accent/30">
+                      <td><Input className="h-8 text-sm" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></td>
+                      <td><Input className="h-8 text-sm font-mono" value={editForm.tin} onChange={(e) => setEditForm({ ...editForm, tin: e.target.value })} /></td>
+                      <td><Input className="h-8 text-sm" value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} /></td>
+                      <td><Input className="h-8 text-sm text-right" type="number" placeholder="$/hr" value={editForm.payRate} onChange={(e) => setEditForm({ ...editForm, payRate: e.target.value })} /></td>
+                      <td><Input className="h-8 text-sm text-right" type="number" value={editForm.totalPaid} onChange={(e) => setEditForm({ ...editForm, totalPaid: e.target.value })} /></td>
+                      <td colSpan={2}>
+                        <div className="flex gap-1">
+                          <Button size="sm" className="h-7 text-xs" onClick={saveEdit}>Save</Button>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={cancelEdit}>Cancel</Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }
+
                 return (
-                  <tr key={c.id}>
+                  <tr key={c.id} className="cursor-pointer hover:bg-accent/20" onDoubleClick={() => startEdit(c)}>
                     <td className="font-medium">{c.name}</td>
                     <td className="font-mono text-xs text-muted-foreground">{c.tin}</td>
                     <td className="text-sm text-muted-foreground">{c.address || <span className="italic text-chart-warning">Missing</span>}</td>
+                    <td className="text-right font-mono text-sm text-muted-foreground">
+                      {c.payRate ? `$${c.payRate}/hr` : "—"}
+                    </td>
                     <td className="text-right font-mono">{formatCurrency(c.totalPaid)}</td>
                     <td>
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.totalPaid >= 600 ? "bg-chart-warning/10 text-chart-warning" : "bg-muted text-muted-foreground"}`}>
@@ -288,6 +342,9 @@ export default function Report1099Page() {
                     </td>
                     <td>
                       <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => startEdit(c)}>
+                          Edit
+                        </Button>
                         {c.totalPaid >= 600 && (
                           <Button
                             variant="outline"
