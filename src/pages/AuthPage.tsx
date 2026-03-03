@@ -77,7 +77,7 @@ export default function AuthPage() {
         <div className="text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
             <Receipt className="h-8 w-8 text-primary" />
-            <span className="text-2xl font-bold tracking-tight">TaxDash</span>
+            <span className="text-2xl font-bold tracking-tight">Bookie</span>
           </div>
           <p className="text-muted-foreground text-sm">Business Tax Filing Made Simple</p>
         </div>

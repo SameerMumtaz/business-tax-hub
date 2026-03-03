@@ -135,7 +135,7 @@ export default function AppSidebar() {
         <div className="flex items-center gap-2">
           <Receipt className="h-6 w-6 text-sidebar-primary" />
           <span className="text-lg font-semibold text-sidebar-accent-foreground tracking-tight">
-            TaxDash
+            Bookie
           </span>
         </div>
         <p className="text-xs text-sidebar-foreground mt-1">Business Tax Filing</p>
