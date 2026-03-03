@@ -1,5 +1,5 @@
 import { ExpenseCategory, EXPENSE_CATEGORIES } from "@/types/tax";
-import * as XLSX from "xlsx";
+import readXlsxFile from "read-excel-file/browser";
 
 export interface ParsedTransaction {
   date: string;
@@ -46,14 +46,14 @@ export function parseCSV(csvText: string): ParsedTransaction[] {
 
 /**
  * Parse an Excel file (xlsx/xls) into transactions.
- * Reads the first sheet and converts it to CSV text, then reuses parseCSV.
+ * Reads the first sheet and converts rows to CSV text, then reuses parseCSV.
  */
-export function parseExcel(data: ArrayBuffer): ParsedTransaction[] {
-  const workbook = XLSX.read(data, { type: "array" });
-  const sheetName = workbook.SheetNames[0];
-  if (!sheetName) return [];
-  const sheet = workbook.Sheets[sheetName];
-  const csvText = XLSX.utils.sheet_to_csv(sheet);
+export async function parseExcel(data: ArrayBuffer): Promise<ParsedTransaction[]> {
+  const rows = await readXlsxFile(new Blob([data]));
+  const csvText = rows.map(row => row.map(cell => {
+    const val = cell === null || cell === undefined ? "" : String(cell);
+    return val.includes(",") || val.includes('"') ? `"${val.replace(/"/g, '""')}"` : val;
+  }).join(",")).join("\n");
   return parseCSV(csvText);
 }
 

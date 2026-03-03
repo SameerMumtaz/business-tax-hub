@@ -219,7 +219,7 @@ export default function useImportLogic() {
     if (!isCsv && !isExcel) { toast.error("Please upload a CSV or Excel file"); return; }
     const reader = new FileReader();
     reader.onload = async (e) => {
-      const parsed = isExcel ? parseExcel(e.target?.result as ArrayBuffer) : parseCSV(e.target?.result as string);
+      const parsed = isExcel ? await parseExcel(e.target?.result as ArrayBuffer) : parseCSV(e.target?.result as string);
       if (parsed.length === 0) { toast.error("No transactions found."); return; }
       const reviewed: ReviewTransaction[] = parsed.map((t) => ({ ...t, id: generateId(), category: "Other" as ExpenseCategory, include: true }));
       const { dupeCount, withDupeFlags } = detectDuplicates(reviewed, existingExpenses, existingSales);
