@@ -17,7 +17,7 @@ const links = [
   { to: "/sales", label: "Sales", icon: TrendingUp },
   { to: "/expenses", label: "Expenses", icon: TrendingDown },
   { to: "/profit-loss", label: "Profit & Loss", icon: DollarSign },
-  { to: "/1099", label: "1099 Reports", icon: FileText },
+  { to: "/1099", label: "Tax Forms", icon: FileText },
 ];
 
 export default function AppSidebar() {

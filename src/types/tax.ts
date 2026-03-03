@@ -54,6 +54,19 @@ export interface Contractor {
   payRate?: number;
 }
 
+export interface Employee {
+  id: string;
+  name: string;
+  ssn: string;
+  address: string;
+  salary: number;
+  federalWithholding: number;
+  stateWithholding: number;
+  socialSecurity: number;
+  medicare: number;
+  startDate?: string;
+}
+
 export interface ProfitAndLoss {
   totalRevenue: number;
   totalExpenses: number;
