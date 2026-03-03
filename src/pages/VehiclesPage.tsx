@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Car, Trash2, Check, DollarSign, Calendar, Link2, Unlink, ArrowDownToLine } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Plus, Car, Trash2, Check, DollarSign, Calendar, Link2, Unlink, ArrowDownToLine, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import {
   Vehicle,
@@ -64,6 +65,13 @@ export default function VehiclesPage() {
   const [extraAmount, setExtraAmount] = useState(0);
   const [extraDate, setExtraDate] = useState(new Date().toISOString().slice(0, 10));
   const [extraNotes, setExtraNotes] = useState("");
+  const [extraRecurring, setExtraRecurring] = useState(false);
+  const [extraRecurringCount, setExtraRecurringCount] = useState(3);
+
+  // Transaction matching dialog
+  const [matchDialogOpen, setMatchDialogOpen] = useState(false);
+  const [matchingPaymentRow, setMatchingPaymentRow] = useState<number | null>(null);
+  const [matchSearch, setMatchSearch] = useState("");
 
   const selected = vehicles.find((v) => v.id === selectedId) ?? null;
   const { data: payments = [] } = useVehiclePayments(selectedId);
@@ -131,30 +139,125 @@ export default function VehiclesPage() {
     toast.success(`Payment #${row.number} recorded`);
   };
 
-  // Extra payment: applies to next unpaid slot with extra principal
+  // Extra payment handler — supports recurring
   const handleExtraPayment = async () => {
     if (!selected || !nextUnpaid || extraAmount <= 0) return;
-    const monthlyRate = selected.interest_rate / 100 / 12;
-    const interestPortion = Math.round(currentBalance * monthlyRate * 100) / 100;
-    const principalPortion = Math.round((extraAmount - interestPortion) * 100) / 100;
-    await addPayment.mutateAsync({
-      vehicle_id: selected.id,
-      payment_number: nextUnpaid.number,
-      amount_paid: extraAmount,
-      principal_portion: Math.max(principalPortion, 0),
-      interest_portion: Math.min(interestPortion, extraAmount),
-      date_paid: extraDate,
-      notes: extraNotes || "Extra payment",
-    });
-    toast.success(`Extra payment of ${formatCurrency(extraAmount)} recorded`);
+
+    const count = extraRecurring ? Math.max(1, extraRecurringCount) : 1;
+    const unpaidRows = amortSchedule.filter((r) => !r.paid);
+
+    for (let i = 0; i < Math.min(count, unpaidRows.length); i++) {
+      const targetRow = unpaidRows[i];
+      const monthlyRate = selected.interest_rate / 100 / 12;
+      // For simplicity, use the scheduled interest for each row
+      const interestPortion = targetRow.interest;
+      const principalPortion = Math.round((extraAmount - interestPortion) * 100) / 100;
+
+      const payDate = new Date(extraDate);
+      payDate.setMonth(payDate.getMonth() + i);
+
+      await addPayment.mutateAsync({
+        vehicle_id: selected.id,
+        payment_number: targetRow.number,
+        amount_paid: extraAmount,
+        principal_portion: Math.max(principalPortion, 0),
+        interest_portion: Math.min(interestPortion, extraAmount),
+        date_paid: payDate.toISOString().slice(0, 10),
+        notes: extraRecurring
+          ? `Recurring extra payment ${i + 1}/${count}`
+          : (extraNotes || "Extra payment"),
+      });
+    }
+
+    toast.success(
+      extraRecurring
+        ? `${Math.min(count, unpaidRows.length)} recurring extra payments recorded`
+        : `Extra payment of ${formatCurrency(extraAmount)} recorded`
+    );
     setShowExtraPayment(false);
     setExtraAmount(0);
     setExtraNotes("");
+    setExtraRecurring(false);
+    setExtraRecurringCount(3);
+  };
+
+  // ── Transaction matching logic ──
+  const linkedIds = new Set(linkedExpenses.map((le: any) => le.expense_id));
+
+  // Find candidate transactions that could match a payment row
+  const matchCandidates = useMemo(() => {
+    if (matchingPaymentRow === null || !selected) return [];
+    const row = amortSchedule.find((r) => r.number === matchingPaymentRow);
+    if (!row) return [];
+
+    const paymentAmount = selected.monthly_payment;
+    const dueDate = new Date(row.date);
+
+    // Score all expenses by similarity
+    let candidates = expenses
+      .filter((e) => !linkedIds.has(e.id))
+      .map((e) => {
+        const amountDiff = Math.abs(e.amount - paymentAmount);
+        const amountScore = amountDiff <= paymentAmount * 0.05 ? 3
+          : amountDiff <= paymentAmount * 0.15 ? 2
+          : amountDiff <= paymentAmount * 0.50 ? 1 : 0;
+
+        const expDate = new Date(e.date);
+        const daysDiff = Math.abs((expDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+        const dateScore = daysDiff <= 7 ? 3 : daysDiff <= 30 ? 2 : daysDiff <= 90 ? 1 : 0;
+
+        // Check if description/vendor hints at vehicle payment
+        const vendorLower = (e.vendor + " " + (e.description || "")).toLowerCase();
+        const keywordScore = /loan|payment|auto|vehicle|car|finance|lien/.test(vendorLower) ? 2 : 0;
+
+        return { ...e, score: amountScore + dateScore + keywordScore, amountDiff, daysDiff };
+      })
+      .filter((e) => e.score > 0);
+
+    if (matchSearch.trim()) {
+      const q = matchSearch.toLowerCase();
+      candidates = candidates.filter(
+        (e) => e.vendor.toLowerCase().includes(q) || (e.description || "").toLowerCase().includes(q)
+      );
+    }
+
+    return candidates.sort((a, b) => b.score - a.score).slice(0, 15);
+  }, [matchingPaymentRow, selected, expenses, linkedIds, amortSchedule, matchSearch]);
+
+  const handleMatchTransaction = async (expenseId: string) => {
+    if (!selected || matchingPaymentRow === null) return;
+    const row = amortSchedule.find((r) => r.number === matchingPaymentRow);
+    if (!row) return;
+
+    // Link expense to vehicle
+    await linkExpense.mutateAsync({ vehicleId: selected.id, expenseId });
+
+    // If not already paid, mark as paid using the expense data
+    if (!row.paid) {
+      const expense = expenses.find((e) => e.id === expenseId);
+      if (expense) {
+        const monthlyRate = selected.interest_rate / 100 / 12;
+        const interest = row.interest;
+        const principal = Math.round((expense.amount - interest) * 100) / 100;
+        await addPayment.mutateAsync({
+          vehicle_id: selected.id,
+          payment_number: row.number,
+          amount_paid: expense.amount,
+          principal_portion: Math.max(principal, 0),
+          interest_portion: Math.min(interest, expense.amount),
+          date_paid: expense.date,
+          notes: `Matched: ${expense.vendor}`,
+        });
+      }
+    }
+
+    toast.success(`Transaction matched to payment #${matchingPaymentRow}`);
+    setMatchDialogOpen(false);
+    setMatchingPaymentRow(null);
   };
 
   const linkedExpenseTotal = linkedExpenses.reduce((s: number, le: any) => s + Number(le.expenses?.amount ?? 0), 0);
 
-  const linkedIds = new Set(linkedExpenses.map((le: any) => le.expense_id));
   const vehicleCategories = ["Vehicle & Gas", "Vehicle Maintenance"];
   const linkableExpenses = useMemo(() => {
     let list = expenses.filter(
@@ -162,7 +265,7 @@ export default function VehiclesPage() {
     );
     if (expenseSearch.trim()) {
       const q = expenseSearch.toLowerCase();
-      list = list.filter((e) => e.vendor.toLowerCase().includes(q) || e.description.toLowerCase().includes(q));
+      list = list.filter((e) => e.vendor.toLowerCase().includes(q) || (e.description || "").toLowerCase().includes(q));
     }
     return list.slice(0, 20);
   }, [expenses, linkedIds, expenseSearch]);
@@ -287,6 +390,8 @@ export default function VehiclesPage() {
                       setExtraAmount(selected.monthly_payment * 2);
                       setExtraDate(new Date().toISOString().slice(0, 10));
                       setExtraNotes("");
+                      setExtraRecurring(false);
+                      setExtraRecurringCount(3);
                       setShowExtraPayment(true);
                     }}>
                       <ArrowDownToLine className="h-3.5 w-3.5 mr-1" /> Extra Payment
@@ -311,12 +416,14 @@ export default function VehiclesPage() {
                         <th className="text-right">Interest</th>
                         <th className="text-right">Balance</th>
                         <th>Status</th>
+                        <th>Match</th>
                       </tr>
                     </thead>
                     <tbody>
                       {amortSchedule.map((row) => {
                         const payment = payments.find((p) => p.payment_number === row.number);
                         const isExtra = payment && payment.amount_paid > row.payment + 0.01;
+                        const isMatched = payment?.notes?.startsWith("Matched:");
                         return (
                           <tr key={row.number} className={row.paid ? "opacity-60" : ""}>
                             <td className="font-mono text-xs">{row.number}</td>
@@ -338,6 +445,11 @@ export default function VehiclesPage() {
                                   <Badge variant="secondary" className="text-xs">
                                     <Check className="h-3 w-3 mr-0.5" /> Paid
                                   </Badge>
+                                  {isMatched && (
+                                    <Badge variant="outline" className="text-[10px] py-0 text-primary">
+                                      <Link2 className="h-2.5 w-2.5 mr-0.5" /> Matched
+                                    </Badge>
+                                  )}
                                   <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => {
                                     if (payment) {
                                       removePayment.mutate({ id: payment.id, vehicleId: selected.id });
@@ -351,6 +463,22 @@ export default function VehiclesPage() {
                                 <Button variant="outline" size="sm" className="h-6 text-xs"
                                   onClick={() => handleMarkPaid(row)} disabled={addPayment.isPending}>
                                   Mark Paid
+                                </Button>
+                              )}
+                            </td>
+                            <td>
+                              {!row.paid && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 text-xs gap-1"
+                                  onClick={() => {
+                                    setMatchingPaymentRow(row.number);
+                                    setMatchSearch("");
+                                    setMatchDialogOpen(true);
+                                  }}
+                                >
+                                  <Search className="h-3 w-3" /> Match
                                 </Button>
                               )}
                             </td>
@@ -573,7 +701,7 @@ export default function VehiclesPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Extra Payment dialog */}
+        {/* Extra Payment dialog — now with recurring option */}
         <Dialog open={showExtraPayment} onOpenChange={setShowExtraPayment}>
           <DialogContent className="max-w-sm">
             <DialogHeader><DialogTitle>Extra Payment — {selected?.name}</DialogTitle></DialogHeader>
@@ -593,12 +721,96 @@ export default function VehiclesPage() {
                 <Label>Notes (optional)</Label>
                 <Input value={extraNotes} onChange={(e) => setExtraNotes(e.target.value)} placeholder="e.g. Tax refund paydown" />
               </div>
+
+              {/* Recurring toggle */}
+              <div className="p-3 rounded-lg border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="h-4 w-4 text-primary" />
+                    <Label className="text-sm font-medium cursor-pointer">Make Recurring</Label>
+                  </div>
+                  <Switch checked={extraRecurring} onCheckedChange={setExtraRecurring} />
+                </div>
+                {extraRecurring && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      Schedule this extra payment amount for multiple consecutive months.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs whitespace-nowrap">Number of months</Label>
+                      <Input
+                        type="number"
+                        min={2}
+                        max={Math.max(2, amortSchedule.filter(r => !r.paid).length)}
+                        className="w-20 h-8 text-xs"
+                        value={extraRecurringCount}
+                        onChange={(e) => setExtraRecurringCount(Number(e.target.value))}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Total: {formatCurrency(extraAmount * Math.min(extraRecurringCount, amortSchedule.filter(r => !r.paid).length))} over{" "}
+                      {Math.min(extraRecurringCount, amortSchedule.filter(r => !r.paid).length)} months
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <Button variant="outline" onClick={() => setShowExtraPayment(false)}>Cancel</Button>
               <Button onClick={handleExtraPayment} disabled={addPayment.isPending || extraAmount <= 0}>
-                {addPayment.isPending ? "Saving…" : "Record Payment"}
+                {addPayment.isPending ? "Saving…" : extraRecurring ? `Record ${Math.min(extraRecurringCount, amortSchedule.filter(r => !r.paid).length)} Payments` : "Record Payment"}
               </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Match Transaction dialog */}
+        <Dialog open={matchDialogOpen} onOpenChange={setMatchDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Match Transaction to Payment #{matchingPaymentRow}</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              Select a transaction that corresponds to this loan payment. Best matches are shown first based on amount, date, and description.
+            </p>
+            <Input
+              placeholder="Search transactions…"
+              value={matchSearch}
+              onChange={(e) => setMatchSearch(e.target.value)}
+              className="mt-2"
+            />
+            <div className="max-h-60 overflow-y-auto space-y-1 mt-2">
+              {matchCandidates.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No matching transactions found. Try broadening your search or import more transactions.
+                </p>
+              ) : (
+                matchCandidates.map((e) => (
+                  <button
+                    key={e.id}
+                    className="flex items-center justify-between w-full px-3 py-2 text-sm rounded-md hover:bg-accent transition-colors"
+                    onClick={() => handleMatchTransaction(e.id)}
+                  >
+                    <div className="text-left flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium truncate">{e.vendor}</span>
+                        {e.score >= 6 && (
+                          <Badge variant="default" className="text-[10px] py-0 shrink-0">Best Match</Badge>
+                        )}
+                        {e.score >= 4 && e.score < 6 && (
+                          <Badge variant="secondary" className="text-[10px] py-0 shrink-0">Good Match</Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{e.date}</span>
+                        <span>•</span>
+                        <span>{e.category}</span>
+                      </div>
+                    </div>
+                    <span className="font-mono text-xs ml-2 shrink-0">{formatCurrency(e.amount)}</span>
+                  </button>
+                ))
+              )}
             </div>
           </DialogContent>
         </Dialog>
