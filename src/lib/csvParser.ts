@@ -160,7 +160,6 @@ function guessColumnsFromData(rows: string[][]): ColMap {
     textScore: 0,
   }));
 
-  // Sample up to 10 rows
   const sample = rows.slice(0, 10);
   for (const row of sample) {
     for (let i = 0; i < numCols; i++) {
@@ -172,39 +171,79 @@ function guessColumnsFromData(rows: string[][]): ColMap {
     }
   }
 
-  // Date column: highest date score
   let dateIdx = -1;
   let bestDate = 0;
   colScores.forEach((s, i) => {
     if (s.dateScore > bestDate) { bestDate = s.dateScore; dateIdx = i; }
   });
 
-  // Description column: highest text score (not date)
   let descIdx = -1;
   let bestText = 0;
   colScores.forEach((s, i) => {
     if (i !== dateIdx && s.textScore > bestText) { bestText = s.textScore; descIdx = i; }
   });
 
-  // Amount columns: numeric columns (not date)
   const numericCols = colScores
     .map((s, i) => ({ i, score: s.numScore }))
     .filter((c) => c.i !== dateIdx && c.i !== descIdx && c.score > 0)
     .sort((a, b) => b.score - a.score);
 
+  // Detect running balance column from data patterns
+  let balanceIdx = -1;
+  if (numericCols.length >= 2 && sample.length >= 3) {
+    balanceIdx = detectBalanceColumnFromData(numericCols.map((c) => c.i), sample);
+  }
+
+  const filteredNumeric = numericCols.filter((c) => c.i !== balanceIdx);
+
   let amountIdx = -1;
   let debitIdx = -1;
   let creditIdx = -1;
 
-  if (numericCols.length === 1) {
-    amountIdx = numericCols[0].i;
-  } else if (numericCols.length >= 2) {
-    // Could be debit/credit or amount + balance
-    debitIdx = numericCols[0].i;
-    creditIdx = numericCols[1].i;
+  if (filteredNumeric.length === 1) {
+    amountIdx = filteredNumeric[0].i;
+  } else if (filteredNumeric.length >= 2) {
+    debitIdx = filteredNumeric[0].i;
+    creditIdx = filteredNumeric[1].i;
   }
 
-  return { dateIdx, descIdx, amountIdx, debitIdx, creditIdx, balanceIdx: -1 };
+  return { dateIdx, descIdx, amountIdx, debitIdx, creditIdx, balanceIdx };
+}
+
+/**
+ * Detect a running balance column: it tends to be monotonic or have the
+ * largest average absolute values (cumulative sums vs individual amounts).
+ */
+function detectBalanceColumnFromData(numericColIndices: number[], sample: string[][]): number {
+  if (numericColIndices.length < 2) return -1;
+
+  const colStats = numericColIndices.map((colIdx) => {
+    const values = sample.map((row) => parseAmount(row[colIdx])).filter((v) => v !== 0);
+    const avgAbs = values.length > 0 ? values.reduce((s, v) => s + Math.abs(v), 0) / values.length : 0;
+    let monotonic = values.length >= 3;
+    if (monotonic) {
+      let inc = true, dec = true;
+      for (let i = 1; i < values.length; i++) {
+        if (values[i] < values[i - 1]) inc = false;
+        if (values[i] > values[i - 1]) dec = false;
+      }
+      monotonic = inc || dec;
+    }
+    return { colIdx, avgAbs, monotonic, count: values.length };
+  });
+
+  // Monotonic column among non-monotonic ones → likely balance
+  const mono = colStats.filter((s) => s.monotonic && s.count >= 3);
+  const nonMono = colStats.filter((s) => !s.monotonic);
+  if (mono.length === 1 && nonMono.length >= 1) return mono[0].colIdx;
+
+  // Column with 2x+ larger average absolute value → likely cumulative balance
+  const sorted = [...colStats].sort((a, b) => b.avgAbs - a.avgAbs);
+  if (sorted.length >= 2 && sorted[0].avgAbs > sorted[1].avgAbs * 2 && sorted[0].count >= 2) {
+    return sorted[0].colIdx;
+  }
+
+  return -1;
 }
 
 // --- Transaction Extraction ---
@@ -259,9 +298,9 @@ function extractTransaction(cols: string[], colMap: ColMap): ParsedTransaction |
       type = "expense";
     }
   } else {
-    // No mapped amount column — find the first numeric value in the row
+    // No mapped amount column — find the first numeric value in the row (skip balance)
     for (let i = 0; i < cols.length; i++) {
-      if (i === colMap.dateIdx || i === colMap.descIdx) continue;
+      if (i === colMap.dateIdx || i === colMap.descIdx || i === colMap.balanceIdx) continue;
       const val = parseAmount(cols[i]);
       if (val !== 0) {
         amount = Math.abs(val);
