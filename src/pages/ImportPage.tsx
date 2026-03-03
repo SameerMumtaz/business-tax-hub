@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef, memo } from "react";
+import { useState, useCallback, useMemo, useRef, memo, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useAddExpense, useAddSale } from "@/hooks/useData";
 import { useAuth } from "@/hooks/useAuth";
@@ -8,10 +8,11 @@ import { formatCurrency, generateId } from "@/lib/format";
 import { EXPENSE_CATEGORIES, ExpenseCategory } from "@/types/tax";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, FileText, Landmark, Check, X, FileUp, ArrowRight, Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Lightbulb, Plus, XCircle, ShieldAlert, AlertTriangle, Info, Ban } from "lucide-react";
+import { Upload, FileText, Landmark, Check, X, FileUp, ArrowRight, Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Lightbulb, Plus, XCircle, ShieldAlert, AlertTriangle, Info, Ban, Tag, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
 
@@ -30,7 +31,6 @@ interface AuditIssue {
 type SortField = "date" | "description" | "type" | "category" | "amount";
 type SortDir = "asc" | "desc";
 
-
 interface ReviewTransaction extends ParsedTransaction {
   id: string;
   category: ExpenseCategory;
@@ -46,9 +46,9 @@ interface RuleSuggestion {
   count: number;
   saved?: boolean;
 }
+
 function extractKeyword(description: string): string | null {
   const words = description.toLowerCase().replace(/[^a-z0-9\s&]/g, "").split(/\s+/);
-  // Skip common filler words, return first meaningful word (3+ chars)
   const stopWords = new Set(["the", "and", "for", "from", "payment", "purchase", "pos", "ach", "debit", "credit", "to", "inc", "llc", "ltd", "corp"]);
   for (const word of words) {
     if (word.length >= 3 && !stopWords.has(word)) return word;
@@ -61,14 +61,21 @@ const TransactionRow = memo(function TransactionRow({
   onToggle,
   onDelete,
   onUpdateCategory,
+  highlighted,
+  rowRef,
 }: {
   t: ReviewTransaction;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
   onUpdateCategory: (id: string, category: ExpenseCategory) => void;
+  highlighted?: boolean;
+  rowRef?: React.RefObject<HTMLTableRowElement>;
 }) {
   return (
-    <tr className={!t.include ? "opacity-40" : ""}>
+    <tr
+      ref={rowRef}
+      className={`transition-colors duration-500 ${!t.include ? "opacity-40" : ""} ${highlighted ? "!bg-primary/10 ring-1 ring-primary/30" : ""}`}
+    >
       <td>
         <button onClick={() => onToggle(t.id)} className="p-1">
           {t.include ? (
@@ -136,7 +143,79 @@ export default function ImportPage() {
   const [pdfStatus, setPdfStatus] = useState("");
   const [pdfProgress, setPdfProgress] = useState(0);
   const pdfInputRef = useRef<HTMLInputElement>(null);
-  
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const highlightedRowRef = useRef<HTMLTableRowElement>(null);
+  const [inlineRuleIssueIdx, setInlineRuleIssueIdx] = useState<number | null>(null);
+  const [inlineRuleKeyword, setInlineRuleKeyword] = useState("");
+  const [inlineRuleCategory, setInlineRuleCategory] = useState("");
+  const [currentPage, setCurrentPage] = useState(0);
+  const PAGE_SIZE = 50;
+
+  const sortedTransactions = useMemo(() => {
+    return [...transactions].sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case "date": cmp = a.date.localeCompare(b.date); break;
+        case "description": cmp = a.description.localeCompare(b.description); break;
+        case "type": cmp = a.type.localeCompare(b.type); break;
+        case "category": cmp = a.category.localeCompare(b.category); break;
+        case "amount": cmp = a.amount - b.amount; break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [transactions, sortField, sortDir]);
+
+  // Navigate to a transaction: find its page, set highlight, scroll to it
+  const navigateToTransaction = useCallback((id: string) => {
+    const idx = sortedTransactions.findIndex((t) => t.id === id);
+    if (idx === -1) return;
+    const targetPage = Math.floor(idx / PAGE_SIZE);
+    setCurrentPage(targetPage);
+    setHighlightedId(id);
+    setTimeout(() => setHighlightedId(null), 3000);
+  }, [sortedTransactions]);
+
+  // Scroll to highlighted row when it changes
+  useEffect(() => {
+    if (highlightedId && highlightedRowRef.current) {
+      setTimeout(() => {
+        highlightedRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+    }
+  }, [highlightedId, currentPage]);
+
+  // Save an inline rule from audit banner
+  const saveInlineRule = async (issueIdx: number) => {
+    if (!inlineRuleKeyword || !inlineRuleCategory) {
+      toast.error("Enter a keyword and category");
+      return;
+    }
+    const { error } = await supabase.from("categorization_rules").insert({
+      vendor_pattern: inlineRuleKeyword,
+      category: inlineRuleCategory,
+      type: "expense",
+      priority: 10,
+      user_id: user?.id,
+    });
+    if (error) {
+      toast.error("Failed to save rule");
+    } else {
+      invalidateRulesCache();
+      toast.success(`Rule saved: "${inlineRuleKeyword}" → ${inlineRuleCategory}`);
+      // Also apply the rule to matching transactions right now
+      setTransactions((prev) =>
+        prev.map((t) => {
+          if (t.description.toLowerCase().includes(inlineRuleKeyword.toLowerCase())) {
+            return { ...t, category: inlineRuleCategory as ExpenseCategory, catSource: "rule" };
+          }
+          return t;
+        })
+      );
+      setInlineRuleIssueIdx(null);
+      setInlineRuleKeyword("");
+      setInlineRuleCategory("");
+    }
+  };
 
   const handlePdfUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -161,7 +240,6 @@ export default function ImportPage() {
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       const totalPages = Math.min(pdf.numPages, 50);
 
-      // Phase 1: Extract text from all pages (instant, no AI needed)
       setPdfStatus(`Extracting text from ${totalPages} pages…`);
       const pageTexts: string[] = [];
       for (let p = 1; p <= totalPages; p++) {
@@ -187,14 +265,11 @@ export default function ImportPage() {
       setPdfStatus("Extracting transactions…");
       setPdfProgress(40);
 
-      // Phase 2: Send text for rule-based structuring
-      // Split into chunks if text is very long (>50k chars)
       const CHUNK_SIZE = 50000;
       const textChunks: string[] = [];
       if (fullText.length <= CHUNK_SIZE) {
         textChunks.push(fullText);
       } else {
-        // Split on page breaks to keep context
         let current = "";
         for (const pageText of pageTexts) {
           if (current.length + pageText.length > CHUNK_SIZE && current.length > 0) {
@@ -221,7 +296,6 @@ export default function ImportPage() {
         if (error) {
           const msg = (error as { message?: string }).message || "Chunk extraction failed";
           chunkErrors.push(`Chunk ${i + 1}: ${msg}`);
-          console.error(`Text chunk ${i + 1} failed:`, error);
           continue;
         }
 
@@ -242,7 +316,6 @@ export default function ImportPage() {
       setPdfProgress(90);
       setPdfStatus("Processing results…");
 
-      // Convert to ReviewTransaction format
       const reviewed: ReviewTransaction[] = allTransactions.map((t: any) => ({
         date: t.date || "",
         description: t.description || "",
@@ -258,7 +331,6 @@ export default function ImportPage() {
       setStep("review");
       toast.success(`Extracted ${reviewed.length} transactions from ${totalPages} pages`);
 
-      // Auto-categorize with rules
       setCategorizing(true);
       try {
         const results = await categorizeTransactions(
@@ -290,6 +362,7 @@ export default function ImportPage() {
       if (pdfInputRef.current) pdfInputRef.current.value = "";
     }
   }, []);
+
   const processFile = useCallback((file: File) => {
     const isExcel = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
     const isCsv = file.name.endsWith(".csv") || file.name.endsWith(".tsv") || file.name.endsWith(".txt");
@@ -321,7 +394,6 @@ export default function ImportPage() {
       setTransactions(reviewed);
       setStep("review");
 
-      // Step 1: Apply rules only (no AI)
       setCategorizing(true);
       try {
         const results = await categorizeTransactions(
@@ -379,6 +451,8 @@ export default function ImportPage() {
     setTransactions((prev) => prev.filter((t) => t.id !== id));
   };
 
+  // currentPage and PAGE_SIZE moved above navigateToTransaction
+
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -400,33 +474,20 @@ export default function ImportPage() {
     setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, category, catSource: "rule", userEdited: true } : t)));
   };
 
-  // Generate rule suggestions from user edits
   const ruleSuggestions = useMemo<RuleSuggestion[]>(() => {
     const map = new Map<string, { category: string; type: "expense" | "income"; count: number }>();
     for (const t of transactions) {
       if (!t.include) continue;
       if (t.category === "Other") continue;
-      // Only suggest from user edits (not existing rules/keywords)
       if (!t.userEdited) continue;
-
-      // Extract a keyword from the description (first meaningful word, 3+ chars)
       const keyword = extractKeyword(t.description);
       if (!keyword) continue;
-
       const key = `${keyword}|${t.category}|${t.type}`;
       const existing = map.get(key);
-      if (existing) {
-        existing.count++;
-      } else {
-        map.set(key, { category: t.category, type: t.type, count: 1 });
-      }
+      if (existing) { existing.count++; } else { map.set(key, { category: t.category, type: t.type, count: 1 }); }
     }
-
     return Array.from(map.entries())
-      .map(([key, val]) => {
-        const keyword = key.split("|")[0];
-        return { keyword, ...val, saved: false };
-      })
+      .map(([key, val]) => ({ keyword: key.split("|")[0], ...val, saved: false }))
       .sort((a, b) => b.count - a.count);
   }, [transactions]);
 
@@ -490,7 +551,7 @@ export default function ImportPage() {
 
     const issues: AuditIssue[] = [];
 
-    // 1. Duplicate detection (same date + amount)
+    // 1. Duplicate detection
     const seen = new Map<string, ReviewTransaction[]>();
     for (const t of transactions) {
       if (!t.include) continue;
@@ -521,7 +582,7 @@ export default function ImportPage() {
         description: "Uncategorized expenses may lead to missed deductions at tax time.",
         affected_ids: uncategorized.slice(0, 5).map((t) => t.id),
         suggestion: "review",
-        suggestion_detail: "Edit categories manually or add rules on the Categorization Rules page.",
+        suggestion_detail: "Edit categories manually or create a rule to auto-categorize.",
       });
     }
 
@@ -540,7 +601,7 @@ export default function ImportPage() {
       });
     }
 
-    // 4. Potential personal expenses
+    // 4. Personal expenses
     const personalRx = /\b(netflix|hulu|disney\+|spotify|apple music|gym|fitness|personal|grocery|groceries|whole foods|trader joe)\b/i;
     const personal = transactions.filter((t) => t.include && t.type === "expense" && personalRx.test(t.description));
     if (personal.length > 0) {
@@ -550,7 +611,7 @@ export default function ImportPage() {
         description: "These look like personal rather than business expenses — an IRS red flag.",
         affected_ids: personal.map((t) => t.id),
         suggestion: "review",
-        suggestion_detail: "Exclude personal expenses from business deductions.",
+        suggestion_detail: "Exclude personal expenses from business deductions, or create a rule to auto-exclude.",
         irs_reference: "IRC §262",
       });
     }
@@ -653,9 +714,6 @@ export default function ImportPage() {
     setStep("upload");
   };
 
-  const [currentPage, setCurrentPage] = useState(0);
-  const PAGE_SIZE = 50;
-
   const { incomeCount, expenseCountN, totalIncome, totalExpenseAmt } = useMemo(() => {
     let ic = 0, ec = 0, ti = 0, te = 0;
     for (const t of transactions) {
@@ -666,25 +724,18 @@ export default function ImportPage() {
     return { incomeCount: ic, expenseCountN: ec, totalIncome: ti, totalExpenseAmt: te };
   }, [transactions]);
 
-  const sortedTransactions = useMemo(() => {
-    return [...transactions].sort((a, b) => {
-      let cmp = 0;
-      switch (sortField) {
-        case "date": cmp = a.date.localeCompare(b.date); break;
-        case "description": cmp = a.description.localeCompare(b.description); break;
-        case "type": cmp = a.type.localeCompare(b.type); break;
-        case "category": cmp = a.category.localeCompare(b.category); break;
-        case "amount": cmp = a.amount - b.amount; break;
-      }
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-  }, [transactions, sortField, sortDir]);
+  // sortedTransactions moved above navigateToTransaction
 
   const totalPages = Math.ceil(sortedTransactions.length / PAGE_SIZE);
   const pagedTransactions = useMemo(
     () => sortedTransactions.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE),
     [sortedTransactions, currentPage]
   );
+
+  // Get affected transactions for an issue (for display)
+  const getAffectedTransactions = (ids: string[]) => {
+    return transactions.filter((t) => ids.includes(t.id));
+  };
 
   return (
     <DashboardLayout>
@@ -741,7 +792,6 @@ export default function ImportPage() {
                   setPdfDragOver(false);
                   const file = e.dataTransfer.files[0];
                   if (file?.name.toLowerCase().endsWith(".pdf")) {
-                    // Trigger the same handler by creating a synthetic event
                     const dt = new DataTransfer();
                     dt.items.add(file);
                     if (pdfInputRef.current) {
@@ -839,7 +889,7 @@ export default function ImportPage() {
               </div>
             </div>
 
-            {/* Audit issues — shown above table so user sees them first */}
+            {/* Audit issues */}
             {auditIssues.length > 0 && (
               <div className="stat-card space-y-3">
                 <div className="flex items-center justify-between flex-wrap gap-2">
@@ -870,53 +920,128 @@ export default function ImportPage() {
                       : issue.severity === "medium" ? AlertTriangle : Info;
                     const severityColor = issue.severity === "high" ? "text-destructive"
                       : issue.severity === "medium" ? "text-chart-warning" : "text-chart-info";
+                    const affected = getAffectedTransactions(issue.affected_ids);
                     return (
-                      <div key={idx} className="flex items-start gap-3 bg-muted rounded-lg p-3">
-                        <SeverityIcon className={`h-4 w-4 mt-0.5 shrink-0 ${severityColor}`} />
-                        <div className="flex-1 min-w-0 space-y-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-medium">{issue.title}</span>
-                            <Badge variant="outline" className="text-[10px]">{issue.type.replace(/_/g, " ")}</Badge>
-                            <Badge
-                              variant={issue.severity === "high" ? "destructive" : "secondary"}
-                              className="text-[10px]"
-                            >
-                              {issue.severity}
-                            </Badge>
-                            {issue.irs_reference && (
-                              <Badge variant="outline" className="text-[10px] font-mono">{issue.irs_reference}</Badge>
+                      <div key={idx} className="bg-muted rounded-lg p-3 space-y-2">
+                        <div className="flex items-start gap-3">
+                          <SeverityIcon className={`h-4 w-4 mt-0.5 shrink-0 ${severityColor}`} />
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-medium">{issue.title}</span>
+                              <Badge variant="outline" className="text-[10px]">{issue.type.replace(/_/g, " ")}</Badge>
+                              <Badge
+                                variant={issue.severity === "high" ? "destructive" : "secondary"}
+                                className="text-[10px]"
+                              >
+                                {issue.severity}
+                              </Badge>
+                              {issue.irs_reference && (
+                                <Badge variant="outline" className="text-[10px] font-mono">{issue.irs_reference}</Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">{issue.description}</p>
+                            <p className="text-xs font-medium">💡 {issue.suggestion_detail}</p>
+                            {issue.tax_impact && (
+                              <p className="text-xs text-chart-warning font-medium">💰 Tax impact: {issue.tax_impact}</p>
                             )}
                           </div>
-                          <p className="text-xs text-muted-foreground">{issue.description}</p>
-                          <p className="text-xs font-medium">💡 {issue.suggestion_detail}</p>
-                          {issue.tax_impact && (
-                            <p className="text-xs text-chart-warning font-medium">💰 Tax impact: {issue.tax_impact}</p>
-                          )}
-                        </div>
-                        <div className="flex gap-1 shrink-0">
-                          {(issue.suggestion === "delete" || issue.suggestion === "review" || issue.suggestion === "flag") && (
+                          <div className="flex gap-1 shrink-0">
                             <Button
                               variant="outline"
                               size="sm"
                               className="text-xs h-7"
-                              onClick={() => applyIssueSuggestion(issue, idx)}
+                              onClick={() => {
+                                setInlineRuleIssueIdx(inlineRuleIssueIdx === idx ? null : idx);
+                                // Pre-fill keyword from first affected transaction
+                                if (affected.length > 0) {
+                                  const kw = extractKeyword(affected[0].description);
+                                  setInlineRuleKeyword(kw || "");
+                                }
+                                setInlineRuleCategory("");
+                              }}
                             >
-                              {issue.suggestion === "delete" ? (
-                                <><Trash2 className="h-3 w-3 mr-1" /> Delete</>
-                              ) : (
-                                <><X className="h-3 w-3 mr-1" /> Exclude</>
-                              )}
+                              <Tag className="h-3 w-3 mr-1" /> Create Rule
                             </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-xs h-7"
-                            onClick={() => dismissIssue(idx)}
-                          >
-                            Dismiss
-                          </Button>
+                            {(issue.suggestion === "delete" || issue.suggestion === "review" || issue.suggestion === "flag") && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-xs h-7"
+                                onClick={() => applyIssueSuggestion(issue, idx)}
+                              >
+                                {issue.suggestion === "delete" ? (
+                                  <><Trash2 className="h-3 w-3 mr-1" /> Delete</>
+                                ) : (
+                                  <><X className="h-3 w-3 mr-1" /> Exclude</>
+                                )}
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-xs h-7"
+                              onClick={() => dismissIssue(idx)}
+                            >
+                              Dismiss
+                            </Button>
+                          </div>
                         </div>
+
+                        {/* Affected transactions — clickable */}
+                        {affected.length > 0 && (
+                          <div className="ml-7 space-y-1">
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Affected transactions</p>
+                            <div className="flex flex-col gap-0.5">
+                              {affected.slice(0, 8).map((t) => (
+                                <button
+                                  key={t.id}
+                                  onClick={() => navigateToTransaction(t.id)}
+                                  className="flex items-center gap-2 text-xs text-left hover:bg-background/60 rounded px-2 py-1 transition-colors group w-full"
+                                >
+                                  <ExternalLink className="h-3 w-3 text-muted-foreground group-hover:text-primary shrink-0" />
+                                  <span className="font-mono text-muted-foreground w-20 shrink-0">{t.date}</span>
+                                  <span className="truncate flex-1">{t.description}</span>
+                                  <span className={`font-mono shrink-0 ${t.type === "income" ? "text-chart-positive" : "text-chart-negative"}`}>
+                                    {formatCurrency(t.amount)}
+                                  </span>
+                                </button>
+                              ))}
+                              {affected.length > 8 && (
+                                <span className="text-[10px] text-muted-foreground ml-7">…and {affected.length - 8} more</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Inline rule creation */}
+                        {inlineRuleIssueIdx === idx && (
+                          <div className="ml-7 flex items-center gap-2 bg-background/60 rounded-lg p-2 border">
+                            <Tag className="h-3.5 w-3.5 text-primary shrink-0" />
+                            <Input
+                              placeholder="Keyword (e.g. netflix)"
+                              value={inlineRuleKeyword}
+                              onChange={(e) => setInlineRuleKeyword(e.target.value)}
+                              className="h-7 text-xs w-[140px]"
+                            />
+                            <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                            <Select value={inlineRuleCategory} onValueChange={setInlineRuleCategory}>
+                              <SelectTrigger className="h-7 text-xs w-[160px]">
+                                <SelectValue placeholder="Category" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {EXPENSE_CATEGORIES.map((c) => (
+                                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button size="sm" className="h-7 text-xs" onClick={() => saveInlineRule(idx)}>
+                              Save Rule
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setInlineRuleIssueIdx(null)}>
+                              Cancel
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -956,6 +1081,8 @@ export default function ImportPage() {
                       onToggle={toggleInclude}
                       onDelete={deleteTransaction}
                       onUpdateCategory={updateCategory}
+                      highlighted={t.id === highlightedId}
+                      rowRef={t.id === highlightedId ? highlightedRowRef : undefined}
                     />
                   ))}
                 </tbody>
@@ -968,45 +1095,11 @@ export default function ImportPage() {
                     Showing {currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, sortedTransactions.length)} of {sortedTransactions.length}
                   </span>
                   <div className="flex gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs"
-                      disabled={currentPage === 0}
-                      onClick={() => setCurrentPage(0)}
-                    >
-                      First
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs"
-                      disabled={currentPage === 0}
-                      onClick={() => setCurrentPage((p) => p - 1)}
-                    >
-                      Prev
-                    </Button>
-                    <span className="flex items-center px-2 text-xs text-muted-foreground">
-                      Page {currentPage + 1} of {totalPages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs"
-                      disabled={currentPage >= totalPages - 1}
-                      onClick={() => setCurrentPage((p) => p + 1)}
-                    >
-                      Next
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs"
-                      disabled={currentPage >= totalPages - 1}
-                      onClick={() => setCurrentPage(totalPages - 1)}
-                    >
-                      Last
-                    </Button>
+                    <Button variant="outline" size="sm" className="h-7 text-xs" disabled={currentPage === 0} onClick={() => setCurrentPage(0)}>First</Button>
+                    <Button variant="outline" size="sm" className="h-7 text-xs" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => p - 1)}>Prev</Button>
+                    <span className="flex items-center px-2 text-xs text-muted-foreground">Page {currentPage + 1} of {totalPages}</span>
+                    <Button variant="outline" size="sm" className="h-7 text-xs" disabled={currentPage >= totalPages - 1} onClick={() => setCurrentPage((p) => p + 1)}>Next</Button>
+                    <Button variant="outline" size="sm" className="h-7 text-xs" disabled={currentPage >= totalPages - 1} onClick={() => setCurrentPage(totalPages - 1)}>Last</Button>
                   </div>
                 </div>
               )}
