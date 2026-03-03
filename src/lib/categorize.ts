@@ -17,22 +17,36 @@ interface CategorizeInput {
 
 let cachedRules: { vendor_pattern: string; category: string; type: string }[] | null = null;
 let rulesCacheTime = 0;
+let rulesCacheUserId: string | null = null;
 const RULES_CACHE_TTL = 60_000;
 
 async function fetchRules() {
-  if (cachedRules && Date.now() - rulesCacheTime < RULES_CACHE_TTL) return cachedRules;
+  const { data: authData } = await supabase.auth.getUser();
+  const currentUserId = authData.user?.id ?? null;
+
+  if (
+    cachedRules &&
+    rulesCacheUserId === currentUserId &&
+    Date.now() - rulesCacheTime < RULES_CACHE_TTL
+  ) {
+    return cachedRules;
+  }
+
   const { data } = await supabase
     .from("categorization_rules")
     .select("*")
     .order("priority", { ascending: false });
+
   cachedRules = data || [];
   rulesCacheTime = Date.now();
+  rulesCacheUserId = currentUserId;
   return cachedRules;
 }
 
 export function invalidateRulesCache() {
   cachedRules = null;
   rulesCacheTime = 0;
+  rulesCacheUserId = null;
   sessionCache.clear();
 }
 
@@ -533,8 +547,8 @@ export async function applyRulesToUncategorized(userId: string): Promise<{ expen
   
   // Fetch all "Other" expenses and sales for this user
   const [{ data: otherExpenses }, { data: otherSales }] = await Promise.all([
-    supabase.from("expenses").select("id, vendor, description").eq("user_id", userId).eq("category", "Other"),
-    supabase.from("sales").select("id, client, description").eq("user_id", userId).eq("category", "Other"),
+    supabase.from("expenses").select("id, vendor, description").eq("user_id", userId).in("category", ["Other", "other"]),
+    supabase.from("sales").select("id, client, description").eq("user_id", userId).in("category", ["Other", "other"]),
   ]);
 
   let expenseCount = 0;
