@@ -9,7 +9,8 @@ import ExportButton from "@/components/ExportButton";
 import SmartAlerts from "@/components/SmartAlerts";
 import OnboardingWizard from "@/components/OnboardingWizard";
 import HelpTooltip from "@/components/HelpTooltip";
-import { TrendingUp, TrendingDown, DollarSign, Users } from "lucide-react";
+import ExpenseBreakdownDialog from "@/components/ExpenseBreakdownDialog";
+import { TrendingUp, TrendingDown, DollarSign, Users, Expand } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { useMemo, useState } from "react";
 
@@ -20,6 +21,7 @@ export default function DashboardPage() {
   const { data: profile } = useProfile();
   const { filterByDate } = useDateRange();
   const [showOnboarding, setShowOnboarding] = useState(true);
+  const [showBreakdown, setShowBreakdown] = useState(false);
 
   const expenses = useMemo(() => filterByDate(allExpenses), [allExpenses, filterByDate]);
   const sales = useMemo(() => filterByDate(allSales), [allSales, filterByDate]);
@@ -93,8 +95,11 @@ export default function DashboardPage() {
             </ResponsiveContainer>
           </div>
 
-          <div className="stat-card">
-            <h2 className="section-title mb-4">Expense Breakdown</h2>
+          <div className="stat-card cursor-pointer group" onClick={() => setShowBreakdown(true)}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="section-title">Expense Breakdown</h2>
+              <Expand className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+            </div>
             <div className="flex items-center gap-4">
               <ResponsiveContainer width="50%" height={240}>
                 <PieChart>
@@ -156,6 +161,8 @@ export default function DashboardPage() {
             </tbody>
           </table>
         </div>
+
+        <ExpenseBreakdownDialog open={showBreakdown} onOpenChange={setShowBreakdown} allExpenses={allExpenses} />
       </div>
     </DashboardLayout>
   );
