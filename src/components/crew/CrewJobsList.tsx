@@ -1,7 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Clock, LogIn, AlertTriangle, DollarSign, Navigation } from "lucide-react";
+import { MapPin, Clock, LogIn, AlertTriangle, DollarSign, Navigation, CalendarOff } from "lucide-react";
 
 export interface AssignedJob {
   id: string;
@@ -51,10 +51,18 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
     return null;
   };
 
+  const isJobToday = (job: AssignedJob) => {
+    const now = Date.now();
+    const startMs = new Date(job.start_date).setHours(0,0,0,0);
+    const endMs = job.end_date ? new Date(job.end_date).setHours(23,59,59,999) : new Date(job.start_date).setHours(23,59,59,999);
+    return now >= startMs && now <= endMs;
+  };
+
   return (
     <div className="space-y-3">
       {jobs.map((job) => {
         const directionsUrl = getDirectionsUrl(job.site.latitude, job.site.longitude, job.site.address);
+        const todayJob = isJobToday(job);
         return (
           <Card key={job.id}>
             <CardContent className="pt-5 space-y-3">
@@ -97,7 +105,7 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
               )}
 
               <div className="flex gap-2">
-                {!activeCheckin && (
+                {!activeCheckin && todayJob && (
                   <Button
                     className="flex-1"
                     onClick={() => onCheckIn(job)}
@@ -106,6 +114,12 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
                     <LogIn className="h-4 w-4 mr-2" />
                     {gpsLoading === job.id ? "Getting location…" : "Check In"}
                   </Button>
+                )}
+                {!activeCheckin && !todayJob && (
+                  <div className="flex-1 flex items-center gap-2 text-xs text-muted-foreground bg-muted px-3 py-2 rounded-md">
+                    <CalendarOff className="h-3.5 w-3.5" />
+                    Check-in available on {new Date(job.start_date).toLocaleDateString()}
+                  </div>
                 )}
                 {directionsUrl && (
                   <Button variant="outline" size="icon" asChild>
