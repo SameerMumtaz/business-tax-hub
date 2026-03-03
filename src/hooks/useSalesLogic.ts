@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/format";
 import { invalidateRulesCache } from "@/lib/categorize";
 import { auditSales, AuditResult } from "@/lib/audit";
+import { checkForPatternAfterCategoryChange } from "@/lib/ruleInference";
 import { toast } from "sonner";
 
 type SortField = "date" | "client" | "invoiceNumber" | "amount" | "description" | "category";
@@ -130,6 +131,22 @@ export default function useSalesLogic() {
     bulkRemove.mutate([...selected], { onSuccess: () => { toast.success(`Deleted ${selected.size} sale(s)`); setSelected(new Set()); }, onError: () => toast.error("Failed to delete") });
   };
 
+  const handleSingleCategoryChange = (id: string, category: string) => {
+    const sale = sales.find(s => s.id === id);
+    updateSale.mutate({ id, category }, {
+      onSuccess: () => {
+        toast.success("Category updated");
+        setEditingCategoryId(null);
+        if (sale && user) {
+          const updatedSales = sales.map(s => s.id === id ? { ...s, category } : s);
+          const mapped = updatedSales.map(s => ({ id: s.id, vendor: s.client, category: s.category }));
+          checkForPatternAfterCategoryChange(sale.client, category, mapped, "income", user.id);
+        }
+      },
+      onError: () => toast.error("Failed to update"),
+    });
+  };
+
   const openBulkRule = () => {
     const selectedSales = sales.filter((s) => selected.has(s.id));
     if (selectedSales.length > 0) setRuleKeyword(selectedSales[0].client.split(/\s+/)[0]?.toLowerCase() || "");
@@ -162,6 +179,7 @@ export default function useSalesLogic() {
     sortField, sortDir, toggleSort, selected, toggleSelect, selectItems, toggleAll, handleBulkDelete,
     searchQuery, setSearchQuery, auditResult, setAuditResult, persistentAudit, activeIssueCount,
     editingCategoryId, setEditingCategoryId, batchCreating, updateSale, removeSale, bulkRemove,
+    handleSingleCategoryChange,
     ruleDialogOpen, setRuleDialogOpen, ruleKeyword, setRuleKeyword, ruleCategory, setRuleCategory,
     openBulkRule, saveBulkRule, handleBatchCreateInvoices, handleInlineCreateInvoice,
     chartData, totalInflows, totalOutflows, netCashFlow, currentBalance, matchedSaleIds,

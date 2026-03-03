@@ -2,14 +2,17 @@ import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { invalidateRulesCache, applyRulesToUncategorized } from "@/lib/categorize";
+import { detectPatterns, saveInferredRule, InferredPattern } from "@/lib/ruleInference";
 import { useAuth } from "@/hooks/useAuth";
+import { useExpenses, useSales } from "@/hooks/useData";
 import { EXPENSE_CATEGORIES, ExpenseCategory } from "@/types/tax";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Tag, Sparkles, BookOpen } from "lucide-react";
+import { Plus, Trash2, Tag, Sparkles, BookOpen, Lightbulb, Check, X } from "lucide-react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 const INCOME_CATEGORIES = [
   "Product Sales", "Service Revenue", "Consulting",
@@ -26,12 +29,17 @@ interface Rule {
 
 export default function CategorizationRulesPage() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { data: allExpenses = [] } = useExpenses();
+  const { data: allSales = [] } = useSales();
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
   const [newPattern, setNewPattern] = useState("");
   const [newCategory, setNewCategory] = useState("Other");
   const [newType, setNewType] = useState<"expense" | "income">("expense");
   const [customCategoryName, setCustomCategoryName] = useState("");
+  const [inferredPatterns, setInferredPatterns] = useState<InferredPattern[]>([]);
+  const [detectingPatterns, setDetectingPatterns] = useState(false);
 
   useEffect(() => {
     fetchRules();
@@ -131,15 +139,99 @@ export default function CategorizationRulesPage() {
   const expenseRules = rules.filter((r) => r.type === "expense");
   const incomeRules = rules.filter((r) => r.type === "income");
 
+  async function handleDetectPatterns() {
+    if (!user) return;
+    setDetectingPatterns(true);
+    try {
+      const expenseItems = allExpenses.map(e => ({ id: e.id, vendor: e.vendor, category: e.category }));
+      const salesItems = allSales.map(s => ({ id: s.id, vendor: s.client, category: s.category }));
+      const [expPatterns, incPatterns] = await Promise.all([
+        detectPatterns(expenseItems, "expense", user.id),
+        detectPatterns(salesItems, "income", user.id),
+      ]);
+      const all = [...expPatterns, ...incPatterns];
+      setInferredPatterns(all);
+      if (all.length === 0) {
+        toast.info("No new patterns detected. Categorize more transactions to build patterns.");
+      } else {
+        toast.success(`Found ${all.length} pattern${all.length > 1 ? "s" : ""} from your categorization history`);
+      }
+    } catch {
+      toast.error("Failed to detect patterns");
+    } finally {
+      setDetectingPatterns(false);
+    }
+  }
+
+  async function handleAcceptPattern(pattern: InferredPattern) {
+    if (!user) return;
+    const { created, applied } = await saveInferredRule(pattern, user.id);
+    if (created) {
+      toast.success(`Rule created: "${pattern.keyword}" → ${pattern.category}${applied > 0 ? `. ${applied} transaction${applied > 1 ? "s" : ""} auto-categorized.` : ""}`);
+      setInferredPatterns(prev => prev.filter(p => p.keyword !== pattern.keyword));
+      fetchRules();
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["sales"] });
+    }
+  }
+
+  function handleDismissPattern(keyword: string) {
+    setInferredPatterns(prev => prev.filter(p => p.keyword !== keyword));
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Categorization Rules</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Define vendor keywords to auto-categorize imported transactions
-          </p>
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Categorization Rules</h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              Define vendor keywords to auto-categorize imported transactions
+            </p>
+          </div>
+          <Button variant="outline" onClick={handleDetectPatterns} disabled={detectingPatterns}>
+            <Lightbulb className="h-4 w-4 mr-2" />
+            {detectingPatterns ? "Scanning…" : "Detect Patterns"}
+          </Button>
         </div>
+
+        {/* Inferred patterns */}
+        {inferredPatterns.length > 0 && (
+          <div className="stat-card space-y-3">
+            <h2 className="section-title flex items-center gap-2">
+              <Lightbulb className="h-4 w-4 text-primary" /> Suggested Rules ({inferredPatterns.length})
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Based on your categorization patterns, we detected these potential rules.
+            </p>
+            <div className="space-y-2">
+              {inferredPatterns.map((p) => (
+                <div key={`${p.type}-${p.keyword}`} className="flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-sm font-medium">"{p.keyword}"</span>
+                      <span className="text-muted-foreground text-sm">→</span>
+                      <Badge variant="secondary" className="text-xs">{p.category}</Badge>
+                      <Badge variant="outline" className="text-xs">{p.type}</Badge>
+                      <span className="text-xs text-muted-foreground">{p.count} transactions</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1 truncate">
+                      e.g. {p.exampleVendors.join(", ")}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button size="sm" variant="default" className="h-7 text-xs" onClick={() => handleAcceptPattern(p)}>
+                      <Check className="h-3 w-3 mr-1" /> Accept
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => handleDismissPattern(p.keyword)}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* How it works */}
         <div className="stat-card flex items-start gap-4">
