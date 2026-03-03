@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
+import { DateRangeProvider } from "@/contexts/DateRangeContext";
 import ProtectedRoute, { ProfileGateProvider } from "@/components/ProtectedRoute";
 import AuthPage from "./pages/AuthPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
@@ -18,6 +19,7 @@ import CategorizationRulesPage from "./pages/CategorizationRulesPage";
 import ProfilePage from "./pages/ProfilePage";
 import InvoicesPage from "./pages/InvoicesPage";
 import ClientsPage from "./pages/ClientsPage";
+import AgingReportPage from "./pages/AgingReportPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +28,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <ProfileGateProvider>
+      <DateRangeProvider>
       <TooltipProvider>
         <Toaster />
         <Sonner />
@@ -43,11 +46,13 @@ const App = () => (
             <Route path="/profit-loss" element={<ProtectedRoute><ProfitLossPage /></ProtectedRoute>} />
             <Route path="/tax-center" element={<ProtectedRoute><TaxCenterPage /></ProtectedRoute>} />
             <Route path="/1099" element={<ProtectedRoute><Report1099Page /></ProtectedRoute>} />
+            <Route path="/aging" element={<ProtectedRoute><AgingReportPage /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
+      </DateRangeProvider>
       </ProfileGateProvider>
     </AuthProvider>
   </QueryClientProvider>

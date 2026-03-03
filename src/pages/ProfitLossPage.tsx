@@ -1,20 +1,17 @@
 import { useMemo, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useExpenses, useSales } from "@/hooks/useData";
+import { useDateRange } from "@/contexts/DateRangeContext";
 import { formatCurrency } from "@/lib/format";
+import DateRangeFilter from "@/components/DateRangeFilter";
+import ExportButton from "@/components/ExportButton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { ArrowUp, ArrowDown, Minus } from "lucide-react";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 
-/* ── P&L Compare helpers ── */
 function pctChange(curr: number, prev: number) {
   if (prev === 0) return curr > 0 ? 100 : 0;
   return ((curr - prev) / Math.abs(prev)) * 100;
@@ -34,9 +31,13 @@ function DeltaBadge({ value }: { value: number }) {
 type PeriodData = { label: string; revenue: number; expenses: number; net: number };
 
 export default function ProfitLossPage() {
-  const { data: expenses = [] } = useExpenses();
-  const { data: sales = [] } = useSales();
+  const { data: allExpenses = [] } = useExpenses();
+  const { data: allSales = [] } = useSales();
+  const { filterByDate } = useDateRange();
   const [compareView, setCompareView] = useState<"monthly" | "quarterly">("monthly");
+
+  const expenses = useMemo(() => filterByDate(allExpenses), [allExpenses, filterByDate]);
+  const sales = useMemo(() => filterByDate(allSales), [allSales, filterByDate]);
 
   const totalRevenue = sales.reduce((sum, s) => sum + s.amount, 0);
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
@@ -44,13 +45,10 @@ export default function ProfitLossPage() {
   const margin = totalRevenue > 0 ? ((netIncome / totalRevenue) * 100).toFixed(1) : "0";
 
   const categoryMap: Record<string, number> = {};
-  expenses.forEach((e) => {
-    categoryMap[e.category] = (categoryMap[e.category] || 0) + e.amount;
-  });
+  expenses.forEach((e) => { categoryMap[e.category] = (categoryMap[e.category] || 0) + e.amount; });
   const sortedCategories = Object.entries(categoryMap).sort((a, b) => b[1] - a[1]);
   const chartData = sortedCategories.map(([name, amount]) => ({ name, amount }));
 
-  /* ── P&L Compare data ── */
   const periods = useMemo(() => {
     const revenueMap: Record<string, number> = {};
     const expenseMap: Record<string, number> = {};
@@ -64,24 +62,35 @@ export default function ProfitLossPage() {
     }
     const allKeys = [...new Set([...Object.keys(revenueMap), ...Object.keys(expenseMap)])].sort();
     return allKeys.map((label): PeriodData => ({
-      label,
-      revenue: revenueMap[label] || 0,
-      expenses: expenseMap[label] || 0,
-      net: (revenueMap[label] || 0) - (expenseMap[label] || 0),
+      label, revenue: revenueMap[label] || 0, expenses: expenseMap[label] || 0, net: (revenueMap[label] || 0) - (expenseMap[label] || 0),
     }));
   }, [expenses, sales, compareView]);
 
-  const pairs = periods.map((curr, i) => ({
-    current: curr,
-    previous: i > 0 ? periods[i - 1] : null,
-  }));
+  const pairs = periods.map((curr, i) => ({ current: curr, previous: i > 0 ? periods[i - 1] : null }));
+
+  const exportData = sortedCategories.map(([category, amount]) => ({ category, amount }));
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Profit & Loss</h1>
-          <p className="text-muted-foreground text-sm mt-1">Year-to-date financial summary</p>
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Profit & Loss</h1>
+            <p className="text-muted-foreground text-sm mt-1">Financial summary</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <DateRangeFilter />
+            <ExportButton
+              data={[
+                { line: "Revenue", amount: totalRevenue },
+                ...sortedCategories.map(([cat, amt]) => ({ line: cat, amount: -amt })),
+                { line: "Total Expenses", amount: -totalExpenses },
+                { line: "Net Income", amount: netIncome },
+              ]}
+              filename="profit-loss-report"
+              columns={[{ key: "line", label: "Line Item" }, { key: "amount", label: "Amount" }]}
+            />
+          </div>
         </div>
 
         <Tabs defaultValue="statement">
@@ -90,7 +99,6 @@ export default function ProfitLossPage() {
             <TabsTrigger value="compare">P&L Compare</TabsTrigger>
           </TabsList>
 
-          {/* ── Income Statement Tab ── */}
           <TabsContent value="statement" className="space-y-8 mt-4">
             <div className="stat-card">
               <h2 className="section-title mb-6">Income Statement</h2>
@@ -114,9 +122,7 @@ export default function ProfitLossPage() {
                 </div>
                 <div className="flex justify-between items-center py-3 border-t-2 border-foreground/20">
                   <span className="text-lg font-bold">Net Income</span>
-                  <span className={`font-mono text-2xl font-bold ${netIncome >= 0 ? "text-chart-positive" : "text-chart-negative"}`}>
-                    {formatCurrency(netIncome)}
-                  </span>
+                  <span className={`font-mono text-2xl font-bold ${netIncome >= 0 ? "text-chart-positive" : "text-chart-negative"}`}>{formatCurrency(netIncome)}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm text-muted-foreground">
                   <span>Profit Margin</span>
@@ -139,7 +145,6 @@ export default function ProfitLossPage() {
             </div>
           </TabsContent>
 
-          {/* ── P&L Compare Tab ── */}
           <TabsContent value="compare" className="space-y-6 mt-4">
             <Tabs value={compareView} onValueChange={(v) => setCompareView(v as "monthly" | "quarterly")}>
               <TabsList>

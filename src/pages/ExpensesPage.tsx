@@ -1,20 +1,24 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useExpenses, useAddExpense, useRemoveExpense, useUpdateExpense, useBulkRemoveExpenses, useBulkUpdateExpenseCategory } from "@/hooks/useData";
+import { useDateRange } from "@/contexts/DateRangeContext";
+import DateRangeFilter from "@/components/DateRangeFilter";
+import ExportButton from "@/components/ExportButton";
+import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/format";
 import { EXPENSE_CATEGORIES, ExpenseCategory } from "@/types/tax";
 import { invalidateRulesCache } from "@/lib/categorize";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import ReceiptUploadButton from "@/components/ReceiptUploadButton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import { Plus, Trash2, Filter, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Tag, Pencil, Search, ShieldAlert } from "lucide-react";
+import { Plus, Trash2, Filter, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Tag, Pencil, Search, ShieldAlert, Paperclip, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { auditExpenses, AuditResult } from "@/lib/audit";
 import AuditIssuesPanel from "@/components/AuditIssuesPanel";
@@ -32,8 +36,10 @@ type SortField = "date" | "vendor" | "description" | "category" | "amount";
 type SortDir = "asc" | "desc";
 
 export default function ExpensesPage() {
-  const { data: expenses = [] } = useExpenses();
+  const { data: allExpenses = [] } = useExpenses();
   const { user } = useAuth();
+  const { filterByDate } = useDateRange();
+  const expenses = useMemo(() => filterByDate(allExpenses), [allExpenses, filterByDate]);
   const addExpense = useAddExpense();
   const removeExpense = useRemoveExpense();
   const updateExpense = useUpdateExpense();
@@ -212,7 +218,7 @@ export default function ExpensesPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Expenses</h1>
             <p className="text-muted-foreground text-sm mt-1">
@@ -220,7 +226,19 @@ export default function ExpensesPage() {
               Total: <span className="font-mono text-chart-negative">{formatCurrency(totalFiltered)}</span>
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center flex-wrap">
+            <DateRangeFilter />
+            <ExportButton
+              data={sorted.map((e) => ({ date: e.date, vendor: e.vendor, description: e.description, category: e.category, amount: e.amount }))}
+              filename="expenses"
+              columns={[
+                { key: "date", label: "Date" },
+                { key: "vendor", label: "Vendor" },
+                { key: "description", label: "Description" },
+                { key: "category", label: "Category" },
+                { key: "amount", label: "Amount" },
+              ]}
+            />
             <Select value={filterCategory} onValueChange={setFilterCategory}>
               <SelectTrigger className="w-[180px]"><Filter className="h-3.5 w-3.5 mr-2" /><SelectValue placeholder="All Categories" /></SelectTrigger>
               <SelectContent>
@@ -404,7 +422,8 @@ export default function ExpensesPage() {
                         )}
                       </td>
                       <td className="text-right font-mono text-chart-negative">{formatCurrency(e.amount)}</td>
-                      <td>
+                      <td className="flex items-center gap-1">
+                        <ReceiptUploadButton expenseId={e.id} receiptUrl={(e as any).receipt_url} userId={user?.id} />
                         <Button variant="ghost" size="icon" onClick={() => { removeExpense.mutate(e.id); toast.success("Removed"); }}>
                           <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
                         </Button>

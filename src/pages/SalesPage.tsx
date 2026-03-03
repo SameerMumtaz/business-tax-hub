@@ -2,6 +2,9 @@ import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useSales, useAddSale, useRemoveSale, useUpdateSale, useBulkRemoveSales, useExpenses } from "@/hooks/useData";
+import { useDateRange } from "@/contexts/DateRangeContext";
+import DateRangeFilter from "@/components/DateRangeFilter";
+import ExportButton from "@/components/ExportButton";
 import { useInvoices, useAddInvoice } from "@/hooks/useInvoices";
 import { useClients } from "@/hooks/useClients";
 import { formatCurrency } from "@/lib/format";
@@ -34,8 +37,11 @@ type SortDir = "asc" | "desc";
 
 export default function SalesPage() {
   const navigate = useNavigate();
-  const { data: sales = [] } = useSales();
-  const { data: expenses = [] } = useExpenses();
+  const { data: allSales = [] } = useSales();
+  const { data: allExpenses = [] } = useExpenses();
+  const { filterByDate } = useDateRange();
+  const sales = useMemo(() => filterByDate(allSales), [allSales, filterByDate]);
+  const expenses = useMemo(() => filterByDate(allExpenses), [allExpenses, filterByDate]);
   const { data: invoices = [] } = useInvoices();
   const { data: clients = [] } = useClients();
   const { user } = useAuth();
@@ -56,7 +62,7 @@ export default function SalesPage() {
 
   // Persistent audit: auto-compute on data change
   const matchedSaleIds = useMemo(
-    () => new Set(invoices.filter(inv => inv.matched_sale_id).map(inv => inv.matched_sale_id!)),
+    () => new Set(invoices.filter(inv => inv.matched_sale_id).map(inv => inv.matched_sale_id!)) as Set<string>,
     [invoices]
   );
   const persistentAudit = useMemo(
@@ -269,12 +275,24 @@ export default function SalesPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Sales</h1>
             <p className="text-muted-foreground text-sm mt-1">
               Total: <span className="font-mono text-chart-positive">{formatCurrency(totalSales)}</span>
             </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <DateRangeFilter />
+            <ExportButton
+              data={sorted.map((s) => ({ date: s.date, client: s.client, description: s.description, invoice: s.invoiceNumber, category: s.category, amount: s.amount }))}
+              filename="sales"
+              columns={[
+                { key: "date", label: "Date" }, { key: "client", label: "Client" },
+                { key: "description", label: "Description" }, { key: "invoice", label: "Invoice #" },
+                { key: "category", label: "Category" }, { key: "amount", label: "Amount" },
+              ]}
+            />
           </div>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
