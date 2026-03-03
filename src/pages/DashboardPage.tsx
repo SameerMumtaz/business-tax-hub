@@ -1,4 +1,5 @@
 import { useExpenses, useSales, useContractors, useProfile } from "@/hooks/useData";
+import { useQuotes } from "@/hooks/useQuotes";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { formatCurrency } from "@/lib/format";
 import { CHART_COLORS, AXIS_STYLE, GRID_STYLE, TOOLTIP_STYLE } from "@/lib/chartTheme";
@@ -10,7 +11,7 @@ import SmartAlerts from "@/components/SmartAlerts";
 import OnboardingWizard from "@/components/OnboardingWizard";
 import HelpTooltip from "@/components/HelpTooltip";
 import ExpenseBreakdownDialog from "@/components/ExpenseBreakdownDialog";
-import { TrendingUp, TrendingDown, DollarSign, Users, Expand } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, Users, Expand, ClipboardList } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { useMemo, useState } from "react";
 
@@ -20,6 +21,7 @@ export default function DashboardPage() {
   const { data: contractors = [] } = useContractors();
   const { data: profile } = useProfile();
   const { filterByDate } = useDateRange();
+  const { data: quotes = [] } = useQuotes();
   const [showOnboarding, setShowOnboarding] = useState(true);
   const [showBreakdown, setShowBreakdown] = useState(false);
 
@@ -38,6 +40,9 @@ export default function DashboardPage() {
   const totalRevenue = sales.reduce((sum, s) => sum + s.amount, 0);
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
   const netIncome = totalRevenue - totalExpenses;
+
+  const pendingQuotes = quotes.filter(q => q.status === "sent" || q.status === "draft");
+  const pendingQuotesValue = pendingQuotes.reduce((s, q) => s + q.total, 0);
 
   const categoryMap: Record<string, number> = {};
   expenses.forEach((e) => { categoryMap[e.category] = (categoryMap[e.category] || 0) + e.amount; });
@@ -74,10 +79,11 @@ export default function DashboardPage() {
 
         <SmartAlerts />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <StatCard title="Total Revenue" value={totalRevenue} icon={TrendingUp} variant="positive" trend={`${sales.length} transactions`} />
           <StatCard title="Total Expenses" value={totalExpenses} icon={TrendingDown} variant="negative" trend={`${expenses.length} transactions`} />
           <StatCard title="Net Profit" value={netIncome} icon={DollarSign} variant={netIncome >= 0 ? "positive" : "negative"} />
+          <StatCard title="Pending Quotes" value={pendingQuotesValue} icon={ClipboardList} trend={`${pendingQuotes.length} quotes`} />
           <StatCard title="Contractor Payments" value={contractors.reduce((s, c) => s + c.totalPaid, 0)} icon={Users} trend={`${contractors.length} contractors`} />
         </div>
 
