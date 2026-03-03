@@ -41,7 +41,6 @@ export default function ImportPage() {
         return;
       }
 
-      // Create initial review items with "Other" as placeholder
       const reviewed: ReviewTransaction[] = parsed.map((t) => ({
         ...t,
         id: generateId(),
@@ -51,28 +50,29 @@ export default function ImportPage() {
 
       setTransactions(reviewed);
       setStep("review");
-      toast.success(`Found ${parsed.length} transactions — categorizing…`);
 
-      // Run categorization engine (rules + AI)
+      // Step 1: Apply rules only (no AI)
       setCategorizing(true);
       try {
         const results = await categorizeTransactions(
-          reviewed.map((t) => ({ id: t.id, description: t.description, type: t.type }))
+          reviewed.map((t) => ({ id: t.id, description: t.description, type: t.type })),
+          false // useAI = false
         );
         setTransactions((prev) =>
           prev.map((t) => {
             const match = results.find((r) => r.id === t.id);
-            if (match) {
+            if (match && match.category !== "Other") {
               return { ...t, category: match.category as ExpenseCategory, catSource: match.source };
             }
             return t;
           })
         );
-        const aiCount = results.filter((r) => r.source === "ai").length;
         const ruleCount = results.filter((r) => r.source === "rule").length;
-        toast.success(`Categorized: ${ruleCount} by rules, ${aiCount} by AI`);
+        const uncategorized = results.filter((r) => r.category === "Other").length;
+        if (ruleCount > 0) toast.success(`${ruleCount} matched by rules`);
+        if (uncategorized > 0) toast.info(`${uncategorized} uncategorized — use AI to auto-categorize`);
       } catch {
-        toast.error("Categorization failed, defaulting to Other");
+        toast.error("Rule matching failed");
       } finally {
         setCategorizing(false);
       }
@@ -103,7 +103,37 @@ export default function ImportPage() {
   };
 
   const updateCategory = (id: string, category: ExpenseCategory) => {
-    setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, category } : t)));
+    setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, category, catSource: "rule" } : t)));
+  };
+
+  const uncategorizedItems = transactions.filter((t) => t.include && t.category === "Other" && !t.catSource);
+
+  const handleAICategorize = async () => {
+    const targets = uncategorizedItems;
+    if (targets.length === 0) return;
+
+    setCategorizing(true);
+    try {
+      const results = await categorizeTransactions(
+        targets.map((t) => ({ id: t.id, description: t.description, type: t.type })),
+        true // useAI = true
+      );
+      setTransactions((prev) =>
+        prev.map((t) => {
+          const match = results.find((r) => r.id === t.id);
+          if (match && match.category !== "Other") {
+            return { ...t, category: match.category as ExpenseCategory, catSource: match.source };
+          }
+          return t;
+        })
+      );
+      const aiCount = results.filter((r) => r.source === "ai" && r.category !== "Other").length;
+      toast.success(`AI categorized ${aiCount} transactions`);
+    } catch {
+      toast.error("AI categorization failed");
+    } finally {
+      setCategorizing(false);
+    }
   };
 
   const handleImport = () => {
@@ -219,7 +249,7 @@ export default function ImportPage() {
         {step === "review" && (
           <div className="space-y-4">
             {/* Summary bar */}
-            <div className="flex items-center justify-between bg-card border rounded-lg p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-card border rounded-lg p-4">
               <div className="flex gap-6 text-sm">
                 <div>
                   <span className="text-muted-foreground">Income:</span>{" "}
@@ -229,14 +259,24 @@ export default function ImportPage() {
                   <span className="text-muted-foreground">Expenses:</span>{" "}
                   <span className="font-mono text-chart-negative">{expenseCountN} ({formatCurrency(totalExpenseAmt)})</span>
                 </div>
+                {uncategorizedItems.length > 0 && (
+                  <div>
+                    <span className="text-chart-warning font-medium">{uncategorizedItems.length} uncategorized</span>
+                  </div>
+                )}
               </div>
               <div className="flex gap-2 items-center">
                 {categorizing && (
                   <span className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <Sparkles className="h-4 w-4 text-primary" />
                     Categorizing…
                   </span>
+                )}
+                {uncategorizedItems.length > 0 && !categorizing && (
+                  <Button variant="outline" onClick={handleAICategorize}>
+                    <Sparkles className="h-4 w-4 mr-2 text-primary" />
+                    AI Categorize ({uncategorizedItems.length})
+                  </Button>
                 )}
                 <Button variant="outline" onClick={() => { setStep("upload"); setTransactions([]); }}>
                   Cancel
