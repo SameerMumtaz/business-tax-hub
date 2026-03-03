@@ -11,6 +11,10 @@ import {
   Building2,
   LogOut,
   ClipboardList,
+  Banknote,
+  GitCompareArrows,
+  ActivitySquare,
+  Calculator,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -22,6 +26,10 @@ const links = [
   { to: "/sales", label: "Sales", icon: TrendingUp },
   { to: "/expenses", label: "Expenses", icon: TrendingDown },
   { to: "/profit-loss", label: "Profit & Loss", icon: DollarSign },
+  { to: "/cash-flow", label: "Cash Flow", icon: Banknote },
+  { to: "/pl-compare", label: "P&L Compare", icon: GitCompareArrows },
+  { to: "/expense-trends", label: "Expense Trends", icon: ActivitySquare },
+  { to: "/tax-estimate", label: "Tax Estimate", icon: Calculator },
   { to: "/1099", label: "Tax Forms", icon: FileText },
   { to: "/schedule-c", label: "Schedule C", icon: ClipboardList },
   { to: "/profile", label: "Company Profile", icon: Building2 },

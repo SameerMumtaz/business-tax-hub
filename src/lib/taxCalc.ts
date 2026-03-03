@@ -20,7 +20,7 @@ const FEDERAL_BRACKETS: [number, number][] = [
 
 // State income tax rates (simplified flat/effective rates)
 // States with no income tax have 0
-const STATE_RATES: Record<string, number> = {
+export const STATE_RATES: Record<string, number> = {
   AL: 0.04, AK: 0, AZ: 0.025, AR: 0.039, CA: 0.0725,
   CO: 0.044, CT: 0.05, DE: 0.055, FL: 0, GA: 0.0549,
   HI: 0.065, ID: 0.058, IL: 0.0495, IN: 0.0305, IA: 0.038,
