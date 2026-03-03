@@ -4,14 +4,13 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { useExpenses, useSales } from "@/hooks/useData";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { formatCurrency } from "@/lib/format";
+import { AXIS_STYLE, GRID_STYLE, TOOLTIP_STYLE } from "@/lib/chartTheme";
 import DateRangeFilter from "@/components/DateRangeFilter";
 import ExportButton from "@/components/ExportButton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { ArrowUp, ArrowDown, Minus, BarChart3 } from "lucide-react";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 function pctChange(curr: number, prev: number) {
   if (prev === 0) return curr > 0 ? 100 : 0;
@@ -53,23 +52,13 @@ export default function ProfitLossPage() {
   const periods = useMemo(() => {
     const revenueMap: Record<string, number> = {};
     const expenseMap: Record<string, number> = {};
-    for (const s of sales) {
-      const key = compareView === "monthly" ? s.date.slice(0, 7) : `${s.date.slice(0, 4)}-Q${Math.ceil(parseInt(s.date.slice(5, 7)) / 3)}`;
-      revenueMap[key] = (revenueMap[key] || 0) + s.amount;
-    }
-    for (const e of expenses) {
-      const key = compareView === "monthly" ? e.date.slice(0, 7) : `${e.date.slice(0, 4)}-Q${Math.ceil(parseInt(e.date.slice(5, 7)) / 3)}`;
-      expenseMap[key] = (expenseMap[key] || 0) + e.amount;
-    }
+    for (const s of sales) { const key = compareView === "monthly" ? s.date.slice(0, 7) : `${s.date.slice(0, 4)}-Q${Math.ceil(parseInt(s.date.slice(5, 7)) / 3)}`; revenueMap[key] = (revenueMap[key] || 0) + s.amount; }
+    for (const e of expenses) { const key = compareView === "monthly" ? e.date.slice(0, 7) : `${e.date.slice(0, 4)}-Q${Math.ceil(parseInt(e.date.slice(5, 7)) / 3)}`; expenseMap[key] = (expenseMap[key] || 0) + e.amount; }
     const allKeys = [...new Set([...Object.keys(revenueMap), ...Object.keys(expenseMap)])].sort();
-    return allKeys.map((label): PeriodData => ({
-      label, revenue: revenueMap[label] || 0, expenses: expenseMap[label] || 0, net: (revenueMap[label] || 0) - (expenseMap[label] || 0),
-    }));
+    return allKeys.map((label): PeriodData => ({ label, revenue: revenueMap[label] || 0, expenses: expenseMap[label] || 0, net: (revenueMap[label] || 0) - (expenseMap[label] || 0) }));
   }, [expenses, sales, compareView]);
 
   const pairs = periods.map((curr, i) => ({ current: curr, previous: i > 0 ? periods[i - 1] : null }));
-
-  const exportData = sortedCategories.map(([category, amount]) => ({ category, amount }));
 
   return (
     <DashboardLayout>
@@ -82,12 +71,7 @@ export default function ProfitLossPage() {
           <div className="flex items-center gap-2">
             <DateRangeFilter />
             <ExportButton
-              data={[
-                { line: "Revenue", amount: totalRevenue },
-                ...sortedCategories.map(([cat, amt]) => ({ line: cat, amount: -amt })),
-                { line: "Total Expenses", amount: -totalExpenses },
-                { line: "Net Income", amount: netIncome },
-              ]}
+              data={[{ line: "Revenue", amount: totalRevenue }, ...sortedCategories.map(([cat, amt]) => ({ line: cat, amount: -amt })), { line: "Total Expenses", amount: -totalExpenses }, { line: "Net Income", amount: netIncome }]}
               filename="profit-loss-report"
               columns={[{ key: "line", label: "Line Item" }, { key: "amount", label: "Amount" }]}
             />
@@ -136,11 +120,11 @@ export default function ProfitLossPage() {
               <h2 className="section-title mb-4">Expenses by Category</h2>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={chartData} layout="vertical" margin={{ left: 120 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 13%, 90%)" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 12 }} stroke="hsl(220, 10%, 46%)" tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} stroke="hsl(220, 10%, 46%)" width={110} />
-                  <Tooltip formatter={(value: number) => formatCurrency(value)} contentStyle={{ borderRadius: "8px", fontSize: "13px" }} />
-                  <Bar dataKey="amount" fill="hsl(0, 72%, 51%)" radius={[0, 4, 4, 0]} />
+                  <CartesianGrid {...GRID_STYLE} horizontal={false} />
+                  <XAxis type="number" {...AXIS_STYLE} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                  <YAxis type="category" dataKey="name" {...AXIS_STYLE} width={110} />
+                  <Tooltip formatter={(value: number) => formatCurrency(value)} contentStyle={TOOLTIP_STYLE} />
+                  <Bar dataKey="amount" fill="hsl(var(--chart-negative))" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -206,9 +190,7 @@ export default function ProfitLossPage() {
             {periods.length === 0 && (
               <div className="rounded-lg border bg-card p-12 text-center">
                 <div className="flex flex-col items-center gap-3">
-                  <div className="rounded-full bg-muted p-3">
-                    <BarChart3 className="h-6 w-6 text-muted-foreground" />
-                  </div>
+                  <div className="rounded-full bg-muted p-3"><BarChart3 className="h-6 w-6 text-muted-foreground" /></div>
                   <p className="font-medium">No data to compare yet</p>
                   <p className="text-sm text-muted-foreground max-w-sm">Import transactions to see how your income and expenses change over time.</p>
                 </div>

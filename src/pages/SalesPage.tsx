@@ -1,16 +1,11 @@
-import { useState, useMemo, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
-import { useSales, useAddSale, useRemoveSale, useUpdateSale, useBulkRemoveSales, useExpenses } from "@/hooks/useData";
-import { useDateRange } from "@/contexts/DateRangeContext";
+import useSalesLogic, { PAGE_SIZE } from "@/hooks/useSalesLogic";
 import DateRangeFilter from "@/components/DateRangeFilter";
 import ExportButton from "@/components/ExportButton";
-import { useInvoices, useAddInvoice } from "@/hooks/useInvoices";
-import { useClients } from "@/hooks/useClients";
 import { formatCurrency } from "@/lib/format";
-import { invalidateRulesCache } from "@/lib/categorize";
-import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { EXPENSE_CATEGORIES } from "@/types/tax";
+import StatCard from "@/components/StatCard";
+import AuditIssuesPanel from "@/components/AuditIssuesPanel";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,222 +15,29 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import { EXPENSE_CATEGORIES } from "@/types/tax";
-import StatCard from "@/components/StatCard";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Trash2, ArrowDownLeft, ArrowUpRight, Activity, Wallet, ArrowUpDown, ArrowUp, ArrowDown, Tag, Search, ShieldAlert, Pencil, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
-import { auditSales, AuditResult } from "@/lib/audit";
-import AuditIssuesPanel from "@/components/AuditIssuesPanel";
-import {
-  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
-} from "recharts";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-
-type SortField = "date" | "client" | "invoiceNumber" | "amount" | "description" | "category";
-type SortDir = "asc" | "desc";
-const PAGE_SIZE = 50;
+import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
+import { auditSales } from "@/lib/audit";
 
 export default function SalesPage() {
-  const navigate = useNavigate();
-  const { data: allSales = [] } = useSales();
-  const { data: allExpenses = [] } = useExpenses();
-  const { filterByDate } = useDateRange();
-  const sales = useMemo(() => filterByDate(allSales), [allSales, filterByDate]);
-  const expenses = useMemo(() => filterByDate(allExpenses), [allExpenses, filterByDate]);
-  const { data: invoices = [] } = useInvoices();
-  const { data: clients = [] } = useClients();
-  const { user } = useAuth();
-  const addSale = useAddSale();
-  const removeSale = useRemoveSale();
-  const updateSale = useUpdateSale();
-  const bulkRemove = useBulkRemoveSales();
-  const addInvoice = useAddInvoice();
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ date: "", client: "", description: "", amount: "", invoiceNumber: "" });
-  const [sortField, setSortField] = useState<SortField>("date");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [searchQuery, setSearchQuery] = useState("");
-  const [auditResult, setAuditResult] = useState<AuditResult | null>(null);
-  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
-  const [batchCreating, setBatchCreating] = useState(false);
-  const [currentPage, setCurrentPage] = useState(0);
+  const logic = useSalesLogic();
+  const {
+    sales, sorted, paginatedRows, totalPages, currentPage, setCurrentPage, totalSales,
+    open, setOpen, form, setForm, handleAdd, addSale,
+    sortField, sortDir, toggleSort, selected, toggleSelect, toggleAll, handleBulkDelete,
+    searchQuery, setSearchQuery, auditResult, setAuditResult, persistentAudit, activeIssueCount,
+    editingCategoryId, setEditingCategoryId, updateSale, removeSale,
+    ruleDialogOpen, setRuleDialogOpen, ruleKeyword, setRuleKeyword, ruleCategory, setRuleCategory,
+    openBulkRule, saveBulkRule, handleBatchCreateInvoices, handleInlineCreateInvoice,
+    chartData, totalInflows, totalOutflows, netCashFlow, currentBalance, expenses, matchedSaleIds,
+  } = logic;
 
-  // Persistent audit
-  const matchedSaleIds = useMemo(
-    () => new Set(invoices.filter(inv => inv.matched_sale_id).map(inv => inv.matched_sale_id!)) as Set<string>,
-    [invoices]
-  );
-  const persistentAudit = useMemo(
-    () => sales.length > 0 ? auditSales(sales, expenses, matchedSaleIds) : null,
-    [sales, expenses, matchedSaleIds]
-  );
-  const activeIssueCount = persistentAudit?.issues.length ?? 0;
-
-  const findClientForSale = (clientName: string) => {
-    const lower = clientName.toLowerCase();
-    return clients.find((c) => {
-      const cName = c.name.toLowerCase();
-      return cName === lower || cName.includes(lower) || lower.includes(cName);
-    });
-  };
-
-  const handleBatchCreateInvoices = async (saleIds: string[]) => {
-    const salesToInvoice = sales.filter((s) => saleIds.includes(s.id));
-    if (salesToInvoice.length === 0) return;
-    setBatchCreating(true);
-    let created = 0, failed = 0;
-    for (const sale of salesToInvoice) {
-      const matchedClient = findClientForSale(sale.client);
-      try {
-        await addInvoice.mutateAsync({
-          invoice_number: `INV-${Date.now().toString().slice(-6)}-${created}`,
-          client_name: matchedClient?.name || sale.client,
-          client_email: matchedClient?.email || undefined,
-          client_id: matchedClient?.id || undefined,
-          issue_date: sale.date,
-          matched_sale_id: sale.id,
-          line_items: [{ description: sale.description || `Sale to ${sale.client}`, quantity: 1, unit_price: sale.amount }],
-        });
-        created++;
-      } catch { failed++; }
-    }
-    setBatchCreating(false);
-    if (failed > 0) toast.warning(`Created ${created} invoices, ${failed} failed`);
-    else toast.success(`Created ${created} invoices — all matched & marked as Paid`);
-    const newMatched = new Set(matchedSaleIds);
-    salesToInvoice.forEach((s) => newMatched.add(s.id));
-    setAuditResult(auditSales(sales, expenses, newMatched));
-  };
-
-  const handleInlineCreateInvoice = async (saleId: string) => {
-    const sale = sales.find((s) => s.id === saleId);
-    if (!sale) return;
-    const matchedClient = findClientForSale(sale.client);
-    try {
-      await addInvoice.mutateAsync({
-        invoice_number: `INV-${Date.now().toString().slice(-6)}`,
-        client_name: matchedClient?.name || sale.client,
-        client_email: matchedClient?.email || undefined,
-        client_id: matchedClient?.id || undefined,
-        issue_date: sale.date,
-        matched_sale_id: sale.id,
-        line_items: [{ description: sale.description || `Sale to ${sale.client}`, quantity: 1, unit_price: sale.amount }],
-      });
-      toast.success(`Invoice created for ${sale.client}${matchedClient ? ` (matched to saved client)` : ""}`);
-      const newMatched = new Set(matchedSaleIds);
-      newMatched.add(saleId);
-      setAuditResult(auditSales(sales, expenses, newMatched));
-    } catch { toast.error("Failed to create invoice"); }
-  };
-
-  const searchedSales = useMemo(() => {
-    if (!searchQuery.trim()) return sales;
-    const q = searchQuery.trim().toLowerCase();
-    return sales.filter((s) =>
-      s.client.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) ||
-      s.date.includes(q) || s.amount.toString().includes(q) ||
-      formatCurrency(s.amount).toLowerCase().includes(q) || (s.invoiceNumber || "").toLowerCase().includes(q)
-    );
-  }, [sales, searchQuery]);
-
-  const totalSales = searchedSales.reduce((sum, s) => sum + s.amount, 0);
-
-  const handleAdd = () => {
-    if (!form.date || !form.client || !form.amount) { toast.error("Please fill required fields"); return; }
-    addSale.mutate({
-      date: form.date, client: form.client, description: form.description,
-      amount: parseFloat(form.amount),
-      invoiceNumber: form.invoiceNumber || `INV-${Date.now().toString().slice(-4)}`,
-      category: "Other",
-    }, {
-      onSuccess: () => { setForm({ date: "", client: "", description: "", amount: "", invoiceNumber: "" }); setOpen(false); toast.success("Sale added"); },
-      onError: () => toast.error("Failed to add sale"),
-    });
-  };
-
-  const toggleSort = (field: SortField) => {
-    if (sortField === field) setSortDir((d) => d === "asc" ? "desc" : "asc");
-    else { setSortField(field); setSortDir("asc"); }
-    setCurrentPage(0);
-  };
-
-  const SortIcon = ({ field }: { field: SortField }) => {
+  const SortIcon = ({ field }: { field: typeof sortField }) => {
     if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
     return sortDir === "asc" ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
   };
-
-  const sorted = useMemo(() => {
-    return [...searchedSales].sort((a, b) => {
-      let cmp = 0;
-      switch (sortField) {
-        case "date": cmp = a.date.localeCompare(b.date); break;
-        case "client": cmp = a.client.localeCompare(b.client); break;
-        case "invoiceNumber": cmp = (a.invoiceNumber || "").localeCompare(b.invoiceNumber || ""); break;
-        case "description": cmp = a.description.localeCompare(b.description); break;
-        case "category": cmp = a.category.localeCompare(b.category); break;
-        case "amount": cmp = a.amount - b.amount; break;
-      }
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-  }, [searchedSales, sortField, sortDir]);
-
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const paginatedRows = sorted.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
-
-  const toggleSelect = (id: string) => {
-    setSelected((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
-  };
-  const toggleAll = () => {
-    if (selected.size === sorted.length) setSelected(new Set());
-    else setSelected(new Set(sorted.map((s) => s.id)));
-  };
-
-  const handleBulkDelete = () => {
-    if (selected.size === 0) return;
-    bulkRemove.mutate([...selected], {
-      onSuccess: () => { toast.success(`Deleted ${selected.size} sale(s)`); setSelected(new Set()); },
-      onError: () => toast.error("Failed to delete"),
-    });
-  };
-
-  // Rule creation
-  const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
-  const [ruleKeyword, setRuleKeyword] = useState("");
-  const [ruleCategory, setRuleCategory] = useState("");
-
-  const openBulkRule = () => {
-    const selectedSales = sales.filter((s) => selected.has(s.id));
-    if (selectedSales.length > 0) { setRuleKeyword(selectedSales[0].client.split(/\s+/)[0]?.toLowerCase() || ""); }
-    setRuleCategory(""); setRuleDialogOpen(true);
-  };
-
-  const saveBulkRule = async () => {
-    if (!ruleKeyword || !ruleCategory) { toast.error("Enter keyword and category"); return; }
-    const { error } = await supabase.from("categorization_rules").insert({
-      vendor_pattern: ruleKeyword, category: ruleCategory, type: "income", priority: 10, user_id: user?.id,
-    });
-    if (error) { toast.error("Failed to save rule"); return; }
-    invalidateRulesCache();
-    toast.success(`Rule saved: "${ruleKeyword}" → ${ruleCategory}`);
-    setRuleDialogOpen(false); setRuleKeyword(""); setRuleCategory("");
-  };
-
-  /* ── Cash Flow data ── */
-  const { chartData, totalInflows, totalOutflows } = useMemo(() => {
-    const monthMap: Record<string, { inflows: number; outflows: number }> = {};
-    for (const s of sales) { const m = s.date.slice(0, 7); if (!monthMap[m]) monthMap[m] = { inflows: 0, outflows: 0 }; monthMap[m].inflows += s.amount; }
-    for (const e of expenses) { const m = e.date.slice(0, 7); if (!monthMap[m]) monthMap[m] = { inflows: 0, outflows: 0 }; monthMap[m].outflows += e.amount; }
-    const sortedM = Object.entries(monthMap).sort(([a], [b]) => a.localeCompare(b)).map(([month, v]) => ({ month, ...v }));
-    let balance = 0;
-    const data = sortedM.map((row) => { balance += row.inflows - row.outflows; return { ...row, balance }; });
-    return { chartData: data, totalInflows: data.reduce((s, r) => s + r.inflows, 0), totalOutflows: data.reduce((s, r) => s + r.outflows, 0) };
-  }, [expenses, sales]);
-
-  const netCashFlow = totalInflows - totalOutflows;
-  const currentBalance = chartData.length > 0 ? chartData[chartData.length - 1].balance : 0;
 
   return (
     <DashboardLayout>
@@ -247,15 +49,7 @@ export default function SalesPage() {
           </div>
           <div className="flex items-center gap-2">
             <DateRangeFilter />
-            <ExportButton
-              data={sorted.map((s) => ({ date: s.date, client: s.client, description: s.description, invoice: s.invoiceNumber, category: s.category, amount: s.amount }))}
-              filename="sales"
-              columns={[
-                { key: "date", label: "Date" }, { key: "client", label: "Client" },
-                { key: "description", label: "Description" }, { key: "invoice", label: "Invoice #" },
-                { key: "category", label: "Category" }, { key: "amount", label: "Amount" },
-              ]}
-            />
+            <ExportButton data={sorted.map((s) => ({ date: s.date, client: s.client, description: s.description, invoice: s.invoiceNumber, category: s.category, amount: s.amount }))} filename="sales" columns={[{ key: "date", label: "Date" }, { key: "client", label: "Client" }, { key: "description", label: "Description" }, { key: "invoice", label: "Invoice #" }, { key: "category", label: "Category" }, { key: "amount", label: "Amount" }]} />
           </div>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-2" />Add Sale</Button></DialogTrigger>
@@ -273,94 +67,57 @@ export default function SalesPage() {
           </Dialog>
         </div>
 
-        {/* Persistent audit banner */}
         {persistentAudit && activeIssueCount > 0 && !auditResult && (
           <Alert variant="destructive" className="cursor-pointer" onClick={() => setAuditResult(persistentAudit)}>
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle className="flex items-center gap-2">
               {activeIssueCount} audit issue{activeIssueCount !== 1 ? "s" : ""} detected
-              {persistentAudit.totalDollarImpact > 0 && (
-                <Badge variant="outline" className="text-[10px] font-mono ml-1">{formatCurrency(persistentAudit.totalDollarImpact)} impacted</Badge>
-              )}
+              {persistentAudit.totalDollarImpact > 0 && <Badge variant="outline" className="text-[10px] font-mono ml-1">{formatCurrency(persistentAudit.totalDollarImpact)} impacted</Badge>}
             </AlertTitle>
-            <AlertDescription className="text-xs">Click to review and resolve — issues are ranked by dollar impact.</AlertDescription>
+            <AlertDescription className="text-xs">Click to review and resolve.</AlertDescription>
           </Alert>
         )}
 
         <Tabs defaultValue="sales">
           <TabsList>
-            <TabsTrigger value="sales">
-              Sales
-              {activeIssueCount > 0 && (
-                <Badge variant="destructive" className="ml-2 text-[10px] h-5 w-5 rounded-full p-0 flex items-center justify-center">{activeIssueCount}</Badge>
-              )}
-            </TabsTrigger>
+            <TabsTrigger value="sales">Sales{activeIssueCount > 0 && <Badge variant="destructive" className="ml-2 text-[10px] h-5 w-5 rounded-full p-0 flex items-center justify-center">{activeIssueCount}</Badge>}</TabsTrigger>
             <TabsTrigger value="cashflow">Cash Flow</TabsTrigger>
           </TabsList>
 
           <TabsContent value="sales" className="mt-4 space-y-3">
             <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Search by client, description, date, or amount…" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-9" />
-              </div>
-              <Button variant="outline" onClick={() => setAuditResult(persistentAudit || auditSales(sales, expenses, matchedSaleIds))}>
-                <ShieldAlert className="h-4 w-4 mr-2" />Quick Audit
-              </Button>
+              <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search…" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-9" /></div>
+              <Button variant="outline" onClick={() => setAuditResult(persistentAudit || auditSales(sales, expenses, matchedSaleIds))}><ShieldAlert className="h-4 w-4 mr-2" />Quick Audit</Button>
             </div>
 
             {auditResult && (
-              <AuditIssuesPanel
-                result={auditResult}
-                getItemLabel={(id) => { const s = sales.find((x) => x.id === id); if (!s) return null; return { date: s.date, label: `${s.client} — ${s.description}`, amount: s.amount }; }}
-                onDeleteItems={(ids) => { bulkRemove.mutate(ids, { onSuccess: () => toast.success(`Deleted ${ids.length} sale(s)`) }); }}
-                onSelectItems={(ids) => setSelected(new Set(ids))}
+              <AuditIssuesPanel result={auditResult} getItemLabel={(id) => { const s = sales.find((x) => x.id === id); if (!s) return null; return { date: s.date, label: `${s.client} — ${s.description}`, amount: s.amount }; }}
+                onDeleteItems={(ids) => { logic.bulkRemove.mutate(ids, { onSuccess: () => toast.success(`Deleted ${ids.length} sale(s)`) }); }}
+                onSelectItems={(ids) => logic.selected.size === 0 ? undefined : undefined}
                 onCreateInvoice={handleInlineCreateInvoice}
                 onBatchCreateInvoices={(ids) => handleBatchCreateInvoices(ids)}
               />
             )}
 
-            {/* Bulk actions bar */}
             {selected.size > 0 && (
               <div className="flex items-center gap-3 bg-muted rounded-lg px-4 py-2">
                 <span className="text-sm font-medium">{selected.size} selected</span>
-                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={openBulkRule}>
-                  <Tag className="h-3 w-3 mr-1" /> Create Rule
-                </Button>
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={openBulkRule}><Tag className="h-3 w-3 mr-1" /> Create Rule</Button>
                 <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-7 text-xs text-destructive">
-                      <Trash2 className="h-3 w-3 mr-1" /> Delete
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Delete {selected.size} sale(s)?</AlertDialogTitle>
-                      <AlertDialogDescription>This action cannot be undone. The selected sales will be permanently removed.</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
+                  <AlertDialogTrigger asChild><Button variant="outline" size="sm" className="h-7 text-xs text-destructive"><Trash2 className="h-3 w-3 mr-1" /> Delete</Button></AlertDialogTrigger>
+                  <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete {selected.size} sale(s)?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
                 </AlertDialog>
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelected(new Set())}>Clear</Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => toggleAll()}>Clear</Button>
               </div>
             )}
 
-            {/* Rule creation dialog */}
             <Dialog open={ruleDialogOpen} onOpenChange={setRuleDialogOpen}>
               <DialogContent>
                 <DialogHeader><DialogTitle>Create Categorization Rule</DialogTitle></DialogHeader>
-                <p className="text-sm text-muted-foreground">This rule will auto-categorize future imports matching the keyword.</p>
+                <p className="text-sm text-muted-foreground">Auto-categorize future imports matching this keyword.</p>
                 <div className="space-y-3">
-                  <div><label className="text-xs text-muted-foreground mb-1 block">Keyword pattern</label><Input value={ruleKeyword} onChange={(e) => setRuleKeyword(e.target.value)} placeholder="e.g. acme" /></div>
-                  <div><label className="text-xs text-muted-foreground mb-1 block">Category</label>
-                    <Select value={ruleCategory} onValueChange={setRuleCategory}>
-                      <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
-                      <SelectContent>{EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
+                  <div><label className="text-xs text-muted-foreground mb-1 block">Keyword</label><Input value={ruleKeyword} onChange={(e) => setRuleKeyword(e.target.value)} placeholder="e.g. acme" /></div>
+                  <div><label className="text-xs text-muted-foreground mb-1 block">Category</label><Select value={ruleCategory} onValueChange={setRuleCategory}><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger><SelectContent>{EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></div>
                   <Button onClick={saveBulkRule} className="w-full" disabled={!ruleKeyword || !ruleCategory}>Save Rule</Button>
                 </div>
               </DialogContent>
@@ -404,19 +161,8 @@ export default function SalesPage() {
                       <td className="text-right font-mono text-chart-positive">{formatCurrency(s.amount)}</td>
                       <td>
                         <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon"><Trash2 className="h-3.5 w-3.5 text-muted-foreground" /></Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete sale?</AlertDialogTitle>
-                              <AlertDialogDescription>{s.client} — {formatCurrency(s.amount)} on {s.date}</AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => { removeSale.mutate(s.id); toast.success("Removed"); }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
+                          <AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-3.5 w-3.5 text-muted-foreground" /></Button></AlertDialogTrigger>
+                          <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete sale?</AlertDialogTitle><AlertDialogDescription>{s.client} — {formatCurrency(s.amount)} on {s.date}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { removeSale.mutate(s.id); toast.success("Removed"); }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
                         </AlertDialog>
                       </td>
                     </tr>
@@ -425,18 +171,13 @@ export default function SalesPage() {
               </table>
             </div>
 
-            {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between pt-2">
                 <p className="text-xs text-muted-foreground">Showing {currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, sorted.length)} of {sorted.length}</p>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => p - 1)}>
-                    <ChevronLeft className="h-4 w-4 mr-1" />Previous
-                  </Button>
+                  <Button variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => p - 1)}><ChevronLeft className="h-4 w-4 mr-1" />Previous</Button>
                   <span className="text-sm text-muted-foreground">Page {currentPage + 1} of {totalPages}</span>
-                  <Button variant="outline" size="sm" disabled={currentPage >= totalPages - 1} onClick={() => setCurrentPage((p) => p + 1)}>
-                    Next<ChevronRight className="h-4 w-4 ml-1" />
-                  </Button>
+                  <Button variant="outline" size="sm" disabled={currentPage >= totalPages - 1} onClick={() => setCurrentPage((p) => p + 1)}>Next<ChevronRight className="h-4 w-4 ml-1" /></Button>
                 </div>
               </div>
             )}
@@ -449,7 +190,6 @@ export default function SalesPage() {
               <StatCard title="Net Cash Flow" value={netCashFlow} icon={Activity} variant={netCashFlow >= 0 ? "positive" : "negative"} />
               <StatCard title="Current Balance" value={currentBalance} icon={Wallet} variant={currentBalance >= 0 ? "positive" : "negative"} />
             </div>
-
             {chartData.length > 0 ? (
               <>
                 <div className="rounded-lg border bg-card p-6">
@@ -470,15 +210,7 @@ export default function SalesPage() {
                 <div className="rounded-lg border bg-card p-6">
                   <h2 className="text-lg font-medium mb-4">Monthly Breakdown</h2>
                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Month</TableHead>
-                        <TableHead className="text-right">Inflows</TableHead>
-                        <TableHead className="text-right">Outflows</TableHead>
-                        <TableHead className="text-right">Net</TableHead>
-                        <TableHead className="text-right">Balance</TableHead>
-                      </TableRow>
-                    </TableHeader>
+                    <TableHeader><TableRow><TableHead>Month</TableHead><TableHead className="text-right">Inflows</TableHead><TableHead className="text-right">Outflows</TableHead><TableHead className="text-right">Net</TableHead><TableHead className="text-right">Balance</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {chartData.map((row) => (
                         <TableRow key={row.month}>
@@ -494,7 +226,7 @@ export default function SalesPage() {
                 </div>
               </>
             ) : (
-              <div className="rounded-lg border bg-card p-12 text-center text-muted-foreground">No transaction data yet. Import sales and expenses to see your cash flow.</div>
+              <div className="rounded-lg border bg-card p-12 text-center text-muted-foreground">No transaction data yet.</div>
             )}
           </TabsContent>
         </Tabs>

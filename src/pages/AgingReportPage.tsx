@@ -16,7 +16,7 @@ const BUCKET_COLORS = [
   "hsl(var(--chart-positive))",
   "hsl(var(--chart-info))",
   "hsl(var(--chart-warning))",
-  "hsl(230, 60%, 55%)",
+  "hsl(var(--chart-5))",
   "hsl(var(--chart-negative))",
 ];
 

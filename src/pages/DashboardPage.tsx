@@ -1,6 +1,7 @@
 import { useExpenses, useSales, useContractors, useProfile } from "@/hooks/useData";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { formatCurrency } from "@/lib/format";
+import { CHART_COLORS, AXIS_STYLE, GRID_STYLE, TOOLTIP_STYLE } from "@/lib/chartTheme";
 import StatCard from "@/components/StatCard";
 import DashboardLayout from "@/components/DashboardLayout";
 import DateRangeFilter from "@/components/DateRangeFilter";
@@ -11,17 +12,6 @@ import HelpTooltip from "@/components/HelpTooltip";
 import { TrendingUp, TrendingDown, DollarSign, Users } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { useMemo, useState } from "react";
-
-const COLORS = [
-  "hsl(160, 84%, 39%)",
-  "hsl(217, 91%, 60%)",
-  "hsl(38, 92%, 50%)",
-  "hsl(0, 72%, 51%)",
-  "hsl(280, 65%, 60%)",
-  "hsl(160, 40%, 55%)",
-  "hsl(200, 70%, 50%)",
-  "hsl(340, 75%, 55%)",
-];
 
 export default function DashboardPage() {
   const { data: allExpenses = [] } = useExpenses();
@@ -34,7 +24,6 @@ export default function DashboardPage() {
   const expenses = useMemo(() => filterByDate(allExpenses), [allExpenses, filterByDate]);
   const sales = useMemo(() => filterByDate(allSales), [allSales, filterByDate]);
 
-  // Determine onboarding steps completed
   const completedSteps = useMemo(() => {
     const steps = new Set<string>();
     if (profile?.business_name) steps.add("profile");
@@ -49,22 +38,14 @@ export default function DashboardPage() {
   const netIncome = totalRevenue - totalExpenses;
 
   const categoryMap: Record<string, number> = {};
-  expenses.forEach((e) => {
-    categoryMap[e.category] = (categoryMap[e.category] || 0) + e.amount;
-  });
+  expenses.forEach((e) => { categoryMap[e.category] = (categoryMap[e.category] || 0) + e.amount; });
   const pieData = Object.entries(categoryMap).map(([name, value]) => ({ name, value }));
 
   const monthlyRevenue: Record<string, number> = {};
-  sales.forEach((s) => {
-    const month = s.date.substring(0, 7);
-    monthlyRevenue[month] = (monthlyRevenue[month] || 0) + s.amount;
-  });
+  sales.forEach((s) => { const month = s.date.substring(0, 7); monthlyRevenue[month] = (monthlyRevenue[month] || 0) + s.amount; });
   const barData = Object.entries(monthlyRevenue)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, revenue]) => ({
-      month: new Date(month + "-01").toLocaleDateString("en-US", { month: "short" }),
-      revenue,
-    }));
+    .map(([month, revenue]) => ({ month: new Date(month + "-01").toLocaleDateString("en-US", { month: "short" }), revenue }));
 
   const exportData = [
     ...sales.map((s) => ({ date: s.date, description: `${s.client} — ${s.description}`, type: "Income", amount: s.amount })),
@@ -81,25 +62,14 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-2">
             <DateRangeFilter />
-            <ExportButton
-              data={exportData}
-              filename="dashboard-transactions"
-              columns={[
-                { key: "date", label: "Date" },
-                { key: "description", label: "Description" },
-                { key: "type", label: "Type" },
-                { key: "amount", label: "Amount" },
-              ]}
-            />
+            <ExportButton data={exportData} filename="dashboard-transactions" columns={[{ key: "date", label: "Date" }, { key: "description", label: "Description" }, { key: "type", label: "Type" }, { key: "amount", label: "Amount" }]} />
           </div>
         </div>
 
-        {/* Onboarding wizard for new users */}
         {showOnboarding && completedSteps.size < 3 && (
           <OnboardingWizard completedSteps={completedSteps} onDismiss={() => setShowOnboarding(false)} />
         )}
 
-        {/* Smart action items */}
         <SmartAlerts />
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -114,11 +84,11 @@ export default function DashboardPage() {
             <h2 className="section-title mb-4">Monthly Revenue</h2>
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={barData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 13%, 90%)" />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="hsl(220, 10%, 46%)" />
-                <YAxis tick={{ fontSize: 12 }} stroke="hsl(220, 10%, 46%)" tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={(value: number) => formatCurrency(value)} contentStyle={{ borderRadius: "8px", border: "1px solid hsl(220, 13%, 90%)", fontSize: "13px" }} />
-                <Bar dataKey="revenue" fill="hsl(160, 84%, 39%)" radius={[4, 4, 0, 0]} />
+                <CartesianGrid {...GRID_STYLE} />
+                <XAxis dataKey="month" {...AXIS_STYLE} />
+                <YAxis {...AXIS_STYLE} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                <Tooltip formatter={(value: number) => formatCurrency(value)} contentStyle={TOOLTIP_STYLE} />
+                <Bar dataKey="revenue" fill={CHART_COLORS[0]} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -130,17 +100,17 @@ export default function DashboardPage() {
                 <PieChart>
                   <Pie data={pieData} dataKey="value" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3}>
                     {pieData.map((_, i) => (
-                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: number) => formatCurrency(value)} contentStyle={{ borderRadius: "8px", fontSize: "13px" }} />
+                  <Tooltip formatter={(value: number) => formatCurrency(value)} contentStyle={TOOLTIP_STYLE} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="flex-1 space-y-2">
                 {pieData.map((item, i) => (
                   <div key={item.name} className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
                       <span className="text-muted-foreground truncate max-w-[120px]">{item.name}</span>
                     </div>
                     <span className="font-mono text-xs">{formatCurrency(item.value)}</span>

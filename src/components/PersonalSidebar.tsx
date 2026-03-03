@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import AccountSwitcher from "@/components/AccountSwitcher";
 
 const links = [
   { to: "/personal", label: "Dashboard", icon: LayoutDashboard },
@@ -59,6 +60,7 @@ export default function PersonalSidebar() {
       </nav>
 
       <div className="p-4 border-t border-sidebar-border space-y-3">
+        <AccountSwitcher current="individual" />
         {user && (
           <p className="text-xs text-sidebar-foreground truncate">{user.email}</p>
         )}

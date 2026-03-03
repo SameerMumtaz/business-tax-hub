@@ -49,6 +49,11 @@
     --chart-negative: 0 72% 51%;
     --chart-warning: 38 92% 50%;
     --chart-info: 217 91% 60%;
+    --chart-1: 280 65% 60%;
+    --chart-2: 160 40% 55%;
+    --chart-3: 200 70% 50%;
+    --chart-4: 340 75% 55%;
+    --chart-5: 230 60% 55%;
 
     --font-mono: 'JetBrains Mono', ui-monospace, monospace;
   }
@@ -81,6 +86,16 @@
     --border: 222 20% 18%;
     --input: 222 20% 18%;
     --ring: 160 84% 45%;
+
+    --chart-positive: 160 84% 45%;
+    --chart-negative: 0 62% 50%;
+    --chart-warning: 38 85% 55%;
+    --chart-info: 217 85% 65%;
+    --chart-1: 280 60% 65%;
+    --chart-2: 160 35% 60%;
+    --chart-3: 200 65% 55%;
+    --chart-4: 340 70% 60%;
+    --chart-5: 230 55% 60%;
   }
 }
 

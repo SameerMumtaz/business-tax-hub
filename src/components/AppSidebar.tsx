@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import AccountSwitcher from "@/components/AccountSwitcher";
 
 interface NavChild {
   to: string;
@@ -176,6 +177,7 @@ export default function AppSidebar() {
       </nav>
 
       <div className="p-4 border-t border-sidebar-border space-y-3">
+        <AccountSwitcher current="business" />
         {user && (
           <p className="text-xs text-sidebar-foreground truncate">{user.email}</p>
         )}
