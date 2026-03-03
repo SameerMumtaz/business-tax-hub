@@ -122,10 +122,12 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
                   </div>
                 )}
                 {directionsUrl && (
-                  <Button variant="outline" size="icon" asChild>
-                    <a href={directionsUrl} target="_blank" rel="noopener noreferrer">
-                      <Navigation className="h-4 w-4" />
-                    </a>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => window.open(directionsUrl, "_blank", "noopener,noreferrer")}
+                  >
+                    <Navigation className="h-4 w-4" />
                   </Button>
                 )}
               </div>
