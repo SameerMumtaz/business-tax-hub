@@ -10,7 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { UserPlus, Shield, Users, DollarSign, History } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { UserPlus, Shield, Users, DollarSign, History, MoreHorizontal, Pencil, RefreshCw, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/format";
 
@@ -24,6 +25,7 @@ interface TeamMember {
   accepted_at: string | null;
   worker_type: string;
   pay_rate: number;
+  member_user_id: string | null;
 }
 
 interface PayRateChange {
@@ -52,6 +54,16 @@ export default function MembersContent() {
   const [inviteState, setInviteState] = useState("");
   const [sending, setSending] = useState(false);
 
+  // Edit member state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editMember, setEditMember] = useState<TeamMember | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editRole, setEditRole] = useState<string>("crew");
+  const [editWorkerType, setEditWorkerType] = useState<string>("1099");
+  const [editPayRate, setEditPayRate] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
   // Pay rate change state
   const [rateChangeOpen, setRateChangeOpen] = useState(false);
   const [rateChangeMember, setRateChangeMember] = useState<TeamMember | null>(null);
@@ -64,6 +76,9 @@ export default function MembersContent() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyMember, setHistoryMember] = useState<TeamMember | null>(null);
   const [rateHistory, setRateHistory] = useState<PayRateChange[]>([]);
+
+  // Resend state
+  const [resending, setResending] = useState<string | null>(null);
 
   const fetchMembers = async () => {
     if (!user) return;
@@ -114,6 +129,119 @@ export default function MembersContent() {
     toast.success("Member reactivated"); fetchMembers();
   };
 
+  // --- Edit member + sync contractor/employee ---
+  const openEdit = (member: TeamMember) => {
+    setEditMember(member);
+    setEditName(member.name);
+    setEditEmail(member.email);
+    setEditRole(member.role);
+    setEditWorkerType(member.worker_type);
+    setEditPayRate(String(member.pay_rate || 0));
+    setEditOpen(true);
+  };
+
+  const handleEditSave = async () => {
+    if (!user || !editMember || !editName.trim() || !editEmail.trim()) {
+      toast.error("Name and email are required"); return;
+    }
+    setSavingEdit(true);
+    try {
+      const oldName = editMember.name;
+      const oldWorkerType = editMember.worker_type;
+      const newPayRate = parseFloat(editPayRate) || 0;
+
+      // 1. Update team_members record
+      const { error } = await supabase.from("team_members").update({
+        name: editName.trim(),
+        email: editEmail.trim(),
+        role: editRole as "admin" | "manager" | "crew",
+        worker_type: editWorkerType,
+        pay_rate: newPayRate,
+      }).eq("id", editMember.id);
+      if (error) throw error;
+
+      // 2. Sync contractor/employee records
+      if (oldWorkerType !== editWorkerType) {
+        // Worker type changed — delete old record, create new one
+        if (oldWorkerType === "1099") {
+          await supabase.from("contractors").delete()
+            .eq("user_id", user.id).eq("name", oldName);
+        } else {
+          await supabase.from("employees").delete()
+            .eq("user_id", user.id).eq("name", oldName);
+        }
+        // Create new record with the new type
+        if (editWorkerType === "W2") {
+          await supabase.from("employees").insert({
+            user_id: user.id,
+            name: editName.trim(),
+            salary: newPayRate,
+            federal_withholding: 0, state_withholding: 0,
+            social_security: 0, medicare: 0,
+          });
+        } else {
+          await supabase.from("contractors").insert({
+            user_id: user.id,
+            name: editName.trim(),
+            pay_rate: newPayRate,
+            total_paid: 0,
+          });
+        }
+      } else {
+        // Same worker type — just update name and pay rate
+        if (editWorkerType === "1099") {
+          await supabase.from("contractors").update({
+            name: editName.trim(),
+            pay_rate: newPayRate,
+          }).eq("user_id", user.id).eq("name", oldName);
+        } else {
+          await supabase.from("employees").update({
+            name: editName.trim(),
+            salary: newPayRate,
+          }).eq("user_id", user.id).eq("name", oldName);
+        }
+      }
+
+      toast.success("Member updated");
+      setEditOpen(false);
+      fetchMembers();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update member");
+    } finally { setSavingEdit(false); }
+  };
+
+  // --- Resend invite ---
+  const handleResendInvite = async (member: TeamMember) => {
+    if (!user) return;
+    setResending(member.id);
+    try {
+      const res = await supabase.functions.invoke("invite-crew", {
+        body: {
+          email: member.email, name: member.name, role: member.role,
+          business_user_id: user.id, worker_type: member.worker_type,
+          pay_rate: member.pay_rate,
+          resend: true,
+        },
+      });
+      if (res.error) throw res.error;
+      const resData = res.data as any;
+      if (resData?.error) { toast.error(resData.error); return; }
+      toast.success(`Invite resent to ${member.email}`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to resend invite");
+    } finally { setResending(null); }
+  };
+
+  // --- Copy invite link ---
+  const handleCopyInviteLink = (member: TeamMember) => {
+    const signupUrl = `${window.location.origin}/auth?invite=true&email=${encodeURIComponent(member.email)}`;
+    navigator.clipboard.writeText(signupUrl).then(() => {
+      toast.success("Invite link copied to clipboard");
+    }).catch(() => {
+      toast.error("Failed to copy link");
+    });
+  };
+
   const openRateChange = (member: TeamMember) => {
     setRateChangeMember(member);
     setNewRate("");
@@ -135,7 +263,6 @@ export default function MembersContent() {
     }
     setSavingRate(true);
     try {
-      // Record the change in history
       const { error: historyError } = await supabase.from("pay_rate_changes").insert({
         team_member_id: rateChangeMember.id,
         previous_rate: rateChangeMember.pay_rate,
@@ -146,14 +273,12 @@ export default function MembersContent() {
       });
       if (historyError) throw historyError;
 
-      // Check if effective today or in the past — update current rate immediately
       const today = new Date().toISOString().split("T")[0];
       if (effectiveDate <= today) {
         await supabase.from("team_members")
           .update({ pay_rate: newRateNum })
           .eq("id", rateChangeMember.id);
 
-        // Also update the corresponding contractor/employee record
         if (rateChangeMember.worker_type === "1099") {
           await supabase.from("contractors")
             .update({ pay_rate: newRateNum })
@@ -263,6 +388,57 @@ export default function MembersContent() {
         </Dialog>
       </div>
 
+      {/* Edit Member Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Member — {editMember?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div>
+              <label className="text-sm font-medium">Name</label>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Email</label>
+              <Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Role</label>
+              <Select value={editRole} onValueChange={setEditRole}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {canInviteRole.map((r) => (
+                    <SelectItem key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Worker Type</label>
+              <Select value={editWorkerType} onValueChange={setEditWorkerType}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1099">1099 Contractor</SelectItem>
+                  <SelectItem value="W2">W-2 Salaried</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Pay Rate</label>
+              <Input
+                type="number" step="0.01" min="0"
+                placeholder={editWorkerType === "1099" ? "Hourly rate ($)" : "Annual salary ($)"}
+                value={editPayRate} onChange={(e) => setEditPayRate(e.target.value)}
+              />
+            </div>
+            <Button className="w-full" onClick={handleEditSave} disabled={savingEdit}>
+              {savingEdit ? "Saving…" : "Save Changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Pay Rate Change Dialog */}
       <Dialog open={rateChangeOpen} onOpenChange={setRateChangeOpen}>
         <DialogContent>
@@ -294,7 +470,6 @@ export default function MembersContent() {
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Set to today to apply immediately, or a future date to schedule the change.
-                Future changes won't affect current rate until that date.
               </p>
             </div>
             <div>
@@ -403,19 +578,52 @@ export default function MembersContent() {
                     <TableCell className="text-sm text-muted-foreground">
                       {new Date(m.invited_at).toLocaleDateString()}
                     </TableCell>
-                    <TableCell className="text-right space-x-1">
-                      <Button size="sm" variant="ghost" onClick={() => openRateChange(m)} title="Change pay rate">
-                        <DollarSign className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => openHistory(m)} title="Rate history">
-                        <History className="h-3.5 w-3.5" />
-                      </Button>
-                      {m.status === "active" && (
-                        <Button size="sm" variant="ghost" onClick={() => handleDeactivate(m.id)}>Deactivate</Button>
-                      )}
-                      {m.status === "deactivated" && (
-                        <Button size="sm" variant="ghost" onClick={() => handleReactivate(m.id)}>Reactivate</Button>
-                      )}
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="sm" variant="ghost">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openEdit(m)}>
+                            <Pencil className="h-3.5 w-3.5 mr-2" /> Edit Info
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openRateChange(m)}>
+                            <DollarSign className="h-3.5 w-3.5 mr-2" /> Change Pay Rate
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openHistory(m)}>
+                            <History className="h-3.5 w-3.5 mr-2" /> Rate History
+                          </DropdownMenuItem>
+                          {m.status === "invited" && (
+                            <>
+                              <DropdownMenuItem
+                                onClick={() => handleResendInvite(m)}
+                                disabled={resending === m.id}
+                              >
+                                <RefreshCw className={`h-3.5 w-3.5 mr-2 ${resending === m.id ? "animate-spin" : ""}`} />
+                                {resending === m.id ? "Sending…" : "Resend Invite"}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleCopyInviteLink(m)}>
+                                <Copy className="h-3.5 w-3.5 mr-2" /> Copy Invite Link
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                          {m.status === "active" && (
+                            <DropdownMenuItem
+                              onClick={() => handleDeactivate(m.id)}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              Deactivate
+                            </DropdownMenuItem>
+                          )}
+                          {m.status === "deactivated" && (
+                            <DropdownMenuItem onClick={() => handleReactivate(m.id)}>
+                              Reactivate
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}
