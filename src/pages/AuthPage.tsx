@@ -1,16 +1,32 @@
 import { useState } from "react";
+import { Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Receipt, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 export default function AuthPage() {
+  const { user, loading: authLoading } = useAuth();
+  
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
+
+  if (user) {
+    return <Navigate to="/" replace />;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,7 +34,7 @@ export default function AuthPage() {
       toast.error("Please fill in all fields");
       return;
     }
-    setLoading(true);
+    setSubmitting(true);
     try {
       if (isLogin) {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -36,7 +52,7 @@ export default function AuthPage() {
     } catch (err: any) {
       toast.error(err.message || "Authentication failed");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -93,8 +109,8 @@ export default function AuthPage() {
             </div>
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Please wait…" : isLogin ? "Sign In" : "Create Account"}
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting ? "Please wait…" : isLogin ? "Sign In" : "Create Account"}
           </Button>
 
           {isLogin && (
