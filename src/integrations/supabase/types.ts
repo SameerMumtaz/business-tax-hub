@@ -21,7 +21,7 @@ export type Database = {
           id: string
           priority: number
           type: string
-          user_id: string | null
+          user_id: string
           vendor_pattern: string
         }
         Insert: {
@@ -30,7 +30,7 @@ export type Database = {
           id?: string
           priority?: number
           type?: string
-          user_id?: string | null
+          user_id: string
           vendor_pattern: string
         }
         Update: {
@@ -39,7 +39,7 @@ export type Database = {
           id?: string
           priority?: number
           type?: string
-          user_id?: string | null
+          user_id?: string
           vendor_pattern?: string
         }
         Relationships: []
