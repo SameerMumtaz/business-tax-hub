@@ -1,8 +1,7 @@
 import { useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { useTaxStore } from "@/store/taxStore";
+import { useExpenses, useAddExpense, useRemoveExpense } from "@/hooks/useData";
 import { formatCurrency } from "@/lib/format";
-import { generateId } from "@/lib/format";
 import { EXPENSE_CATEGORIES, ExpenseCategory } from "@/types/tax";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +12,9 @@ import { Plus, Trash2, Filter } from "lucide-react";
 import { toast } from "sonner";
 
 export default function ExpensesPage() {
-  const { expenses, addExpense, removeExpense } = useTaxStore();
+  const { data: expenses = [] } = useExpenses();
+  const addExpense = useAddExpense();
+  const removeExpense = useRemoveExpense();
   const [open, setOpen] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [form, setForm] = useState({ date: "", vendor: "", description: "", amount: "", category: "" as string });
@@ -26,17 +27,20 @@ export default function ExpensesPage() {
       toast.error("Please fill all required fields");
       return;
     }
-    addExpense({
-      id: generateId(),
+    addExpense.mutate({
       date: form.date,
       vendor: form.vendor,
       description: form.description,
       amount: parseFloat(form.amount),
       category: form.category as ExpenseCategory,
+    }, {
+      onSuccess: () => {
+        setForm({ date: "", vendor: "", description: "", amount: "", category: "" });
+        setOpen(false);
+        toast.success("Expense added");
+      },
+      onError: () => toast.error("Failed to add expense"),
     });
-    setForm({ date: "", vendor: "", description: "", amount: "", category: "" });
-    setOpen(false);
-    toast.success("Expense added");
   };
 
   return (
@@ -82,7 +86,7 @@ export default function ExpensesPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button onClick={handleAdd} className="w-full">Add Expense</Button>
+                  <Button onClick={handleAdd} className="w-full" disabled={addExpense.isPending}>Add Expense</Button>
                 </div>
               </DialogContent>
             </Dialog>
@@ -110,7 +114,7 @@ export default function ExpensesPage() {
                   <td><Badge variant="secondary" className="text-xs font-normal">{e.category}</Badge></td>
                   <td className="text-right font-mono text-chart-negative">{formatCurrency(e.amount)}</td>
                   <td>
-                    <Button variant="ghost" size="icon" onClick={() => { removeExpense(e.id); toast.success("Removed"); }}>
+                    <Button variant="ghost" size="icon" onClick={() => { removeExpense.mutate(e.id); toast.success("Removed"); }}>
                       <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
                     </Button>
                   </td>

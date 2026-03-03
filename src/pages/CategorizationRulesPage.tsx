@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { invalidateRulesCache } from "@/lib/categorize";
-import { useTaxStore } from "@/store/taxStore";
+import { useAuth } from "@/hooks/useAuth";
 import { EXPENSE_CATEGORIES, ExpenseCategory } from "@/types/tax";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,25 +25,19 @@ interface Rule {
 }
 
 export default function CategorizationRulesPage() {
+  const { user } = useAuth();
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
   const [newPattern, setNewPattern] = useState("");
   const [newCategory, setNewCategory] = useState("Other");
   const [newType, setNewType] = useState<"expense" | "income">("expense");
-  const recategorizeAll = useTaxStore((s) => s.recategorizeAll);
 
   useEffect(() => {
     fetchRules();
   }, []);
 
-  /** Re-apply all current rules to stored expenses */
   function applyRulesToStore(currentRules: Rule[]) {
     invalidateRulesCache();
-    recategorizeAll(currentRules.map((r) => ({
-      vendor_pattern: r.vendor_pattern,
-      category: r.category,
-      type: r.type,
-    })));
   }
 
   async function fetchRules() {
@@ -71,6 +65,7 @@ export default function CategorizationRulesPage() {
       category: newCategory,
       type: newType,
       priority: 10,
+      user_id: user?.id,
     });
 
     if (error) {

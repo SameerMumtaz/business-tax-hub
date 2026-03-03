@@ -8,7 +8,11 @@ import {
   DollarSign,
   Upload,
   Tag,
+  Building2,
+  LogOut,
 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
 
 const links = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -18,10 +22,12 @@ const links = [
   { to: "/expenses", label: "Expenses", icon: TrendingDown },
   { to: "/profit-loss", label: "Profit & Loss", icon: DollarSign },
   { to: "/1099", label: "Tax Forms", icon: FileText },
+  { to: "/profile", label: "Company Profile", icon: Building2 },
 ];
 
 export default function AppSidebar() {
   const location = useLocation();
+  const { user, signOut } = useAuth();
 
   return (
     <aside className="w-64 min-h-screen bg-sidebar border-r border-sidebar-border flex flex-col">
@@ -55,7 +61,19 @@ export default function AppSidebar() {
         })}
       </nav>
 
-      <div className="p-4 border-t border-sidebar-border">
+      <div className="p-4 border-t border-sidebar-border space-y-3">
+        {user && (
+          <p className="text-xs text-sidebar-foreground truncate">{user.email}</p>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start text-sidebar-foreground hover:text-sidebar-accent-foreground"
+          onClick={signOut}
+        >
+          <LogOut className="h-4 w-4 mr-2" />
+          Sign Out
+        </Button>
         <p className="text-xs text-sidebar-foreground">Tax Year 2026</p>
       </div>
     </aside>

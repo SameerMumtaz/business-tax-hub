@@ -1,8 +1,7 @@
 import { useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { useTaxStore } from "@/store/taxStore";
+import { useSales, useAddSale, useRemoveSale } from "@/hooks/useData";
 import { formatCurrency } from "@/lib/format";
-import { generateId } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -10,7 +9,9 @@ import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function SalesPage() {
-  const { sales, addSale, removeSale } = useTaxStore();
+  const { data: sales = [] } = useSales();
+  const addSale = useAddSale();
+  const removeSale = useRemoveSale();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ date: "", client: "", description: "", amount: "", invoiceNumber: "" });
 
@@ -21,17 +22,20 @@ export default function SalesPage() {
       toast.error("Please fill required fields");
       return;
     }
-    addSale({
-      id: generateId(),
+    addSale.mutate({
       date: form.date,
       client: form.client,
       description: form.description,
       amount: parseFloat(form.amount),
       invoiceNumber: form.invoiceNumber || `INV-${Date.now().toString().slice(-4)}`,
+    }, {
+      onSuccess: () => {
+        setForm({ date: "", client: "", description: "", amount: "", invoiceNumber: "" });
+        setOpen(false);
+        toast.success("Sale added");
+      },
+      onError: () => toast.error("Failed to add sale"),
     });
-    setForm({ date: "", client: "", description: "", amount: "", invoiceNumber: "" });
-    setOpen(false);
-    toast.success("Sale added");
   };
 
   return (
@@ -56,7 +60,7 @@ export default function SalesPage() {
                 <Input placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
                 <Input type="number" placeholder="Amount" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
                 <Input placeholder="Invoice # (optional)" value={form.invoiceNumber} onChange={(e) => setForm({ ...form, invoiceNumber: e.target.value })} />
-                <Button onClick={handleAdd} className="w-full">Add Sale</Button>
+                <Button onClick={handleAdd} className="w-full" disabled={addSale.isPending}>Add Sale</Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -83,7 +87,7 @@ export default function SalesPage() {
                   <td className="text-muted-foreground">{s.description}</td>
                   <td className="text-right font-mono text-chart-positive">{formatCurrency(s.amount)}</td>
                   <td>
-                    <Button variant="ghost" size="icon" onClick={() => { removeSale(s.id); toast.success("Removed"); }}>
+                    <Button variant="ghost" size="icon" onClick={() => { removeSale.mutate(s.id); toast.success("Removed"); }}>
                       <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
                     </Button>
                   </td>

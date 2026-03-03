@@ -1,10 +1,11 @@
 import DashboardLayout from "@/components/DashboardLayout";
-import { useTaxStore } from "@/store/taxStore";
+import { useExpenses, useSales } from "@/hooks/useData";
 import { formatCurrency } from "@/lib/format";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 export default function ProfitLossPage() {
-  const { expenses, sales } = useTaxStore();
+  const { data: expenses = [] } = useExpenses();
+  const { data: sales = [] } = useSales();
 
   const totalRevenue = sales.reduce((sum, s) => sum + s.amount, 0);
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
@@ -26,7 +27,6 @@ export default function ProfitLossPage() {
           <p className="text-muted-foreground text-sm mt-1">Year-to-date financial summary</p>
         </div>
 
-        {/* P&L Summary */}
         <div className="stat-card">
           <h2 className="section-title mb-6">Income Statement</h2>
           <div className="space-y-4">
@@ -60,7 +60,6 @@ export default function ProfitLossPage() {
           </div>
         </div>
 
-        {/* Expenses by category bar chart */}
         <div className="stat-card">
           <h2 className="section-title mb-4">Expenses by Category</h2>
           <ResponsiveContainer width="100%" height={300}>

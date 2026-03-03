@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useRef, memo } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { useTaxStore } from "@/store/taxStore";
+import { useAddExpense, useAddSale } from "@/hooks/useData";
+import { useAuth } from "@/hooks/useAuth";
 import { parseCSV, parseExcel, ParsedTransaction } from "@/lib/csvParser";
 import { categorizeTransactions, invalidateRulesCache } from "@/lib/categorize";
 import { formatCurrency, generateId } from "@/lib/format";
@@ -115,7 +116,9 @@ const TransactionRow = memo(function TransactionRow({
 });
 
 export default function ImportPage() {
-  const { addExpense, addSale } = useTaxStore();
+  const addExpenseMutation = useAddExpense();
+  const addSaleMutation = useAddSale();
+  const { user } = useAuth();
   const [transactions, setTransactions] = useState<ReviewTransaction[]>([]);
   const [step, setStep] = useState<"upload" | "review">("upload");
   const [dragOver, setDragOver] = useState(false);
@@ -440,6 +443,7 @@ export default function ImportPage() {
       category: suggestion.category,
       type: suggestion.type,
       priority: 10,
+      user_id: user?.id,
     });
     if (error) {
       toast.error("Failed to save rule");
@@ -461,6 +465,7 @@ export default function ImportPage() {
       category: s.category,
       type: s.type,
       priority: 10,
+      user_id: user?.id,
     }));
     const { error } = await supabase.from("categorization_rules").insert(inserts);
     if (error) {
@@ -616,15 +621,14 @@ export default function ImportPage() {
 
   const uncategorizedCount = useMemo(() => transactions.filter((t) => t.include && t.category === "Other").length, [transactions]);
 
-  const handleImport = () => {
+  const handleImport = async () => {
     const included = transactions.filter((t) => t.include);
     let expenseCount = 0;
     let saleCount = 0;
 
-    included.forEach((t) => {
+    for (const t of included) {
       if (t.type === "expense") {
-        addExpense({
-          id: generateId(),
+        await addExpenseMutation.mutateAsync({
           date: t.date,
           vendor: t.description,
           description: t.originalDescription,
@@ -633,8 +637,7 @@ export default function ImportPage() {
         });
         expenseCount++;
       } else {
-        addSale({
-          id: generateId(),
+        await addSaleMutation.mutateAsync({
           date: t.date,
           client: t.description,
           description: t.originalDescription,
@@ -643,7 +646,7 @@ export default function ImportPage() {
         });
         saleCount++;
       }
-    });
+    }
 
     toast.success(`Imported ${expenseCount} expenses and ${saleCount} income transactions`);
     setTransactions([]);

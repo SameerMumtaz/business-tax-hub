@@ -1,4 +1,4 @@
-import { useTaxStore } from "@/store/taxStore";
+import { useExpenses, useSales, useContractors } from "@/hooks/useData";
 import { formatCurrency } from "@/lib/format";
 import StatCard from "@/components/StatCard";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -17,20 +17,20 @@ const COLORS = [
 ];
 
 export default function DashboardPage() {
-  const { expenses, sales, contractors } = useTaxStore();
+  const { data: expenses = [] } = useExpenses();
+  const { data: sales = [] } = useSales();
+  const { data: contractors = [] } = useContractors();
 
   const totalRevenue = sales.reduce((sum, s) => sum + s.amount, 0);
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
   const netIncome = totalRevenue - totalExpenses;
 
-  // Expenses by category
   const categoryMap: Record<string, number> = {};
   expenses.forEach((e) => {
     categoryMap[e.category] = (categoryMap[e.category] || 0) + e.amount;
   });
   const pieData = Object.entries(categoryMap).map(([name, value]) => ({ name, value }));
 
-  // Monthly revenue
   const monthlyRevenue: Record<string, number> = {};
   sales.forEach((s) => {
     const month = s.date.substring(0, 7);
@@ -59,7 +59,6 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Revenue Chart */}
           <div className="stat-card">
             <h2 className="section-title mb-4">Monthly Revenue</h2>
             <ResponsiveContainer width="100%" height={240}>
@@ -67,16 +66,12 @@ export default function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 13%, 90%)" />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="hsl(220, 10%, 46%)" />
                 <YAxis tick={{ fontSize: 12 }} stroke="hsl(220, 10%, 46%)" tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-                <Tooltip
-                  formatter={(value: number) => formatCurrency(value)}
-                  contentStyle={{ borderRadius: "8px", border: "1px solid hsl(220, 13%, 90%)", fontSize: "13px" }}
-                />
+                <Tooltip formatter={(value: number) => formatCurrency(value)} contentStyle={{ borderRadius: "8px", border: "1px solid hsl(220, 13%, 90%)", fontSize: "13px" }} />
                 <Bar dataKey="revenue" fill="hsl(160, 84%, 39%)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
 
-          {/* Expense Breakdown */}
           <div className="stat-card">
             <h2 className="section-title mb-4">Expense Breakdown</h2>
             <div className="flex items-center gap-4">
@@ -105,7 +100,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Recent Transactions */}
         <div className="stat-card">
           <h2 className="section-title mb-4">Recent Transactions</h2>
           <table className="data-table">
