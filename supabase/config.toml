@@ -1,1 +1,7 @@
 project_id = "nhxjgryiwicyhhjeewec"
+
+[functions.categorize]
+verify_jwt = false
+
+[functions.audit-transactions]
+verify_jwt = false
