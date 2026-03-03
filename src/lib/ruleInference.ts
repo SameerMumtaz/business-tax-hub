@@ -79,11 +79,16 @@ export function extractVendorName(raw: string): string | null {
   // Remove remaining special chars and normalize
   cleaned = cleaned.replace(/[^a-zA-Z\s'-]/g, " ").replace(/\s+/g, " ").trim();
 
-  // Final: remove very short results or empty
-  const result = cleaned.toLowerCase().trim();
-  if (result.length < 2) return null;
+  if (cleaned.length < 2) return null;
 
-  return result;
+  // Title Case: capitalize each word for proper display
+  const titleCased = cleaned
+    .toLowerCase()
+    .split(/\s+/)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+
+  return titleCased;
 }
 
 /**
@@ -94,6 +99,9 @@ function extractKeywords(vendor: string): string[] {
   const vendorName = extractVendorName(vendor);
   if (!vendorName) return [];
 
+  // Lowercase for matching purposes
+  const lowerName = vendorName.toLowerCase();
+
   const noise = new Set([
     "the", "of", "and", "a", "an", "inc", "llc", "ltd", "corp", "co",
     "store", "shop", "market", "marketplace", "services", "service",
@@ -102,10 +110,10 @@ function extractKeywords(vendor: string): string[] {
   const keywords: string[] = [];
 
   // The full cleaned vendor name is the best candidate
-  keywords.push(vendorName);
+  keywords.push(lowerName);
 
   // Also add individual words if multi-word (e.g. "home depot" → also "home", "depot")
-  const words = vendorName.split(/\s+/).filter(w => w.length >= 3 && !noise.has(w));
+  const words = lowerName.split(/\s+/).filter(w => w.length >= 3 && !noise.has(w));
   if (words.length > 1) {
     for (const w of words) {
       keywords.push(w);
