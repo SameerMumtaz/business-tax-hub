@@ -134,7 +134,10 @@ export function useAddInvoice() {
       }
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["sales"] });
+    },
   });
 }
 
@@ -145,7 +148,10 @@ export function useUpdateInvoiceStatus() {
       const { error } = await supabase.from("invoices").update({ status }).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["sales"] });
+    },
   });
 }
 
@@ -158,7 +164,10 @@ export function useMatchInvoiceToSale() {
       const { error } = await supabase.from("invoices").update(update).eq("id", invoiceId);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["sales"] });
+    },
   });
 }
 
@@ -169,7 +178,11 @@ export function useDeleteInvoice() {
       const { error } = await supabase.from("invoices").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["sales"] });
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+    },
   });
 }
 
