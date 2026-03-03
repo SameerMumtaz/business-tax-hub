@@ -505,6 +505,7 @@ const CATEGORY_KEYWORDS: Record<ExpenseCategory, string[]> = {
   "Education & Training": ["udemy", "coursera", "seminar", "workshop", "training", "certification", "conference"],
   "Commissions & Fees": ["stripe", "square", "paypal fee", "processing fee", "commission", "platform fee", "merchant fee"],
   "Home Office": ["home office"],
+  "Partner Distribution": ["distribution", "partner draw", "owner draw", "member draw"],
   "Other": [],
 };
 
