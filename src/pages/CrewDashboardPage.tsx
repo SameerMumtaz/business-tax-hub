@@ -40,19 +40,23 @@ export default function CrewDashboardPage() {
       const rate = memberData?.pay_rate ?? null;
       setPayRate(rate);
 
-      // Fetch assignments
-      const { data: assignments } = await supabase
-        .from("job_assignments")
-        .select("job_id")
-        .eq("worker_id", teamMemberId);
+      // Fetch job IDs from both job_assignments AND timesheet_entries
+      const [assignRes, tsEntryRes] = await Promise.all([
+        supabase.from("job_assignments").select("job_id").eq("worker_id", teamMemberId),
+        supabase.from("timesheet_entries").select("job_id").eq("worker_id", teamMemberId).not("job_id", "is", null),
+      ]);
 
-      if (!assignments?.length) {
+      const jobIdSet = new Set<string>();
+      (assignRes.data || []).forEach((a: any) => jobIdSet.add(a.job_id));
+      (tsEntryRes.data || []).forEach((e: any) => { if (e.job_id) jobIdSet.add(e.job_id); });
+
+      const jobIds = Array.from(jobIdSet);
+      if (!jobIds.length) {
         setAssignedJobs([]);
         setLoading(false);
         return;
       }
 
-      const jobIds = assignments.map((a: any) => a.job_id);
       const { data: jobs } = await supabase
         .from("jobs")
         .select("id, title, description, start_date, end_date, status, site_id")
