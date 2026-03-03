@@ -7,7 +7,7 @@ import { formatCurrency } from "@/lib/format";
 import { EXPENSE_CATEGORIES, ExpenseCategory } from "@/types/tax";
 import { invalidateRulesCache } from "@/lib/categorize";
 import { auditExpenses, AuditResult } from "@/lib/audit";
-import { checkForPatternAfterCategoryChange } from "@/lib/ruleInference";
+import { checkForPatternAfterCategoryChange, RuleSuggestion } from "@/lib/ruleInference";
 import { toast } from "sonner";
 
 type SortField = "date" | "vendor" | "description" | "category" | "amount";
@@ -43,6 +43,7 @@ export default function useExpensesLogic() {
   const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
   const [ruleKeyword, setRuleKeyword] = useState("");
   const [ruleCategory, setRuleCategory] = useState("");
+  const [pendingRuleSuggestion, setPendingRuleSuggestion] = useState<RuleSuggestion | null>(null);
 
   const filtered = useMemo(() => {
     let result = filterCategory === "all" ? expenses : expenses.filter((e) => e.category === filterCategory);
@@ -129,7 +130,8 @@ export default function useExpensesLogic() {
         // Check for pattern inference after bulk change
         const firstSelected = expenses.find(e => selected.has(e.id));
         if (firstSelected && user) {
-          checkForPatternAfterCategoryChange(firstSelected.vendor, category, updatedExpenses, "expense", user.id);
+          checkForPatternAfterCategoryChange(firstSelected.vendor, category, updatedExpenses, "expense", user.id)
+            .then(s => { if (s) setPendingRuleSuggestion(s); });
         }
         setSelected(new Set());
       },
@@ -153,7 +155,8 @@ export default function useExpensesLogic() {
         // Check for pattern inference
         if (expense && user) {
           const updatedExpenses = expenses.map(e => e.id === id ? { ...e, category } : e);
-          checkForPatternAfterCategoryChange(expense.vendor, category, updatedExpenses, "expense", user.id);
+          checkForPatternAfterCategoryChange(expense.vendor, category, updatedExpenses, "expense", user.id)
+            .then(s => { if (s) setPendingRuleSuggestion(s); });
         }
       },
       onError: () => toast.error("Failed to update"),
@@ -199,6 +202,7 @@ export default function useExpensesLogic() {
     selected, toggleSelect, selectItems, toggleAll, handleBulkDelete, handleBulkCategoryChange,
     editingCategoryId, setEditingCategoryId, handleSingleCategoryChange,
     searchQuery, setSearchQuery, auditResult, setAuditResult,
+    pendingRuleSuggestion, setPendingRuleSuggestion,
     ruleDialogOpen, setRuleDialogOpen, ruleKeyword, setRuleKeyword, ruleCategory, setRuleCategory,
     openBulkRule, saveBulkRule, removeExpense, updateExpense, bulkRemove,
     trendFilterCat, setTrendFilterCat, months, categories, monthlyData, currentSpikes, visibleCats,

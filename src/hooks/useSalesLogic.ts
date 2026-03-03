@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/format";
 import { invalidateRulesCache } from "@/lib/categorize";
 import { auditSales, AuditResult } from "@/lib/audit";
-import { checkForPatternAfterCategoryChange } from "@/lib/ruleInference";
+import { checkForPatternAfterCategoryChange, RuleSuggestion } from "@/lib/ruleInference";
 import { toast } from "sonner";
 
 type SortField = "date" | "client" | "invoiceNumber" | "amount" | "description" | "category";
@@ -46,6 +46,7 @@ export default function useSalesLogic() {
   const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
   const [ruleKeyword, setRuleKeyword] = useState("");
   const [ruleCategory, setRuleCategory] = useState("");
+  const [pendingRuleSuggestion, setPendingRuleSuggestion] = useState<RuleSuggestion | null>(null);
 
   const matchedSaleIds = useMemo(() => new Set(invoices.filter(inv => inv.matched_sale_id).map(inv => inv.matched_sale_id!)) as Set<string>, [invoices]);
   const persistentAudit = useMemo(() => sales.length > 0 ? auditSales(sales, expenses, matchedSaleIds) : null, [sales, expenses, matchedSaleIds]);
@@ -158,8 +159,9 @@ export default function useSalesLogic() {
 
         if (sale && user) {
           const updatedSales = sales.map(s => s.id === id ? { ...s, category } : s);
-          const mapped = updatedSales.map(s => ({ id: s.id, vendor: s.client, category: s.category }));
-          checkForPatternAfterCategoryChange(sale.client, category, mapped, "income", user.id);
+          const mapped = updatedSales.map(s => ({ id: s.id, vendor: s.client, description: s.description, amount: s.amount, date: s.date, category: s.category }));
+          checkForPatternAfterCategoryChange(sale.client, category, mapped, "income", user.id)
+            .then(s => { if (s) setPendingRuleSuggestion(s); });
         }
       },
       onError: () => toast.error("Failed to update"),
@@ -197,6 +199,7 @@ export default function useSalesLogic() {
     open, setOpen, form, setForm, handleAdd, addSale,
     sortField, sortDir, toggleSort, selected, toggleSelect, selectItems, toggleAll, handleBulkDelete,
     searchQuery, setSearchQuery, auditResult, setAuditResult, persistentAudit, activeIssueCount,
+    pendingRuleSuggestion, setPendingRuleSuggestion,
     editingCategoryId, setEditingCategoryId, batchCreating, updateSale, removeSale, bulkRemove,
     handleSingleCategoryChange,
     ruleDialogOpen, setRuleDialogOpen, ruleKeyword, setRuleKeyword, ruleCategory, setRuleCategory,

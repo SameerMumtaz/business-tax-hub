@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import SuggestedRulesPanel from "@/components/SuggestedRulesPanel";
+import RuleSuggestionDialog from "@/components/RuleSuggestionDialog";
 import { extractVendorName } from "@/lib/ruleInference";
 import DashboardLayout from "@/components/DashboardLayout";
 import useExpensesLogic, { PAGE_SIZE } from "@/hooks/useExpensesLogic";
@@ -36,6 +37,7 @@ export default function ExpensesPage() {
     selected, toggleSelect, selectItems, toggleAll, handleBulkDelete, handleBulkCategoryChange,
     editingCategoryId, setEditingCategoryId, handleSingleCategoryChange,
     searchQuery, setSearchQuery, auditResult, setAuditResult,
+    pendingRuleSuggestion, setPendingRuleSuggestion,
     ruleDialogOpen, setRuleDialogOpen, ruleKeyword, setRuleKeyword, ruleCategory, setRuleCategory,
     openBulkRule, saveBulkRule, removeExpense, updateExpense, bulkRemove,
     trendFilterCat, setTrendFilterCat, categories, monthlyData, currentSpikes, visibleCats,
@@ -235,6 +237,13 @@ export default function ExpensesPage() {
           </TabsContent>
         </Tabs>
       </div>
+      <RuleSuggestionDialog
+        suggestion={pendingRuleSuggestion}
+        onClose={() => setPendingRuleSuggestion(null)}
+        onApplied={() => {
+          queryClient.invalidateQueries({ queryKey: ["expenses", user?.id] });
+        }}
+      />
     </DashboardLayout>
   );
 }
