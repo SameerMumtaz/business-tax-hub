@@ -111,7 +111,7 @@ export default function SalesPage() {
 
             {auditResult && (
               <AuditIssuesPanel result={auditResult} getItemLabel={(id) => { const s = sales.find((x) => x.id === id); if (!s) return null; return { date: s.date, label: `${s.client} — ${s.description}`, amount: s.amount }; }}
-                onDeleteItems={(ids) => { logic.bulkRemove.mutate(ids, { onSuccess: () => toast.success(`Deleted ${ids.length} sale(s)`) }); }}
+                onDeleteItems={(ids) => { logic.bulkRemove.mutate(ids, { onSuccess: () => { toast.success(`Deleted ${ids.length} sale(s)`); logic.setAuditResult(auditSales(sales.filter((s) => !ids.includes(s.id)), logic.expenses, logic.matchedSaleIds)); } }); }}
                 onSelectItems={(ids) => { logic.selectItems(ids); toast.info(`Selected ${ids.length} item(s)`); }}
                 onCreateInvoice={handleInlineCreateInvoice}
                 onBatchCreateInvoices={(ids) => handleBatchCreateInvoices(ids)}

@@ -52,7 +52,7 @@ export function auditExpenses(expenses: Expense[]): AuditResult {
   }
 
   // 2. Uncategorized
-  const uncategorized = expenses.filter((e) => e.category === "Other");
+  const uncategorized = expenses.filter((e) => e.category === "Other" || !e.category);
   if (uncategorized.length > 0) {
     const total = uncategorized.reduce((s, e) => s + e.amount, 0);
     issues.push({
