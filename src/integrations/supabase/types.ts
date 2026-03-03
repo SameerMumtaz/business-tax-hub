@@ -1142,9 +1142,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_business_ids_for_member: {
+        Args: { _user_id: string }
+        Returns: string[]
+      }
+      get_business_job_ids: { Args: { _user_id: string }; Returns: string[] }
       get_team_role: {
         Args: { _business_id: string; _user_id: string }
         Returns: string
+      }
+      is_team_member_of: {
+        Args: { _business_user_id: string; _user_id: string }
+        Returns: boolean
       }
     }
     Enums: {
