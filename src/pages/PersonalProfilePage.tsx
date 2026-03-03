@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { US_STATES, FILING_STATUS_LABELS, type FilingStatus } from "@/lib/taxCalc";
 import { toast } from "sonner";
-import { Save, UserCircle } from "lucide-react";
+import { Save, UserCircle, Link2, Check, X } from "lucide-react";
 
 interface PersonalProfile {
   first_name: string;
@@ -172,7 +172,131 @@ export default function PersonalProfilePage() {
           <Save className="h-4 w-4" />
           {saving ? "Saving…" : "Save Profile"}
         </Button>
+
+        {/* Link to Business via Bookie ID */}
+        <LinkToBusinessSection />
       </div>
     </PersonalDashboardLayout>
+  );
+}
+
+function LinkToBusinessSection() {
+  const { user } = useAuth();
+  const [bookieCode, setBookieCode] = useState("");
+  const [linking, setLinking] = useState(false);
+  const [linkedBusinesses, setLinkedBusinesses] = useState<{ name: string; id: string }[]>([]);
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const { data } = await supabase
+        .from("team_members")
+        .select("business_user_id, status")
+        .eq("member_user_id", user.id)
+        .eq("status", "active");
+      if (data && data.length > 0) {
+        // Fetch business names
+        const bizIds = data.map((d) => d.business_user_id);
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("user_id, business_name")
+          .in("user_id", bizIds);
+        setLinkedBusinesses(
+          (profiles || []).map((p) => ({ name: p.business_name || "Unnamed Business", id: p.user_id }))
+        );
+      }
+    })();
+  }, [user]);
+
+  const handleLink = async () => {
+    if (!user || !bookieCode.trim()) return;
+    setLinking(true);
+    const code = bookieCode.trim().toUpperCase();
+
+    const { data: bizProfile, error } = await (supabase as any)
+      .from("profiles")
+      .select("user_id, business_name, bookie_id")
+      .eq("bookie_id", code)
+      .single();
+
+    if (error || !bizProfile) {
+      toast.error("Invalid Bookie ID");
+      setLinking(false);
+      return;
+    }
+
+    const { data: existing } = await supabase
+      .from("team_members")
+      .select("id")
+      .eq("email", user.email!)
+      .eq("business_user_id", bizProfile.user_id)
+      .maybeSingle();
+
+    if (!existing) {
+      const { error: insertError } = await supabase
+        .from("team_members")
+        .insert({
+          business_user_id: bizProfile.user_id,
+          member_user_id: user.id,
+          email: user.email!,
+          name: user.email!.split("@")[0],
+          role: "crew" as const,
+          status: "active",
+          accepted_at: new Date().toISOString(),
+        });
+      if (insertError) {
+        toast.error("Failed to link");
+        setLinking(false);
+        return;
+      }
+    } else {
+      await supabase
+        .from("team_members")
+        .update({ member_user_id: user.id, status: "active", accepted_at: new Date().toISOString() })
+        .eq("id", existing.id);
+    }
+
+    toast.success(`Linked to ${(bizProfile as any).business_name || "business"}!`);
+    setBookieCode("");
+    setLinkedBusinesses((prev) => [...prev, { name: (bizProfile as any).business_name || "Unnamed Business", id: bizProfile.user_id }]);
+    setLinking(false);
+  };
+
+  return (
+    <div className="stat-card space-y-4">
+      <div className="flex items-center gap-3 mb-2">
+        <Link2 className="h-5 w-5 text-muted-foreground" />
+        <h2 className="font-semibold">Linked Businesses</h2>
+      </div>
+
+      {linkedBusinesses.length > 0 ? (
+        <div className="space-y-2">
+          {linkedBusinesses.map((biz) => (
+            <div key={biz.id} className="flex items-center gap-2 rounded-md bg-accent/50 px-3 py-2 text-sm">
+              <Check className="h-4 w-4 text-primary" />
+              <span className="font-medium">{biz.name}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">No businesses linked yet</p>
+      )}
+
+      <div className="flex gap-2">
+        <Input
+          placeholder="Enter Bookie ID (e.g. BK-A3X9)"
+          value={bookieCode}
+          onChange={(e) => setBookieCode(e.target.value.toUpperCase())}
+          maxLength={7}
+          className="font-mono tracking-wider"
+        />
+        <Button onClick={handleLink} disabled={linking || !bookieCode.trim()} size="sm">
+          {linking ? "Linking…" : "Link"}
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Ask your employer for their Bookie ID to link your account to their business
+      </p>
+    </div>
   );
 }
