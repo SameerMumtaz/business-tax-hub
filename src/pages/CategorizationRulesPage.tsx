@@ -3,6 +3,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { invalidateRulesCache, applyRulesToUncategorized } from "@/lib/categorize";
 import { detectPatterns, saveInferredRule, InferredPattern } from "@/lib/ruleInference";
+import SuggestedRulesPanel from "@/components/SuggestedRulesPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { useExpenses, useSales } from "@/hooks/useData";
 import { EXPENSE_CATEGORIES, ExpenseCategory } from "@/types/tax";
@@ -40,6 +41,8 @@ export default function CategorizationRulesPage() {
   const [customCategoryName, setCustomCategoryName] = useState("");
   const [inferredPatterns, setInferredPatterns] = useState<InferredPattern[]>([]);
   const [detectingPatterns, setDetectingPatterns] = useState(false);
+  const expenseTransactions = allExpenses.map(e => ({ id: e.id, vendor: e.vendor, category: e.category }));
+  const salesTransactions = allSales.map(s => ({ id: s.id, vendor: s.client, category: s.category }));
 
   useEffect(() => {
     fetchRules();
@@ -195,43 +198,15 @@ export default function CategorizationRulesPage() {
           </Button>
         </div>
 
-        {/* Inferred patterns */}
-        {inferredPatterns.length > 0 && (
-          <div className="stat-card space-y-3">
-            <h2 className="section-title flex items-center gap-2">
-              <Lightbulb className="h-4 w-4 text-primary" /> Suggested Rules ({inferredPatterns.length})
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Based on your categorization patterns, we detected these potential rules.
-            </p>
-            <div className="space-y-2">
-              {inferredPatterns.map((p) => (
-                <div key={`${p.type}-${p.keyword}`} className="flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-sm font-medium">"{p.keyword}"</span>
-                      <span className="text-muted-foreground text-sm">→</span>
-                      <Badge variant="secondary" className="text-xs">{p.category}</Badge>
-                      <Badge variant="outline" className="text-xs">{p.type}</Badge>
-                      <span className="text-xs text-muted-foreground">{p.count} transactions</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1 truncate">
-                      e.g. {p.exampleVendors.join(", ")}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button size="sm" variant="default" className="h-7 text-xs" onClick={() => handleAcceptPattern(p)}>
-                      <Check className="h-3 w-3 mr-1" /> Accept
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => handleDismissPattern(p.keyword)}>
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
+        {/* Suggested rules panels */}
+        <div className="grid md:grid-cols-2 gap-6">
+          <div className="stat-card">
+            <SuggestedRulesPanel type="expense" transactions={expenseTransactions} />
           </div>
-        )}
+          <div className="stat-card">
+            <SuggestedRulesPanel type="income" transactions={salesTransactions} />
+          </div>
+        </div>
 
         {/* How it works */}
         <div className="stat-card flex items-start gap-4">

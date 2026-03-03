@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import SuggestedRulesPanel from "@/components/SuggestedRulesPanel";
 import DashboardLayout from "@/components/DashboardLayout";
 import useSalesLogic, { PAGE_SIZE } from "@/hooks/useSalesLogic";
 import DateRangeFilter from "@/components/DateRangeFilter";
@@ -86,6 +87,7 @@ export default function SalesPage() {
           <TabsList>
             <TabsTrigger value="sales">Sales{activeIssueCount > 0 && <Badge variant="destructive" className="ml-2 text-[10px] h-5 w-5 rounded-full p-0 flex items-center justify-center">{activeIssueCount}</Badge>}</TabsTrigger>
             <TabsTrigger value="cashflow">Cash Flow</TabsTrigger>
+            <TabsTrigger value="rules">Rules</TabsTrigger>
           </TabsList>
 
           <TabsContent value="sales" className="mt-4 space-y-3">
@@ -244,6 +246,10 @@ export default function SalesPage() {
             ) : (
               <div className="rounded-lg border bg-card p-12 text-center text-muted-foreground">No transaction data yet.</div>
             )}
+          </TabsContent>
+
+          <TabsContent value="rules" className="mt-4">
+            <SuggestedRulesPanel type="income" transactions={sales.map(s => ({ id: s.id, vendor: s.client, category: s.category }))} />
           </TabsContent>
         </Tabs>
       </div>
