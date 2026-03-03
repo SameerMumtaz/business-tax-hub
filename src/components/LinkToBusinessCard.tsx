@@ -18,7 +18,7 @@ export default function LinkToBusinessCard({ compact = false }: Props) {
   const { refetch } = useTeamRole();
   const [bookieCode, setBookieCode] = useState("");
   const [linking, setLinking] = useState(false);
-  const [linkedBusinesses, setLinkedBusinesses] = useState<{ name: string; role: string }[]>([]);
+  const [linkedBusinesses, setLinkedBusinesses] = useState<{ name: string; role: string; status: string }[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -26,7 +26,7 @@ export default function LinkToBusinessCard({ compact = false }: Props) {
       .from("team_members")
       .select("business_user_id, role, status")
       .eq("member_user_id", user.id)
-      .eq("status", "active")
+      .in("status", ["active", "pending"])
       .then(async ({ data }) => {
         if (!data?.length) return;
         const bizIds = data.map((d: any) => d.business_user_id);
@@ -39,6 +39,7 @@ export default function LinkToBusinessCard({ compact = false }: Props) {
           data.map((d: any) => ({
             name: nameMap.get(d.business_user_id) || "Unknown Business",
             role: d.role,
+            status: d.status,
           }))
         );
       });
@@ -80,10 +81,17 @@ export default function LinkToBusinessCard({ compact = false }: Props) {
         return;
       }
 
+      if (existing?.status === "pending") {
+        toast.info("Your request is pending admin approval");
+        setLinking(false);
+        return;
+      }
+
       if (existing) {
+        // Re-request (e.g. was deactivated) — set to pending for admin approval
         await supabase
           .from("team_members")
-          .update({ status: "active", accepted_at: new Date().toISOString() })
+          .update({ status: "pending", member_user_id: user.id })
           .eq("id", existing.id);
       } else {
         await supabase.from("team_members").insert({
@@ -92,17 +100,16 @@ export default function LinkToBusinessCard({ compact = false }: Props) {
           email: user.email || "",
           name: user.email?.split("@")[0] || "Team Member",
           role: "crew" as any,
-          status: "active",
-          accepted_at: new Date().toISOString(),
+          status: "pending",
         });
       }
 
-      toast.success(`Linked to ${bizProfile.business_name || "business"}!`);
+      toast.success(`Request sent to ${bizProfile.business_name || "business"}! Waiting for admin approval.`);
       setBookieCode("");
       refetch();
       setLinkedBusinesses((prev) => [
         ...prev,
-        { name: bizProfile.business_name || "Unknown", role: "crew" },
+        { name: bizProfile.business_name || "Unknown", role: "crew", status: "pending" },
       ]);
     } catch (err: any) {
       toast.error(err.message || "Failed to link");
@@ -118,7 +125,10 @@ export default function LinkToBusinessCard({ compact = false }: Props) {
             {linkedBusinesses.map((b, i) => (
               <div key={i} className="flex items-center justify-between text-xs bg-sidebar-accent px-2 py-1 rounded">
                 <span className="truncate">{b.name}</span>
-                <Badge variant="secondary" className="text-[10px] px-1">{b.role}</Badge>
+                <div className="flex gap-1">
+                  {b.status === "pending" && <Badge variant="outline" className="text-[10px] px-1">pending</Badge>}
+                  <Badge variant="secondary" className="text-[10px] px-1">{b.role}</Badge>
+                </div>
               </div>
             ))}
           </div>
@@ -153,7 +163,10 @@ export default function LinkToBusinessCard({ compact = false }: Props) {
             {linkedBusinesses.map((b, i) => (
               <div key={i} className="flex items-center justify-between text-sm bg-muted px-3 py-1.5 rounded-md">
                 <span>{b.name}</span>
-                <Badge variant="secondary" className="text-xs">{b.role}</Badge>
+                <div className="flex gap-1.5">
+                  {b.status === "pending" && <Badge variant="outline" className="text-xs">⏳ Pending</Badge>}
+                  <Badge variant="secondary" className="text-xs">{b.role}</Badge>
+                </div>
               </div>
             ))}
           </div>
