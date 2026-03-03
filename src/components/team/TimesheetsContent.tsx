@@ -307,10 +307,10 @@ export default function TimesheetsContent() {
                               </TableCell>
                               <TableCell>
                                 {isDraft ? (
-                                  <Select value={entry.job_id || ""} onValueChange={(v) => handleJobChange(entry.id, v)}>
+                                  <Select value={entry.job_id || "none"} onValueChange={(v) => handleJobChange(entry.id, v === "none" ? "" : v)}>
                                     <SelectTrigger className="h-7 text-xs w-28"><SelectValue placeholder="None" /></SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="">None</SelectItem>
+                                      <SelectItem value="none">None</SelectItem>
                                       {jobs.map((j) => (
                                         <SelectItem key={j.id} value={j.id}>{j.title}</SelectItem>
                                       ))}
