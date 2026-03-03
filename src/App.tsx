@@ -29,6 +29,11 @@ import PersonalDeductionsPage from "./pages/PersonalDeductionsPage";
 import PersonalTaxCenterPage from "./pages/PersonalTaxCenterPage";
 import Personal1040Page from "./pages/Personal1040Page";
 import PersonalProfilePage from "./pages/PersonalProfilePage";
+import JobSchedulerPage from "./pages/JobSchedulerPage";
+import TimesheetsPage from "./pages/TimesheetsPage";
+import TeamPage from "./pages/TeamPage";
+import CrewDashboardPage from "./pages/CrewDashboardPage";
+import CrewMapPage from "./pages/CrewMapPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,7 +52,7 @@ const App = () => (
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/account-type" element={<ProtectedRoute><AccountTypePage /></ProtectedRoute>} />
 
-            {/* Business routes */}
+            {/* Business routes (admin) */}
             <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
             <Route path="/import" element={<ProtectedRoute><ImportPage /></ProtectedRoute>} />
             <Route path="/categorization" element={<ProtectedRoute><CategorizationRulesPage /></ProtectedRoute>} />
@@ -61,6 +66,15 @@ const App = () => (
             <Route path="/aging" element={<ProtectedRoute><AgingReportPage /></ProtectedRoute>} />
             <Route path="/reconciliation" element={<ProtectedRoute><ReconciliationPage /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+
+            {/* Shared business routes (admin + manager) */}
+            <Route path="/jobs" element={<ProtectedRoute><JobSchedulerPage /></ProtectedRoute>} />
+            <Route path="/timesheets" element={<ProtectedRoute><TimesheetsPage /></ProtectedRoute>} />
+            <Route path="/team" element={<ProtectedRoute><TeamPage /></ProtectedRoute>} />
+            <Route path="/crew-map" element={<ProtectedRoute><CrewMapPage /></ProtectedRoute>} />
+
+            {/* Crew routes */}
+            <Route path="/crew" element={<ProtectedRoute><CrewDashboardPage /></ProtectedRoute>} />
 
             {/* Personal/Individual routes */}
             <Route path="/personal" element={<ProtectedRoute><PersonalDashboardPage /></ProtectedRoute>} />
