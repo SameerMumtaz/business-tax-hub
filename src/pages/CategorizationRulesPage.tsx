@@ -104,6 +104,8 @@ export default function CategorizationRulesPage() {
         if (total > 0) {
           toast.success(`✨ ${total} transaction${total > 1 ? "s" : ""} auto-categorized (${expenseCount} expense${expenseCount !== 1 ? "s" : ""}, ${salesCount} sale${salesCount !== 1 ? "s" : ""})`);
         }
+        await queryClient.invalidateQueries({ queryKey: ["expenses"] });
+        await queryClient.invalidateQueries({ queryKey: ["sales"] });
       }
     }
   }
@@ -135,6 +137,17 @@ export default function CategorizationRulesPage() {
       const updated = rules.map((r) => r.id === id ? { ...r, category } : r);
       setRules(updated);
       applyRulesToStore(updated);
+
+      // Re-apply all rules to uncategorized transactions
+      if (user) {
+        const { expenseCount, salesCount } = await applyRulesToUncategorized(user.id);
+        const total = expenseCount + salesCount;
+        if (total > 0) {
+          toast.success(`✨ ${total} transaction${total > 1 ? "s" : ""} auto-categorized`);
+        }
+        await queryClient.invalidateQueries({ queryKey: ["expenses"] });
+        await queryClient.invalidateQueries({ queryKey: ["sales"] });
+      }
     }
   }
 
