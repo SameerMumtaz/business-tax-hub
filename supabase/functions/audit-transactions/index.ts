@@ -70,7 +70,7 @@ For each issue found, specify which transaction(s) are affected and suggest a re
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
+          model: "google/gemini-2.5-flash-lite",
           messages: [
             {
               role: "system",
