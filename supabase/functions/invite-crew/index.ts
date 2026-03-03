@@ -24,7 +24,6 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Verify the calling user
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -38,11 +37,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { email, name, role, business_user_id } = await req.json();
+    const { email, name, role, business_user_id, worker_type, pay_rate, address, state_employed } = await req.json();
 
     // Only business owner can invite
     if (user.id !== business_user_id) {
-      // Check if user is a manager of this business
       const adminClient = createClient(supabaseUrl, serviceRoleKey);
       const { data: membership } = await adminClient
         .from("team_members")
@@ -89,8 +87,8 @@ Deno.serve(async (req) => {
       (u: any) => u.email === email
     );
 
-    // Create team_members row
-    const { error: insertError } = await adminClient
+    // Create team_members row with worker_type and pay_rate
+    const { data: teamMember, error: insertError } = await adminClient
       .from("team_members")
       .insert({
         business_user_id,
@@ -100,12 +98,42 @@ Deno.serve(async (req) => {
         email,
         status: existingUser ? "active" : "invited",
         accepted_at: existingUser ? new Date().toISOString() : null,
-      });
+        worker_type: worker_type || "1099",
+        pay_rate: pay_rate || 0,
+      })
+      .select()
+      .single();
 
     if (insertError) {
       return new Response(JSON.stringify({ error: insertError.message }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Auto-create a contractor or employee record for the business owner
+    if (worker_type === "W2") {
+      // Create employee record
+      await adminClient.from("employees").insert({
+        user_id: business_user_id,
+        name,
+        salary: pay_rate || 0,
+        address: address || null,
+        state_employed: state_employed || null,
+        federal_withholding: 0,
+        state_withholding: 0,
+        social_security: 0,
+        medicare: 0,
+      });
+    } else {
+      // Create contractor record (1099)
+      await adminClient.from("contractors").insert({
+        user_id: business_user_id,
+        name,
+        pay_rate: pay_rate || 0,
+        total_paid: 0,
+        address: address || null,
+        state_employed: state_employed || null,
       });
     }
 
