@@ -14,7 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      categorization_rules: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          priority: number
+          type: string
+          vendor_pattern: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          priority?: number
+          type?: string
+          vendor_pattern: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          priority?: number
+          type?: string
+          vendor_pattern?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

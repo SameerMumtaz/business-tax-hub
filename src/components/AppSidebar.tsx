@@ -7,11 +7,13 @@ import {
   FileText,
   DollarSign,
   Upload,
+  Tag,
 } from "lucide-react";
 
 const links = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/import", label: "Import", icon: Upload },
+  { to: "/categorization", label: "Categories", icon: Tag },
   { to: "/sales", label: "Sales", icon: TrendingUp },
   { to: "/expenses", label: "Expenses", icon: TrendingDown },
   { to: "/profit-loss", label: "Profit & Loss", icon: DollarSign },
