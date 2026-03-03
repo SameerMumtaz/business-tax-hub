@@ -26,6 +26,8 @@ interface TeamMember {
   status: string;
   invited_at: string;
   accepted_at: string | null;
+  worker_type: string;
+  pay_rate: number;
 }
 
 export default function TeamPage() {
@@ -44,6 +46,10 @@ export default function TeamPage() {
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<string>("crew");
+  const [inviteWorkerType, setInviteWorkerType] = useState<string>("1099");
+  const [invitePayRate, setInvitePayRate] = useState("");
+  const [inviteAddress, setInviteAddress] = useState("");
+  const [inviteState, setInviteState] = useState("");
   const [sending, setSending] = useState(false);
 
   // Sync tab with URL
@@ -78,11 +84,20 @@ export default function TeamPage() {
     setSending(true);
     try {
       const res = await supabase.functions.invoke("invite-crew", {
-        body: { email: inviteEmail.trim(), name: inviteName.trim(), role: inviteRole, business_user_id: user.id },
+        body: {
+          email: inviteEmail.trim(), name: inviteName.trim(), role: inviteRole,
+          business_user_id: user.id, worker_type: inviteWorkerType,
+          pay_rate: parseFloat(invitePayRate) || 0,
+          address: inviteAddress.trim() || null,
+          state_employed: inviteState.trim() || null,
+        },
       });
       if (res.error) throw res.error;
+      const resData = res.data as any;
+      if (resData?.error) { toast.error(resData.error); return; }
       toast.success(`Invitation sent to ${inviteEmail}`);
       setInviteOpen(false); setInviteName(""); setInviteEmail(""); setInviteRole("crew");
+      setInviteWorkerType("1099"); setInvitePayRate(""); setInviteAddress(""); setInviteState("");
       fetchMembers();
     } catch (err: any) {
       toast.error(err.message || "Failed to send invitation");
@@ -179,6 +194,20 @@ export default function TeamPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                    <Select value={inviteWorkerType} onValueChange={setInviteWorkerType}>
+                      <SelectTrigger><SelectValue placeholder="Worker type" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1099">1099 Contractor</SelectItem>
+                        <SelectItem value="W2">W-2 Salaried</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number" step="0.01" min="0"
+                      placeholder={inviteWorkerType === "1099" ? "Hourly pay rate ($)" : "Annual salary ($)"}
+                      value={invitePayRate} onChange={(e) => setInvitePayRate(e.target.value)}
+                    />
+                    <Input placeholder="Address (optional)" value={inviteAddress} onChange={(e) => setInviteAddress(e.target.value)} />
+                    <Input placeholder="State employed (optional)" value={inviteState} onChange={(e) => setInviteState(e.target.value)} />
                     <Button className="w-full" onClick={handleInvite} disabled={sending}>
                       {sending ? "Sending…" : "Send Invitation"}
                     </Button>
@@ -204,6 +233,8 @@ export default function TeamPage() {
                         <TableHead>Name</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Role</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Pay Rate</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Invited</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
@@ -218,6 +249,16 @@ export default function TeamPage() {
                             <Badge variant={roleBadgeColor(m.role) as any}>
                               <Shield className="h-3 w-3 mr-1" />{m.role}
                             </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={m.worker_type === "W2" ? "secondary" : "outline"}>
+                              {m.worker_type === "W2" ? "W-2 Salaried" : "1099 Contractor"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">
+                            {m.worker_type === "W2"
+                              ? `$${(m.pay_rate || 0).toLocaleString()}/yr`
+                              : `$${(m.pay_rate || 0).toFixed(2)}/hr`}
                           </TableCell>
                           <TableCell><Badge variant={statusBadgeVariant(m.status)}>{m.status}</Badge></TableCell>
                           <TableCell className="text-sm text-muted-foreground">

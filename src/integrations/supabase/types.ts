@@ -896,8 +896,10 @@ export type Database = {
           invited_at: string
           member_user_id: string | null
           name: string
+          pay_rate: number | null
           role: Database["public"]["Enums"]["team_role"]
           status: string
+          worker_type: string
         }
         Insert: {
           accepted_at?: string | null
@@ -908,8 +910,10 @@ export type Database = {
           invited_at?: string
           member_user_id?: string | null
           name: string
+          pay_rate?: number | null
           role?: Database["public"]["Enums"]["team_role"]
           status?: string
+          worker_type?: string
         }
         Update: {
           accepted_at?: string | null
@@ -920,8 +924,10 @@ export type Database = {
           invited_at?: string
           member_user_id?: string | null
           name?: string
+          pay_rate?: number | null
           role?: Database["public"]["Enums"]["team_role"]
           status?: string
+          worker_type?: string
         }
         Relationships: []
       }

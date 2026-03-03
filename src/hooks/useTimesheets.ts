@@ -122,9 +122,30 @@ export function useTimesheets() {
     fetchAll();
   };
 
+  const syncContractorTotals = async (timesheetId: string) => {
+    // Get all entries for this timesheet that are contractors
+    const tsEntries = entries.filter((e) => e.timesheet_id === timesheetId && e.worker_type === "contractor");
+    for (const entry of tsEntries) {
+      // Get current contractor total
+      const { data: contractor } = await supabase
+        .from("contractors")
+        .select("id, total_paid, name")
+        .eq("name", entry.worker_name)
+        .maybeSingle();
+      if (contractor) {
+        await supabase
+          .from("contractors")
+          .update({ total_paid: contractor.total_paid + entry.total_pay })
+          .eq("id", contractor.id);
+      }
+    }
+  };
+
   const submitTimesheet = async (id: string) => {
     const { error } = await supabase.from("timesheets").update({ status: "submitted" }).eq("id", id);
     if (error) { toast.error(error.message); return; }
+    // Sync contractor totals on submit
+    await syncContractorTotals(id);
     toast.success("Timesheet submitted");
     fetchAll();
   };
