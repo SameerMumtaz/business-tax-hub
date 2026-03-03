@@ -47,21 +47,11 @@ serve(async (req) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
+            model: "google/gemini-2.5-flash-lite",
             messages: [
               {
                 role: "system",
-                content: `You are an expert bank statement parser. Extract every individual transaction from the provided bank statement page images. 
-                
-Rules:
-- Extract ONLY actual transactions (debits, credits, deposits, withdrawals, payments, transfers)
-- SKIP headers, footers, account summaries, beginning/ending balances, statement dates, bank logos, page numbers
-- SKIP "balance forward", "opening balance", "closing balance", "total debits", "total credits" rows
-- For each transaction, determine if it's income (credit/deposit) or expense (debit/withdrawal/payment)
-- Use the ORIGINAL description exactly as shown on the statement
-- Dates should be in YYYY-MM-DD format (infer the year from context if only month/day shown)
-- Amounts should be positive numbers (the type field indicates income vs expense)
-- If a running balance column exists, do NOT confuse it with the transaction amount`,
+                content: `Extract every transaction from bank statement images. Return date (YYYY-MM-DD), description (original text), amount (positive number), type (income or expense). Skip balances, headers, footers, summaries.`,
               },
               {
                 role: "user",

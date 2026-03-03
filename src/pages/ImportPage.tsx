@@ -92,59 +92,85 @@ export default function ImportPage() {
     setPdfProgress(0);
 
     try {
-      // Dynamically import pdf.js
       const pdfjsLib = await import("pdfjs-dist");
       pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       const totalPages = Math.min(pdf.numPages, 50);
+
+      // Phase 1: Render all pages to JPEG (fast, CPU-bound)
       setPdfStatus(`Rendering ${totalPages} pages…`);
-
-      // Process pages one-by-one to avoid large payload timeouts
-      const allTransactions: any[] = [];
-      const MAX_RETRIES = 2;
-
+      const pageImages: string[] = [];
       for (let p = 1; p <= totalPages; p++) {
-        setPdfStatus(`Rendering page ${p}/${totalPages}…`);
-        setPdfProgress(Math.round((p / totalPages) * 20)); // 0-20%
-
+        setPdfProgress(Math.round((p / totalPages) * 15));
         const page = await pdf.getPage(p);
-        const viewport = page.getViewport({ scale: 1.2 }); // Smaller payload, still readable
+        const viewport = page.getViewport({ scale: 1.0 });
         const canvas = document.createElement("canvas");
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         const ctx = canvas.getContext("2d")!;
         await page.render({ canvasContext: ctx, viewport }).promise;
-        const pageImage = canvas.toDataURL("image/jpeg", 0.55);
+        pageImages.push(canvas.toDataURL("image/jpeg", 0.5));
         canvas.remove();
-
-        let success = false;
-        for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt++) {
-          setPdfStatus(`AI extracting page ${p}/${totalPages} (attempt ${attempt})…`);
-
-          const { data, error } = await supabase.functions.invoke("parse-pdf", {
-            body: { pages: [pageImage] },
-          });
-
-          if (!error) {
-            if (data?.transactions?.length) allTransactions.push(...data.transactions);
-            success = true;
-            break;
-          }
-
-          console.error(`Page ${p} attempt ${attempt} failed:`, error);
-          if (attempt <= MAX_RETRIES) {
-            await new Promise((resolve) => setTimeout(resolve, 700 * attempt));
-          }
-        }
-
-        if (!success) {
-          toast.error(`Page ${p} failed after retries — continuing`);
-        }
-
-        setPdfProgress(20 + Math.round((p / totalPages) * 70)); // 20-90%
       }
+
+      // Phase 2: Extract transactions via parallel AI calls (2 pages per call, 4 concurrent)
+      const PAGES_PER_CALL = 2;
+      const CONCURRENCY = 4;
+      const allTransactions: any[] = [];
+      let completedChunks = 0;
+
+      // Build chunks of page images
+      const chunks: { images: string[]; label: string }[] = [];
+      for (let i = 0; i < pageImages.length; i += PAGES_PER_CALL) {
+        const imgs = pageImages.slice(i, i + PAGES_PER_CALL);
+        chunks.push({ images: imgs, label: `pages ${i + 1}–${Math.min(i + PAGES_PER_CALL, totalPages)}` });
+      }
+      const totalChunks = chunks.length;
+
+      const processChunk = async (chunk: { images: string[]; label: string }) => {
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            const { data, error } = await supabase.functions.invoke("parse-pdf", {
+              body: { pages: chunk.images },
+            });
+            if (!error && data?.transactions?.length) {
+              return data.transactions;
+            }
+            if (!error) return [];
+            console.error(`${chunk.label} attempt ${attempt} failed:`, error);
+          } catch (e) {
+            console.error(`${chunk.label} attempt ${attempt} error:`, e);
+          }
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 500));
+        }
+        return [];
+      };
+
+      // Run with concurrency limit
+      setPdfStatus(`AI extracting ${totalPages} pages (${CONCURRENCY} parallel)…`);
+      const pending: Promise<void>[] = [];
+      let chunkIdx = 0;
+
+      const launchNext = (): Promise<void> | null => {
+        if (chunkIdx >= totalChunks) return null;
+        const idx = chunkIdx++;
+        const chunk = chunks[idx];
+        return processChunk(chunk).then((txns) => {
+          if (txns.length) allTransactions.push(...txns);
+          completedChunks++;
+          setPdfProgress(15 + Math.round((completedChunks / totalChunks) * 75));
+          setPdfStatus(`Extracted ${completedChunks}/${totalChunks} chunks (${allTransactions.length} txns)…`);
+        });
+      };
+
+      // Seed the pool
+      for (let i = 0; i < Math.min(CONCURRENCY, totalChunks); i++) {
+        const p = launchNext();
+        if (p) pending.push(p.then(async () => { while (chunkIdx < totalChunks) { const next = launchNext(); if (next) await next; } }));
+      }
+      await Promise.all(pending);
 
       if (allTransactions.length === 0) {
         toast.error("No transactions found in the PDF");
