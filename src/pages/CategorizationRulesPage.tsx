@@ -31,6 +31,7 @@ export default function CategorizationRulesPage() {
   const [newPattern, setNewPattern] = useState("");
   const [newCategory, setNewCategory] = useState("Other");
   const [newType, setNewType] = useState<"expense" | "income">("expense");
+  const [customCategoryName, setCustomCategoryName] = useState("");
 
   useEffect(() => {
     fetchRules();
@@ -60,9 +61,15 @@ export default function CategorizationRulesPage() {
       return;
     }
 
+    const resolvedCategory = newCategory === "__custom__" ? customCategoryName.trim() : newCategory;
+    if (!resolvedCategory) {
+      toast.error("Enter a custom category name");
+      return;
+    }
+
     const { error } = await supabase.from("categorization_rules").insert({
       vendor_pattern: newPattern.trim().toLowerCase(),
-      category: newCategory,
+      category: resolvedCategory,
       type: newType,
       priority: 10,
       user_id: user?.id,
@@ -71,8 +78,9 @@ export default function CategorizationRulesPage() {
     if (error) {
       toast.error("Failed to add rule");
     } else {
-      toast.success(`Rule added: "${newPattern}" → ${newCategory}`);
+      toast.success(`Rule added: "${newPattern}" → ${resolvedCategory}`);
       setNewPattern("");
+      setCustomCategoryName("");
       const { data } = await supabase.from("categorization_rules").select("*").order("priority", { ascending: false });
       const updated = data || [];
       setRules(updated);
@@ -165,15 +173,27 @@ export default function CategorizationRulesPage() {
             </div>
             <div className="w-[200px]">
               <label className="text-xs text-muted-foreground mb-1 block">Category</label>
-              <Select value={newCategory} onValueChange={setNewCategory}>
+              <Select value={newCategory} onValueChange={(v) => { setNewCategory(v); if (v !== "__custom__") setCustomCategoryName(""); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {categories.map((c) => (
                     <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
+                  <SelectItem value="__custom__">Custom…</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            {newCategory === "__custom__" && (
+              <div className="min-w-[180px]">
+                <label className="text-xs text-muted-foreground mb-1 block">Custom name</label>
+                <Input
+                  placeholder="e.g. Equipment Rental"
+                  value={customCategoryName}
+                  onChange={(e) => setCustomCategoryName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addRule()}
+                />
+              </div>
+            )}
             <Button onClick={addRule}>Add Rule</Button>
           </div>
         </div>
