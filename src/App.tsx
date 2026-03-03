@@ -8,6 +8,7 @@ import { DateRangeProvider } from "@/contexts/DateRangeContext";
 import ProtectedRoute, { ProfileGateProvider } from "@/components/ProtectedRoute";
 import AuthPage from "./pages/AuthPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
+import AccountTypePage from "./pages/AccountTypePage";
 import DashboardPage from "./pages/DashboardPage";
 import SalesPage from "./pages/SalesPage";
 import ExpensesPage from "./pages/ExpensesPage";
@@ -21,6 +22,7 @@ import InvoicesPage from "./pages/InvoicesPage";
 import ClientsPage from "./pages/ClientsPage";
 import AgingReportPage from "./pages/AgingReportPage";
 import ReconciliationPage from "./pages/ReconciliationPage";
+import PersonalDashboardPage from "./pages/PersonalDashboardPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,6 +39,9 @@ const App = () => (
           <Routes>
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/account-type" element={<ProtectedRoute><AccountTypePage /></ProtectedRoute>} />
+
+            {/* Business routes */}
             <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
             <Route path="/import" element={<ProtectedRoute><ImportPage /></ProtectedRoute>} />
             <Route path="/categorization" element={<ProtectedRoute><CategorizationRulesPage /></ProtectedRoute>} />
@@ -50,6 +55,10 @@ const App = () => (
             <Route path="/aging" element={<ProtectedRoute><AgingReportPage /></ProtectedRoute>} />
             <Route path="/reconciliation" element={<ProtectedRoute><ReconciliationPage /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+
+            {/* Personal/Individual routes */}
+            <Route path="/personal" element={<ProtectedRoute><PersonalDashboardPage /></ProtectedRoute>} />
+
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
