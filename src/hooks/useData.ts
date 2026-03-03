@@ -123,6 +123,7 @@ export function useSales() {
         description: r.description || "",
         amount: Number(r.amount),
         invoiceNumber: r.invoice_number || "",
+        category: (r.category || "Other") as ExpenseCategory,
       })) as Sale[];
     },
   });
@@ -140,7 +141,19 @@ export function useAddSale() {
         description: sale.description,
         amount: sale.amount,
         invoice_number: sale.invoiceNumber,
+        category: sale.category || "Other",
       });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sales"] }),
+  });
+}
+
+export function useUpdateSale() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (update: { id: string; category?: string }) => {
+      const { error } = await supabase.from("sales").update({ category: update.category }).eq("id", update.id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["sales"] }),

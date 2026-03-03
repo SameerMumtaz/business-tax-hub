@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { useSales, useAddSale, useRemoveSale, useBulkRemoveSales, useExpenses } from "@/hooks/useData";
+import { useSales, useAddSale, useRemoveSale, useUpdateSale, useBulkRemoveSales, useExpenses } from "@/hooks/useData";
 import { formatCurrency } from "@/lib/format";
 import { invalidateRulesCache } from "@/lib/categorize";
 import { useAuth } from "@/hooks/useAuth";
@@ -12,8 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { EXPENSE_CATEGORIES } from "@/types/tax";
 import StatCard from "@/components/StatCard";
-import { Plus, Trash2, ArrowDownLeft, ArrowUpRight, Activity, Wallet, ArrowUpDown, ArrowUp, ArrowDown, Tag, Search, ShieldAlert } from "lucide-react";
+import { Plus, Trash2, ArrowDownLeft, ArrowUpRight, Activity, Wallet, ArrowUpDown, ArrowUp, ArrowDown, Tag, Search, ShieldAlert, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { auditSales, AuditResult } from "@/lib/audit";
 import AuditIssuesPanel from "@/components/AuditIssuesPanel";
@@ -23,9 +24,9 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { EXPENSE_CATEGORIES } from "@/types/tax";
 
-type SortField = "date" | "client" | "invoiceNumber" | "amount" | "description";
+
+type SortField = "date" | "client" | "invoiceNumber" | "amount" | "description" | "category";
 type SortDir = "asc" | "desc";
 
 export default function SalesPage() {
@@ -34,6 +35,7 @@ export default function SalesPage() {
   const { user } = useAuth();
   const addSale = useAddSale();
   const removeSale = useRemoveSale();
+  const updateSale = useUpdateSale();
   const bulkRemove = useBulkRemoveSales();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ date: "", client: "", description: "", amount: "", invoiceNumber: "" });
@@ -42,6 +44,7 @@ export default function SalesPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [auditResult, setAuditResult] = useState<AuditResult | null>(null);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
 
   const searchedSales = useMemo(() => {
     if (!searchQuery.trim()) return sales;
@@ -67,6 +70,7 @@ export default function SalesPage() {
       date: form.date, client: form.client, description: form.description,
       amount: parseFloat(form.amount),
       invoiceNumber: form.invoiceNumber || `INV-${Date.now().toString().slice(-4)}`,
+      category: "Other",
     }, {
       onSuccess: () => { setForm({ date: "", client: "", description: "", amount: "", invoiceNumber: "" }); setOpen(false); toast.success("Sale added"); },
       onError: () => toast.error("Failed to add sale"),
@@ -91,6 +95,7 @@ export default function SalesPage() {
         case "client": cmp = a.client.localeCompare(b.client); break;
         case "invoiceNumber": cmp = (a.invoiceNumber || "").localeCompare(b.invoiceNumber || ""); break;
         case "description": cmp = a.description.localeCompare(b.description); break;
+        case "category": cmp = a.category.localeCompare(b.category); break;
         case "amount": cmp = a.amount - b.amount; break;
       }
       return sortDir === "asc" ? cmp : -cmp;
@@ -296,6 +301,9 @@ export default function SalesPage() {
                     <th className="cursor-pointer select-none" onClick={() => toggleSort("description")}>
                       <span className="inline-flex items-center">Description<SortIcon field="description" /></span>
                     </th>
+                    <th className="cursor-pointer select-none" onClick={() => toggleSort("category")}>
+                      <span className="inline-flex items-center">Category<SortIcon field="category" /></span>
+                    </th>
                     <th className="text-right cursor-pointer select-none" onClick={() => toggleSort("amount")}>
                       <span className="inline-flex items-center justify-end">Amount<SortIcon field="amount" /></span>
                     </th>
@@ -315,6 +323,33 @@ export default function SalesPage() {
                       <td className="font-mono text-xs">{s.invoiceNumber}</td>
                       <td className="font-medium">{s.client}</td>
                       <td className="text-muted-foreground">{s.description}</td>
+                      <td>
+                        {editingCategoryId === s.id ? (
+                          <Select
+                            value={s.category}
+                            onValueChange={(v) => {
+                              updateSale.mutate({ id: s.id, category: v }, {
+                                onSuccess: () => { toast.success("Category updated"); setEditingCategoryId(null); },
+                              });
+                            }}
+                          >
+                            <SelectTrigger className="h-7 text-xs w-[150px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <button
+                            onClick={() => setEditingCategoryId(s.id)}
+                            className="group flex items-center gap-1"
+                          >
+                            <Badge variant="secondary" className="text-xs font-normal">{s.category}</Badge>
+                            <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </button>
+                        )}
+                      </td>
                       <td className="text-right font-mono text-chart-positive">{formatCurrency(s.amount)}</td>
                       <td>
                         <Button variant="ghost" size="icon" onClick={() => { removeSale.mutate(s.id); toast.success("Removed"); }}>

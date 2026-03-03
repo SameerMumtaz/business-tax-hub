@@ -1,0 +1,1 @@
+ALTER TABLE public.sales ADD COLUMN category text NOT NULL DEFAULT 'Other';

@@ -719,6 +719,7 @@ export default function ImportPage() {
             description: t.originalDescription,
             amount: t.amount,
             invoiceNumber: `IMP-${Date.now().toString().slice(-4)}`,
+            category: t.category || "Other",
           });
           saleCount++;
         }

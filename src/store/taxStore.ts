@@ -33,11 +33,11 @@ const demoExpenses: Expense[] = [
 ];
 
 const demoSales: Sale[] = [
-  { id: "s1", date: "2026-01-10", client: "Acme Corp", description: "Website redesign", amount: 15000, invoiceNumber: "INV-001" },
-  { id: "s2", date: "2026-01-25", client: "TechStart Inc", description: "Mobile app development", amount: 28000, invoiceNumber: "INV-002" },
-  { id: "s3", date: "2026-02-08", client: "Global Retail Co", description: "E-commerce integration", amount: 12500, invoiceNumber: "INV-003" },
-  { id: "s4", date: "2026-02-18", client: "HealthFirst", description: "Dashboard analytics", amount: 9800, invoiceNumber: "INV-004" },
-  { id: "s5", date: "2026-03-01", client: "EduLearn", description: "LMS platform", amount: 22000, invoiceNumber: "INV-005" },
+  { id: "s1", date: "2026-01-10", client: "Acme Corp", description: "Website redesign", amount: 15000, invoiceNumber: "INV-001", category: "Other" },
+  { id: "s2", date: "2026-01-25", client: "TechStart Inc", description: "Mobile app development", amount: 28000, invoiceNumber: "INV-002", category: "Other" },
+  { id: "s3", date: "2026-02-08", client: "Global Retail Co", description: "E-commerce integration", amount: 12500, invoiceNumber: "INV-003", category: "Other" },
+  { id: "s4", date: "2026-02-18", client: "HealthFirst", description: "Dashboard analytics", amount: 9800, invoiceNumber: "INV-004", category: "Other" },
+  { id: "s5", date: "2026-03-01", client: "EduLearn", description: "LMS platform", amount: 22000, invoiceNumber: "INV-005", category: "Other" },
 ];
 
 const demoContractors: Contractor[] = [
