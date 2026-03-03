@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { invalidateRulesCache } from "@/lib/categorize";
+import { useTaxStore } from "@/store/taxStore";
 import { EXPENSE_CATEGORIES, ExpenseCategory } from "@/types/tax";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,10 +30,21 @@ export default function CategorizationRulesPage() {
   const [newPattern, setNewPattern] = useState("");
   const [newCategory, setNewCategory] = useState("Other");
   const [newType, setNewType] = useState<"expense" | "income">("expense");
+  const recategorizeAll = useTaxStore((s) => s.recategorizeAll);
 
   useEffect(() => {
     fetchRules();
   }, []);
+
+  /** Re-apply all current rules to stored expenses */
+  function applyRulesToStore(currentRules: Rule[]) {
+    invalidateRulesCache();
+    recategorizeAll(currentRules.map((r) => ({
+      vendor_pattern: r.vendor_pattern,
+      category: r.category,
+      type: r.type,
+    })));
+  }
 
   async function fetchRules() {
     setLoading(true);
@@ -64,10 +76,12 @@ export default function CategorizationRulesPage() {
     if (error) {
       toast.error("Failed to add rule");
     } else {
-      invalidateRulesCache();
       toast.success(`Rule added: "${newPattern}" → ${newCategory}`);
       setNewPattern("");
-      fetchRules();
+      const { data } = await supabase.from("categorization_rules").select("*").order("priority", { ascending: false });
+      const updated = data || [];
+      setRules(updated);
+      applyRulesToStore(updated);
     }
   }
 
@@ -80,7 +94,9 @@ export default function CategorizationRulesPage() {
       toast.error("Failed to delete rule");
     } else {
       toast.success("Rule deleted");
-      setRules((prev) => prev.filter((r) => r.id !== id));
+      const updated = rules.filter((r) => r.id !== id);
+      setRules(updated);
+      applyRulesToStore(updated);
     }
   }
 
@@ -93,7 +109,9 @@ export default function CategorizationRulesPage() {
       toast.error("Failed to update rule");
     } else {
       toast.success(`Category updated to ${category}`);
-      setRules((prev) => prev.map((r) => r.id === id ? { ...r, category } : r));
+      const updated = rules.map((r) => r.id === id ? { ...r, category } : r);
+      setRules(updated);
+      applyRulesToStore(updated);
     }
   }
 
