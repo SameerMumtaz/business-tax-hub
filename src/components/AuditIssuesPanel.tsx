@@ -3,19 +3,20 @@ import { AuditIssue, AuditResult } from "@/lib/audit";
 import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ShieldAlert, Ban, AlertTriangle, Info, Trash2, X, Eye, FileText } from "lucide-react";
+import { ShieldAlert, Ban, AlertTriangle, Info, Trash2, Eye, FileText, Zap } from "lucide-react";
 
 interface AuditIssuesPanelProps {
   result: AuditResult;
-  /** Map of id → display label (e.g. vendor name or client name) */
   getItemLabel: (id: string) => { date: string; label: string; amount: number } | null;
   onDeleteItems?: (ids: string[]) => void;
   onSelectItems?: (ids: string[]) => void;
   /** Called when user wants to create an invoice for a specific sale id */
   onCreateInvoice?: (saleId: string) => void;
+  /** Called when user wants to batch-create invoices for all unmatched sale ids */
+  onBatchCreateInvoices?: (saleIds: string[]) => void;
 }
 
-export default function AuditIssuesPanel({ result, getItemLabel, onDeleteItems, onSelectItems, onCreateInvoice }: AuditIssuesPanelProps) {
+export default function AuditIssuesPanel({ result, getItemLabel, onDeleteItems, onSelectItems, onCreateInvoice, onBatchCreateInvoices }: AuditIssuesPanelProps) {
   const [dismissedIssues, setDismissedIssues] = useState<Set<number>>(new Set());
 
   const dismiss = (idx: number) => {
@@ -40,11 +41,18 @@ export default function AuditIssuesPanel({ result, getItemLabel, onDeleteItems, 
           <ShieldAlert className="h-4 w-4 text-destructive" />
           CPA Audit Issues ({activeIssues.length} remaining)
         </h3>
-        {result.riskLevel && (
-          <Badge variant={result.riskLevel === "high" ? "destructive" : result.riskLevel === "medium" ? "secondary" : "outline"}>
-            Risk: {result.riskLevel}
-          </Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {result.riskLevel && (
+            <Badge variant={result.riskLevel === "high" ? "destructive" : result.riskLevel === "medium" ? "secondary" : "outline"}>
+              Risk: {result.riskLevel}
+            </Badge>
+          )}
+          {result.totalDollarImpact > 0 && (
+            <Badge variant="outline" className="text-[10px] font-mono">
+              {formatCurrency(result.totalDollarImpact)} impacted
+            </Badge>
+          )}
+        </div>
       </div>
       <p className="text-xs text-muted-foreground bg-muted/50 rounded p-2">{result.summary}</p>
 
@@ -70,6 +78,11 @@ export default function AuditIssuesPanel({ result, getItemLabel, onDeleteItems, 
                     >
                       {issue.severity}
                     </Badge>
+                    {issue.dollarImpact > 0 && (
+                      <Badge variant="outline" className="text-[10px] font-mono">
+                        {formatCurrency(issue.dollarImpact)}
+                      </Badge>
+                    )}
                     {issue.irs_reference && (
                       <Badge variant="outline" className="text-[10px] font-mono">{issue.irs_reference}</Badge>
                     )}
@@ -80,7 +93,18 @@ export default function AuditIssuesPanel({ result, getItemLabel, onDeleteItems, 
                     <p className="text-xs text-chart-warning font-medium">💰 Tax impact: {issue.tax_impact}</p>
                   )}
                 </div>
-                <div className="flex gap-1 shrink-0">
+                <div className="flex gap-1 shrink-0 flex-wrap">
+                  {/* Batch create invoices button for missing_invoice issues */}
+                  {issue.type === "missing_invoice" && onBatchCreateInvoices && issue.affected_ids.length > 1 && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="text-xs h-7"
+                      onClick={() => onBatchCreateInvoices(issue.affected_ids)}
+                    >
+                      <Zap className="h-3 w-3 mr-1" /> Create All ({issue.affected_ids.length})
+                    </Button>
+                  )}
                   {onSelectItems && issue.affected_ids.length > 0 && (
                     <Button
                       variant="outline"
@@ -118,7 +142,12 @@ export default function AuditIssuesPanel({ result, getItemLabel, onDeleteItems, 
               {/* Affected items */}
               {issue.affected_ids.length > 0 && (
                 <div className="ml-7 space-y-1">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Affected transactions</p>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                    Affected transactions
+                    {issue.type === "missing_invoice" && onCreateInvoice && (
+                      <span className="ml-1 text-primary normal-case">(click to create invoice)</span>
+                    )}
+                  </p>
                   <div className="flex flex-col gap-0.5">
                     {issue.affected_ids.slice(0, 8).map((id) => {
                       const item = getItemLabel(id);
@@ -127,14 +156,14 @@ export default function AuditIssuesPanel({ result, getItemLabel, onDeleteItems, 
                       return (
                         <div
                           key={id}
-                          className={`flex items-center gap-2 text-xs px-2 py-1 rounded transition-colors ${isInvoiceIssue ? "hover:bg-primary/10 cursor-pointer" : "hover:bg-background/60"}`}
+                          className={`flex items-center gap-2 text-xs px-2 py-1 rounded transition-colors ${isInvoiceIssue ? "hover:bg-primary/10 cursor-pointer group" : "hover:bg-background/60"}`}
                           onClick={isInvoiceIssue ? () => onCreateInvoice(id) : undefined}
                         >
                           <span className="font-mono text-muted-foreground w-20 shrink-0">{item.date}</span>
                           <span className="truncate flex-1">{item.label}</span>
                           <span className="font-mono shrink-0">{formatCurrency(item.amount)}</span>
                           {isInvoiceIssue && (
-                            <FileText className="h-3 w-3 text-primary shrink-0" />
+                            <FileText className="h-3 w-3 text-primary shrink-0 opacity-50 group-hover:opacity-100" />
                           )}
                         </div>
                       );

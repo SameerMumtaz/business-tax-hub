@@ -10,6 +10,8 @@ export interface AuditIssue {
   suggestion_detail: string;
   tax_impact?: string;
   irs_reference?: string;
+  /** Dollar amount of affected transactions for priority sorting */
+  dollarImpact: number;
 }
 
 export interface AuditResult {
@@ -17,9 +19,13 @@ export interface AuditResult {
   summary: string;
   riskLevel: "low" | "medium" | "high" | "";
   estimatedTax: string;
+  /** Total dollar value across all issues */
+  totalDollarImpact: number;
 }
 
 const PERSONAL_RX = /\b(netflix|hulu|disney\+?|spotify|apple music|gym|fitness|personal|grocery|groceries|whole foods|trader joe|planet fitness|peloton|amazon prime|youtube premium|audible|kindle unlimited)\b/i;
+
+const SEVERITY_WEIGHT: Record<string, number> = { high: 3, medium: 2, low: 1 };
 
 export function auditExpenses(expenses: Expense[]): AuditResult {
   const issues: AuditIssue[] = [];
@@ -28,12 +34,11 @@ export function auditExpenses(expenses: Expense[]): AuditResult {
   const seen = new Map<string, Expense[]>();
   for (const e of expenses) {
     const key = `${e.date}|${e.amount.toFixed(2)}`;
-    const group = seen.get(key) || [];
-    group.push(e);
-    seen.set(key, group);
+    (seen.get(key) || (seen.set(key, []), seen.get(key)!)).push(e);
   }
   for (const [, group] of seen) {
     if (group.length >= 2) {
+      const total = group.reduce((s, e) => s + e.amount, 0);
       issues.push({
         type: "duplicate", severity: "medium",
         title: `Possible duplicate: ${group[0].vendor.slice(0, 40)}`,
@@ -41,6 +46,7 @@ export function auditExpenses(expenses: Expense[]): AuditResult {
         affected_ids: group.map((e) => e.id),
         suggestion: "review",
         suggestion_detail: "Review these — they may be duplicates from overlapping statement periods.",
+        dollarImpact: total,
       });
     }
   }
@@ -48,6 +54,7 @@ export function auditExpenses(expenses: Expense[]): AuditResult {
   // 2. Uncategorized
   const uncategorized = expenses.filter((e) => e.category === "Other");
   if (uncategorized.length > 0) {
+    const total = uncategorized.reduce((s, e) => s + e.amount, 0);
     issues.push({
       type: "miscategorized", severity: uncategorized.length > 10 ? "high" : "medium",
       title: `${uncategorized.length} expense(s) uncategorized`,
@@ -55,6 +62,7 @@ export function auditExpenses(expenses: Expense[]): AuditResult {
       affected_ids: uncategorized.slice(0, 10).map((e) => e.id),
       suggestion: "recategorize",
       suggestion_detail: "Edit categories or create categorization rules to auto-assign them.",
+      dollarImpact: total,
     });
   }
 
@@ -70,12 +78,14 @@ export function auditExpenses(expenses: Expense[]): AuditResult {
       affected_ids: [e.id],
       suggestion: "review",
       suggestion_detail: "Verify this amount is correct and properly categorized.",
+      dollarImpact: e.amount,
     });
   }
 
   // 4. Personal expenses
   const personal = expenses.filter((e) => PERSONAL_RX.test(e.vendor) || PERSONAL_RX.test(e.description));
   if (personal.length > 0) {
+    const total = personal.reduce((s, e) => s + e.amount, 0);
     issues.push({
       type: "personal_expense", severity: "high",
       title: `${personal.length} possible personal expense(s)`,
@@ -84,12 +94,14 @@ export function auditExpenses(expenses: Expense[]): AuditResult {
       suggestion: "review",
       suggestion_detail: "Exclude personal expenses from business deductions or document the business purpose.",
       irs_reference: "IRC §262",
+      dollarImpact: total,
     });
   }
 
   // 5. Round-number expenses
   const roundExpenses = expenses.filter((e) => e.amount >= 500 && e.amount % 100 === 0);
   if (roundExpenses.length > 3) {
+    const total = roundExpenses.reduce((s, e) => s + e.amount, 0);
     issues.push({
       type: "documentation", severity: "low",
       title: `${roundExpenses.length} round-number expenses`,
@@ -97,6 +109,7 @@ export function auditExpenses(expenses: Expense[]): AuditResult {
       affected_ids: roundExpenses.slice(0, 5).map((e) => e.id),
       suggestion: "review",
       suggestion_detail: "Ensure you have receipts for these amounts.",
+      dollarImpact: total,
     });
   }
 
@@ -111,6 +124,7 @@ export function auditExpenses(expenses: Expense[]): AuditResult {
   }
   const over600 = Array.from(totalByVendor.entries()).filter(([, v]) => v.total >= 600);
   if (over600.length > 0) {
+    const total = over600.reduce((s, [, v]) => s + v.total, 0);
     issues.push({
       type: "1099_compliance", severity: "medium",
       title: `${over600.length} vendor(s) over $600 — may need 1099`,
@@ -119,10 +133,11 @@ export function auditExpenses(expenses: Expense[]): AuditResult {
       suggestion: "file_1099",
       suggestion_detail: "Check if these vendors are contractors and collect W-9s.",
       irs_reference: "IRC §6041",
+      dollarImpact: total,
     });
   }
 
-  return buildResult(issues, expenses.reduce((s, e) => s + e.amount, 0));
+  return buildResult(issues);
 }
 
 export function auditSales(sales: Sale[], expenses: Expense[], matchedSaleIds?: Set<string>): AuditResult {
@@ -132,12 +147,11 @@ export function auditSales(sales: Sale[], expenses: Expense[], matchedSaleIds?: 
   const seen = new Map<string, Sale[]>();
   for (const s of sales) {
     const key = `${s.date}|${s.amount.toFixed(2)}`;
-    const group = seen.get(key) || [];
-    group.push(s);
-    seen.set(key, group);
+    (seen.get(key) || (seen.set(key, []), seen.get(key)!)).push(s);
   }
   for (const [, group] of seen) {
     if (group.length >= 2) {
+      const total = group.reduce((s, r) => s + r.amount, 0);
       issues.push({
         type: "duplicate", severity: "medium",
         title: `Possible duplicate: ${group[0].client.slice(0, 40)}`,
@@ -145,6 +159,7 @@ export function auditSales(sales: Sale[], expenses: Expense[], matchedSaleIds?: 
         affected_ids: group.map((s) => s.id),
         suggestion: "review",
         suggestion_detail: "Review these — they may be duplicate entries.",
+        dollarImpact: total,
       });
     }
   }
@@ -161,6 +176,7 @@ export function auditSales(sales: Sale[], expenses: Expense[], matchedSaleIds?: 
       affected_ids: [s.id],
       suggestion: "review",
       suggestion_detail: "Verify this amount is correct and properly documented.",
+      dollarImpact: s.amount,
     });
   }
 
@@ -169,13 +185,15 @@ export function auditSales(sales: Sale[], expenses: Expense[], matchedSaleIds?: 
     ? sales.filter((s) => !matchedSaleIds.has(s.id))
     : sales.filter((s) => !s.invoiceNumber || s.invoiceNumber.startsWith("IMP-"));
   if (unmatchedSales.length > 0) {
+    const total = unmatchedSales.reduce((s, r) => s + r.amount, 0);
     issues.push({
       type: "missing_invoice", severity: "medium",
       title: `${unmatchedSales.length} sale(s) without a matched invoice`,
-      description: "Income without proper invoice documentation may complicate IRS audits and revenue tracking.",
+      description: `${formatDollar(total)} in income without proper invoice documentation.`,
       affected_ids: unmatchedSales.map((s) => s.id),
       suggestion: "create_invoice",
-      suggestion_detail: "Create invoices for these sales to maintain proper documentation and enable reconciliation.",
+      suggestion_detail: "Click a sale below to create an invoice, or use 'Create All' to batch-generate invoices for all unmatched sales.",
+      dollarImpact: total,
     });
   }
 
@@ -187,18 +205,20 @@ export function auditSales(sales: Sale[], expenses: Expense[], matchedSaleIds?: 
     const estQuarterly = Math.round(net * 0.3 / 4);
     issues.push({
       type: "estimated_tax", severity: "medium",
-      title: `Estimated quarterly tax: ~$${estQuarterly.toLocaleString()}`,
-      description: `Net income of $${Math.round(net).toLocaleString()} may require quarterly estimated tax payments.`,
+      title: `Estimated quarterly tax: ~${formatDollar(estQuarterly)}`,
+      description: `Net income of ${formatDollar(Math.round(net))} may require quarterly estimated tax payments.`,
       affected_ids: [],
       suggestion: "review",
       suggestion_detail: "Use the Tax Center to calculate and track quarterly payments.",
       irs_reference: "IRC §6654",
+      dollarImpact: estQuarterly,
     });
   }
 
   // 5. Round-number sales
   const roundSales = sales.filter((s) => s.amount >= 1000 && s.amount % 100 === 0);
   if (roundSales.length > 5) {
+    const total = roundSales.reduce((s, r) => s + r.amount, 0);
     issues.push({
       type: "documentation", severity: "low",
       title: `${roundSales.length} round-number sales`,
@@ -206,22 +226,37 @@ export function auditSales(sales: Sale[], expenses: Expense[], matchedSaleIds?: 
       affected_ids: roundSales.slice(0, 5).map((s) => s.id),
       suggestion: "review",
       suggestion_detail: "Ensure each sale is documented with an invoice.",
+      dollarImpact: total,
     });
   }
 
-  return buildResult(issues, totalIncome);
+  return buildResult(issues);
 }
 
-function buildResult(issues: AuditIssue[], totalAmount: number): AuditResult {
+function formatDollar(n: number): string {
+  return `$${n.toLocaleString()}`;
+}
+
+function buildResult(issues: AuditIssue[]): AuditResult {
+  // Sort by severity weight × dollar impact (highest first)
+  issues.sort((a, b) => {
+    const scoreA = (SEVERITY_WEIGHT[a.severity] || 1) * a.dollarImpact;
+    const scoreB = (SEVERITY_WEIGHT[b.severity] || 1) * b.dollarImpact;
+    return scoreB - scoreA;
+  });
+
   const riskLevel = issues.some((i) => i.severity === "high") ? "high"
     : issues.some((i) => i.severity === "medium") ? "medium"
     : issues.length > 0 ? "low" : "";
+  const totalDollarImpact = issues.reduce((s, i) => s + i.dollarImpact, 0);
+
   return {
     issues,
     summary: issues.length === 0
       ? "No issues detected — your data looks clean!"
-      : `Found ${issues.length} issue(s) to review.`,
+      : `Found ${issues.length} issue(s) affecting ${formatDollar(Math.round(totalDollarImpact))} — sorted by priority.`,
     riskLevel,
     estimatedTax: "",
+    totalDollarImpact,
   };
 }
