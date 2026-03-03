@@ -28,6 +28,7 @@ export interface Invoice {
   total: number;
   share_token: string | null;
   matched_sale_id: string | null;
+  client_id: string | null;
   created_at: string;
   updated_at: string;
   line_items?: InvoiceLineItem[];
@@ -71,6 +72,7 @@ export function useAddInvoice() {
       invoice_number: string;
       client_name: string;
       client_email?: string;
+      client_id?: string;
       issue_date: string;
       due_date?: string;
       notes?: string;
@@ -89,6 +91,7 @@ export function useAddInvoice() {
           invoice_number: input.invoice_number,
           client_name: input.client_name,
           client_email: input.client_email || null,
+          client_id: input.client_id || null,
           issue_date: input.issue_date,
           due_date: input.due_date || null,
           notes: input.notes || null,

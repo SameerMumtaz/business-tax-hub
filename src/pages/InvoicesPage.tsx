@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useInvoices, useAddInvoice, useUpdateInvoiceStatus, useDeleteInvoice, useMatchInvoiceToSale, Invoice } from "@/hooks/useInvoices";
+import { useClients } from "@/hooks/useClients";
 import { useSales } from "@/hooks/useData";
 import { formatCurrency } from "@/lib/format";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -23,6 +24,7 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
 export default function InvoicesPage() {
   const { data: invoices = [] } = useInvoices();
   const { data: sales = [] } = useSales();
+  const { data: clients = [] } = useClients();
   const addInvoice = useAddInvoice();
   const updateStatus = useUpdateInvoiceStatus();
   const deleteInvoice = useDeleteInvoice();
@@ -37,12 +39,20 @@ export default function InvoicesPage() {
     invoice_number: "",
     client_name: "",
     client_email: "",
+    client_id: "",
     issue_date: new Date().toISOString().slice(0, 10),
     due_date: "",
     notes: "",
     tax_rate: "0",
     line_items: [{ description: "", quantity: "1", unit_price: "" }] as { description: string; quantity: string; unit_price: string }[],
   });
+
+  const handleSelectClient = (clientId: string) => {
+    const client = clients.find(c => c.id === clientId);
+    if (client) {
+      setForm({ ...form, client_id: clientId, client_name: client.name, client_email: client.email || "" });
+    }
+  };
 
   const addLineItem = () => setForm({ ...form, line_items: [...form.line_items, { description: "", quantity: "1", unit_price: "" }] });
   const removeLineItem = (i: number) => setForm({ ...form, line_items: form.line_items.filter((_, idx) => idx !== i) });
@@ -64,6 +74,7 @@ export default function InvoicesPage() {
       invoice_number: form.invoice_number,
       client_name: form.client_name,
       client_email: form.client_email || undefined,
+      client_id: form.client_id || undefined,
       issue_date: form.issue_date,
       due_date: form.due_date || undefined,
       notes: form.notes || undefined,
@@ -75,7 +86,7 @@ export default function InvoicesPage() {
       })),
     }, {
       onSuccess: () => {
-        setForm({ invoice_number: "", client_name: "", client_email: "", issue_date: new Date().toISOString().slice(0, 10), due_date: "", notes: "", tax_rate: "0", line_items: [{ description: "", quantity: "1", unit_price: "" }] });
+        setForm({ invoice_number: "", client_name: "", client_email: "", client_id: "", issue_date: new Date().toISOString().slice(0, 10), due_date: "", notes: "", tax_rate: "0", line_items: [{ description: "", quantity: "1", unit_price: "" }] });
         setCreateOpen(false);
         toast.success("Invoice created");
       },
@@ -197,6 +208,14 @@ ${inv.notes ? `\nNotes: ${inv.notes}` : ""}
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
                     <Input placeholder="Invoice # *" value={form.invoice_number} onChange={e => setForm({ ...form, invoice_number: e.target.value })} />
+                    <div>
+                      <Select value={form.client_id} onValueChange={handleSelectClient}>
+                        <SelectTrigger><SelectValue placeholder="Select Saved Client" /></SelectTrigger>
+                        <SelectContent>
+                          {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}{c.email ? ` (${c.email})` : ""}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <Input placeholder="Client Name *" value={form.client_name} onChange={e => setForm({ ...form, client_name: e.target.value })} />
                     <Input placeholder="Client Email" value={form.client_email} onChange={e => setForm({ ...form, client_email: e.target.value })} />
                     <Input type="date" value={form.issue_date} onChange={e => setForm({ ...form, issue_date: e.target.value })} />

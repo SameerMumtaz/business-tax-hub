@@ -44,6 +44,42 @@ export type Database = {
         }
         Relationships: []
       }
+      clients: {
+        Row: {
+          address: string | null
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       contractors: {
         Row: {
           address: string | null
@@ -202,6 +238,7 @@ export type Database = {
       invoices: {
         Row: {
           client_email: string | null
+          client_id: string | null
           client_name: string
           created_at: string
           due_date: string | null
@@ -221,6 +258,7 @@ export type Database = {
         }
         Insert: {
           client_email?: string | null
+          client_id?: string | null
           client_name: string
           created_at?: string
           due_date?: string | null
@@ -240,6 +278,7 @@ export type Database = {
         }
         Update: {
           client_email?: string | null
+          client_id?: string | null
           client_name?: string
           created_at?: string
           due_date?: string | null
@@ -258,6 +297,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "invoices_matched_sale_id_fkey"
             columns: ["matched_sale_id"]

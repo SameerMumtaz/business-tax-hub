@@ -12,6 +12,7 @@ import {
   LogOut,
   Calculator,
   Users,
+  UserCircle,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ const links = [
   { to: "/categorization", label: "Categories", icon: Tag },
   { to: "/sales", label: "Sales", icon: TrendingUp },
   { to: "/invoices", label: "Invoices", icon: FileText },
+  { to: "/clients", label: "Clients", icon: UserCircle },
   { to: "/expenses", label: "Expenses", icon: TrendingDown },
   { to: "/profit-loss", label: "Profit & Loss", icon: DollarSign },
   { to: "/tax-center", label: "Tax Center", icon: Calculator },
