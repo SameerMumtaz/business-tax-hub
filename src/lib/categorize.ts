@@ -11,6 +11,7 @@ export interface CategorizationResult {
 interface CategorizeInput {
   id: string;
   description: string;
+  originalDescription?: string;
   type: "income" | "expense";
 }
 
@@ -40,10 +41,24 @@ function matchRule(
   type: string,
   rules: { vendor_pattern: string; category: string; type: string }[]
 ): string | null {
+  // Clean the description the same way we clean for keyword matching
+  const cleaned = cleanForMatching(description);
   const lower = description.toLowerCase();
   for (const rule of rules) {
-    if (rule.type === type && lower.includes(rule.vendor_pattern.toLowerCase())) {
+    if (rule.type !== type) continue;
+    const pattern = rule.vendor_pattern.toLowerCase().trim();
+    if (!pattern) continue;
+    // Match against both the raw lowercase AND the cleaned version
+    if (lower.includes(pattern) || cleaned.includes(pattern)) {
       return rule.category;
+    }
+    // Also try word-boundary-style matching for short patterns
+    // e.g. pattern "qt" should match "qt outside pay" but not "equity"
+    if (pattern.length <= 3) {
+      const wordRegex = new RegExp(`\\b${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      if (wordRegex.test(lower) || wordRegex.test(cleaned)) {
+        return rule.category;
+      }
     }
   }
   return null;
@@ -392,6 +407,8 @@ function cacheKey(desc: string, type: string) {
 export async function categorizeTransactions(
   items: CategorizeInput[],
 ): Promise<CategorizationResult[]> {
+  // Always clear session cache before categorizing to ensure fresh rule matches
+  sessionCache.clear();
   const rules = await fetchRules();
   const results: CategorizationResult[] = [];
 
@@ -403,7 +420,9 @@ export async function categorizeTransactions(
       continue;
     }
 
-    const ruleMatch = matchRule(item.description, item.type, rules);
+    // Try matching rules against both cleaned description and original description
+    const ruleMatch = matchRule(item.description, item.type, rules) 
+      || (item.originalDescription ? matchRule(item.originalDescription, item.type, rules) : null);
     if (ruleMatch) {
       const r: CategorizationResult = { id: item.id, category: ruleMatch, confidence: 1, source: "rule" };
       results.push(r);
@@ -411,7 +430,9 @@ export async function categorizeTransactions(
       continue;
     }
 
-    const kwMatch = matchKeyword(item.description, item.type);
+    // Also try keyword matching against both descriptions
+    const kwMatch = matchKeyword(item.description, item.type)
+      || (item.originalDescription ? matchKeyword(item.originalDescription, item.type) : null);
     if (kwMatch) {
       const r: CategorizationResult = { id: item.id, category: kwMatch.category, confidence: kwMatch.confidence, source: "keyword" };
       results.push(r);
@@ -419,6 +440,7 @@ export async function categorizeTransactions(
       continue;
     }
 
+    // Don't cache "Other" — allows re-categorization to work if rules are added later
     results.push({ id: item.id, category: "Other", confidence: 0, source: "keyword" });
   }
 
