@@ -241,22 +241,37 @@ function LinkToBusinessSection() {
           email: user.email!,
           name: user.email!.split("@")[0],
           role: "crew" as const,
-          status: "active",
-          accepted_at: new Date().toISOString(),
+          status: "pending",
         });
       if (insertError) {
-        toast.error("Failed to link");
+        toast.error("Failed to send request");
         setLinking(false);
         return;
       }
-    } else {
+    } else if (existing) {
+      // Check if already active or pending
+      const { data: existingFull } = await supabase
+        .from("team_members")
+        .select("id, status")
+        .eq("id", (existing as any).id)
+        .single();
+      if (existingFull?.status === "active") {
+        toast.info("Already linked to this business");
+        setLinking(false);
+        return;
+      }
+      if (existingFull?.status === "pending") {
+        toast.info("Your request is pending admin approval");
+        setLinking(false);
+        return;
+      }
       await supabase
         .from("team_members")
-        .update({ member_user_id: user.id, status: "active", accepted_at: new Date().toISOString() })
-        .eq("id", existing.id);
+        .update({ member_user_id: user.id, status: "pending" })
+        .eq("id", (existing as any).id);
     }
 
-    toast.success(`Linked to ${(bizProfile as any).business_name || "business"}!`);
+    toast.success(`Request sent to ${(bizProfile as any).business_name || "business"}! Waiting for admin approval.`);
     setBookieCode("");
     setLinkedBusinesses((prev) => [...prev, { name: (bizProfile as any).business_name || "Unnamed Business", id: bizProfile.user_id }]);
     setLinking(false);

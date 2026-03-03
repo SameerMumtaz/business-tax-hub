@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { UserPlus, Shield, Users, DollarSign, History, MoreHorizontal, Pencil, RefreshCw, Copy, Trash2 } from "lucide-react";
+import { UserPlus, Shield, Users, DollarSign, History, MoreHorizontal, Pencil, RefreshCw, Copy, Trash2, CheckCircle, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/format";
 
@@ -131,8 +131,28 @@ export default function MembersContent() {
     toast.success("Member deactivated"); fetchMembers();
   };
   const handleReactivate = async (id: string) => {
-    await supabase.from("team_members").update({ status: "active" }).eq("id", id);
+    await supabase.from("team_members").update({ status: "active", accepted_at: new Date().toISOString() }).eq("id", id);
     toast.success("Member reactivated"); fetchMembers();
+  };
+  const handleApprove = async (member: TeamMember) => {
+    await supabase.from("team_members").update({ status: "active", accepted_at: new Date().toISOString() }).eq("id", member.id);
+    // Auto-create contractor/employee record
+    if (!user) return;
+    if (member.worker_type === "W2") {
+      await supabase.from("employees").upsert({
+        user_id: user.id, name: member.name, salary: member.pay_rate || 0,
+        federal_withholding: 0, state_withholding: 0, social_security: 0, medicare: 0,
+      }, { onConflict: "user_id,name" as any, ignoreDuplicates: true });
+    } else {
+      await supabase.from("contractors").upsert({
+        user_id: user.id, name: member.name, pay_rate: member.pay_rate || 0, total_paid: 0,
+      }, { onConflict: "user_id,name" as any, ignoreDuplicates: true });
+    }
+    toast.success(`${member.name} approved!`); fetchMembers();
+  };
+  const handleReject = async (id: string) => {
+    await supabase.from("team_members").delete().eq("id", id);
+    toast.success("Request rejected"); fetchMembers();
   };
 
   // --- Edit member + sync contractor/employee ---
@@ -357,7 +377,8 @@ export default function MembersContent() {
 
   const roleBadgeColor = (role: string) => role === "admin" ? "default" : role === "manager" ? "secondary" : "outline";
   const statusBadgeVariant = (status: string) =>
-    status === "active" ? "default" as const : status === "invited" ? "secondary" as const : "destructive" as const;
+    status === "active" ? "default" as const : status === "invited" ? "secondary" as const : status === "pending" ? "outline" as const : "destructive" as const;
+  const pendingMembers = members.filter((m) => m.status === "pending");
   const canInviteRole = currentRole === "admin" ? ["manager", "crew"] : ["crew"];
 
   return (
@@ -429,6 +450,36 @@ export default function MembersContent() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Pending join requests banner */}
+      {pendingMembers.length > 0 && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-primary" />
+              {pendingMembers.length} Pending Join Request{pendingMembers.length > 1 ? "s" : ""}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {pendingMembers.map((m) => (
+              <div key={m.id} className="flex items-center justify-between bg-background rounded-md px-3 py-2">
+                <div>
+                  <span className="font-medium text-sm">{m.name}</span>
+                  <span className="text-xs text-muted-foreground ml-2">{m.email}</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="default" className="h-7 gap-1" onClick={() => handleApprove(m)}>
+                    <CheckCircle className="h-3.5 w-3.5" /> Approve
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 gap-1 text-destructive hover:text-destructive" onClick={() => handleReject(m.id)}>
+                    <XCircle className="h-3.5 w-3.5" /> Reject
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Edit Member Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
@@ -648,6 +699,19 @@ export default function MembersContent() {
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleCopyInviteLink(m)}>
                                 <Copy className="h-3.5 w-3.5 mr-2" /> Copy Invite Link
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                          {m.status === "pending" && (
+                            <>
+                              <DropdownMenuItem onClick={() => handleApprove(m)}>
+                                <CheckCircle className="h-3.5 w-3.5 mr-2" /> Approve Request
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleReject(m.id)}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <XCircle className="h-3.5 w-3.5 mr-2" /> Reject Request
                               </DropdownMenuItem>
                             </>
                           )}
