@@ -32,16 +32,27 @@ const QUARTERLY_DATES = [
 
 const SCHEDULE_C_LINES: { line: string; label: string; key: string }[] = [
   { line: "8", label: "Advertising", key: "Marketing" },
+  { line: "9", label: "Car and truck expenses", key: "Vehicle & Gas" },
+  { line: "9", label: "Vehicle repairs and maintenance", key: "Vehicle Maintenance" },
+  { line: "10", label: "Commissions and fees", key: "Commissions & Fees" },
+  { line: "11", label: "Contract labor", key: "Contract Labor" },
   { line: "13", label: "Depreciation and section 179 expense", key: "Equipment" },
   { line: "15", label: "Insurance (other than health)", key: "Insurance" },
+  { line: "16a", label: "Interest (mortgage)", key: "Interest & Bank Fees" },
   { line: "17", label: "Legal and professional services", key: "Professional Services" },
   { line: "18", label: "Office expense", key: "Office Supplies" },
   { line: "20b", label: "Rent — Business property", key: "Rent" },
+  { line: "21", label: "Repairs and maintenance", key: "Repairs & Maintenance" },
+  { line: "22", label: "Supplies", key: "Supplies & Materials" },
+  { line: "23", label: "Taxes and licenses", key: "Taxes & Licenses" },
   { line: "24a", label: "Travel", key: "Travel" },
   { line: "24b", label: "Deductible meals (50%)", key: "Meals & Entertainment" },
   { line: "25", label: "Utilities", key: "Utilities" },
   { line: "26", label: "Wages", key: "Payroll" },
-  { line: "27a", label: "Other expenses (Software/SaaS)", key: "Software & SaaS" },
+  { line: "27a", label: "Education and training", key: "Education & Training" },
+  { line: "27a", label: "Shipping and postage", key: "Shipping & Postage" },
+  { line: "27a", label: "Software and SaaS", key: "Software & SaaS" },
+  { line: "30", label: "Business use of home", key: "Home Office" },
   { line: "27b", label: "Other expenses", key: "Other" },
 ];
 

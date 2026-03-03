@@ -10,6 +10,17 @@ export type ExpenseCategory =
   | "Equipment"
   | "Rent"
   | "Payroll"
+  | "Vehicle & Gas"
+  | "Vehicle Maintenance"
+  | "Contract Labor"
+  | "Repairs & Maintenance"
+  | "Taxes & Licenses"
+  | "Interest & Bank Fees"
+  | "Supplies & Materials"
+  | "Shipping & Postage"
+  | "Education & Training"
+  | "Commissions & Fees"
+  | "Home Office"
   | "Other";
 
 export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
@@ -24,6 +35,17 @@ export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   "Equipment",
   "Rent",
   "Payroll",
+  "Vehicle & Gas",
+  "Vehicle Maintenance",
+  "Contract Labor",
+  "Repairs & Maintenance",
+  "Taxes & Licenses",
+  "Interest & Bank Fees",
+  "Supplies & Materials",
+  "Shipping & Postage",
+  "Education & Training",
+  "Commissions & Fees",
+  "Home Office",
   "Other",
 ];
 
