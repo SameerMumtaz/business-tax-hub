@@ -101,6 +101,10 @@ export default function useSalesLogic() {
 
   const sorted = useMemo(() => {
     return [...searchedSales].sort((a, b) => {
+      // Selected items float to top
+      const aSelected = selected.has(a.id) ? 0 : 1;
+      const bSelected = selected.has(b.id) ? 0 : 1;
+      if (aSelected !== bSelected) return aSelected - bSelected;
       let cmp = 0;
       switch (sortField) {
         case "date": cmp = a.date.localeCompare(b.date); break;
@@ -112,13 +116,13 @@ export default function useSalesLogic() {
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [searchedSales, sortField, sortDir]);
+  }, [searchedSales, sortField, sortDir, selected]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const paginatedRows = sorted.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
 
   const toggleSelect = (id: string) => setSelected((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
-  const selectItems = (ids: string[]) => setSelected(new Set(ids));
+  const selectItems = (ids: string[]) => { setSelected(new Set(ids)); setCurrentPage(0); };
   const toggleAll = () => { if (selected.size === sorted.length) setSelected(new Set()); else setSelected(new Set(sorted.map((s) => s.id))); };
 
   const handleBulkDelete = () => {
