@@ -172,6 +172,7 @@ export type Database = {
           date: string
           description: string | null
           id: string
+          receipt_url: string | null
           user_id: string
           vendor: string
         }
@@ -182,6 +183,7 @@ export type Database = {
           date: string
           description?: string | null
           id?: string
+          receipt_url?: string | null
           user_id: string
           vendor: string
         }
@@ -192,6 +194,7 @@ export type Database = {
           date?: string
           description?: string | null
           id?: string
+          receipt_url?: string | null
           user_id?: string
           vendor?: string
         }
@@ -228,6 +231,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "invoice_line_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          date_paid: string
+          id: string
+          invoice_id: string
+          method: string | null
+          notes: string | null
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          date_paid: string
+          id?: string
+          invoice_id: string
+          method?: string | null
+          notes?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          date_paid?: string
+          id?: string
+          invoice_id?: string
+          method?: string | null
+          notes?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_payments_invoice_id_fkey"
             columns: ["invoice_id"]
             isOneToOne: false
             referencedRelation: "invoices"
@@ -379,6 +423,42 @@ export type Database = {
           ein_last4?: string | null
           id?: string
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      quarterly_tax_payments: {
+        Row: {
+          amount_paid: number
+          created_at: string
+          date_paid: string
+          id: string
+          notes: string | null
+          payment_type: string
+          quarter: number
+          tax_year: number
+          user_id: string
+        }
+        Insert: {
+          amount_paid?: number
+          created_at?: string
+          date_paid: string
+          id?: string
+          notes?: string | null
+          payment_type?: string
+          quarter: number
+          tax_year?: number
+          user_id: string
+        }
+        Update: {
+          amount_paid?: number
+          created_at?: string
+          date_paid?: string
+          id?: string
+          notes?: string | null
+          payment_type?: string
+          quarter?: number
+          tax_year?: number
           user_id?: string
         }
         Relationships: []

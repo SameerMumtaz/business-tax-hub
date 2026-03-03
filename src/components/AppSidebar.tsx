@@ -15,6 +15,7 @@ import {
   Users,
   UserCircle,
   ChevronDown,
+  Clock,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ const links: NavItem[] = [
     children: [
       { to: "/invoices", label: "Invoices", icon: FileText },
       { to: "/clients", label: "Clients", icon: UserCircle },
+      { to: "/aging", label: "A/R Aging", icon: Clock },
     ],
   },
   { to: "/expenses", label: "Expenses", icon: TrendingDown },
@@ -48,7 +50,7 @@ export default function AppSidebar() {
   const location = useLocation();
   const { user, signOut } = useAuth();
 
-  const salesPaths = ["/sales", "/invoices", "/clients"];
+  const salesPaths = ["/sales", "/invoices", "/clients", "/aging"];
   const isSalesActive = salesPaths.includes(location.pathname);
   const [salesOpen, setSalesOpen] = useState(isSalesActive);
 

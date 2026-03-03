@@ -1,29 +1,33 @@
 import { useMemo, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useExpenses, useSales, useProfile } from "@/hooks/useData";
-import { calculateWithholdings, STATE_RATES } from "@/lib/taxCalc";
+import { useDateRange } from "@/contexts/DateRangeContext";
+import { useQuarterlyPayments, useAddQuarterlyPayment, useDeleteQuarterlyPayment } from "@/hooks/useQuarterlyPayments";
+import { calculateWithholdings, calculateQBI, calculateHomeOffice, calculateMileageDeduction, STATE_RATES, FilingStatus, FILING_STATUS_LABELS, MILEAGE_RATE_2026 } from "@/lib/taxCalc";
 import { formatCurrency } from "@/lib/format";
+import DateRangeFilter from "@/components/DateRangeFilter";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Calculator, Calendar, DollarSign, Landmark, FileText, Printer } from "lucide-react";
+import { Calculator, Calendar, DollarSign, Landmark, FileText, Printer, Home, Car, Percent, Trash2, Plus, Check } from "lucide-react";
 import { toast } from "sonner";
 
 const SE_RATE = 0.153;
 const SE_FACTOR = 0.9235;
 const QUARTERLY_DATES = [
-  { label: "Q1", due: "Apr 15, 2026" },
-  { label: "Q2", due: "Jun 15, 2026" },
-  { label: "Q3", due: "Sep 15, 2026" },
-  { label: "Q4", due: "Jan 15, 2027" },
+  { label: "Q1", due: "Apr 15, 2026", quarter: 1 },
+  { label: "Q2", due: "Jun 15, 2026", quarter: 2 },
+  { label: "Q3", due: "Sep 15, 2026", quarter: 3 },
+  { label: "Q4", due: "Jan 15, 2027", quarter: 4 },
 ];
 
-// Schedule C line items
 const SCHEDULE_C_LINES: { line: string; label: string; key: string }[] = [
   { line: "8", label: "Advertising", key: "Marketing" },
   { line: "13", label: "Depreciation and section 179 expense", key: "Equipment" },
@@ -45,28 +49,71 @@ function escapeHtml(str: string): string {
 function fmt$(n: number) { return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
 export default function TaxCenterPage() {
-  const { data: expenses = [] } = useExpenses();
-  const { data: sales = [] } = useSales();
+  const { data: allExpenses = [] } = useExpenses();
+  const { data: allSales = [] } = useSales();
   const { data: profile } = useProfile();
+  const { filterByDate } = useDateRange();
+  const { data: qPayments = [] } = useQuarterlyPayments();
+  const addQPayment = useAddQuarterlyPayment();
+  const deleteQPayment = useDeleteQuarterlyPayment();
+
+  const expenses = useMemo(() => filterByDate(allExpenses), [allExpenses, filterByDate]);
+  const sales = useMemo(() => filterByDate(allSales), [allSales, filterByDate]);
+
   const state = profile?.business_state || "CA";
 
+  // ── Deductions & settings ──
+  const [filingStatus, setFilingStatus] = useState<FilingStatus>("single");
+  const [qbiEnabled, setQbiEnabled] = useState(true);
+  const [homeOfficeSqft, setHomeOfficeSqft] = useState(0);
+  const [businessMiles, setBusinessMiles] = useState(0);
+  const [paymentForm, setPaymentForm] = useState({ quarter: "", amount: "", date: "" });
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+
   /* ── Tax Estimate ── */
-  const { netIncome, seTax, federalTax, stateTax, totalLiability } = useMemo(() => {
+  const taxCalc = useMemo(() => {
     const totalRevenue = sales.reduce((s, r) => s + r.amount, 0);
     const totalExpenses = expenses.reduce((s, r) => s + r.amount, 0);
-    const net = totalRevenue - totalExpenses;
+    const homeOfficeDeduction = calculateHomeOffice(homeOfficeSqft);
+    const mileageDeduction = calculateMileageDeduction(businessMiles);
+    const net = totalRevenue - totalExpenses - homeOfficeDeduction - mileageDeduction;
     const seBase = Math.max(0, net * SE_FACTOR);
     const se = Math.round(seBase * SE_RATE * 100) / 100;
-    const adjustedIncome = Math.max(0, net - se / 2);
-    const w = calculateWithholdings(adjustedIncome, state);
-    return { netIncome: net, seTax: se, federalTax: w.federalWithholding, stateTax: w.stateWithholding, totalLiability: w.federalWithholding + w.stateWithholding + se };
-  }, [expenses, sales, state]);
+    const qbiDeduction = qbiEnabled ? calculateQBI(net, filingStatus) : 0;
+    const adjustedIncome = Math.max(0, net - se / 2 - qbiDeduction);
+    const w = calculateWithholdings(adjustedIncome, state, filingStatus);
+    const totalLiability = w.federalWithholding + w.stateWithholding + se;
+    return { netIncome: net, seTax: se, federalTax: w.federalWithholding, stateTax: w.stateWithholding, totalLiability, qbiDeduction, homeOfficeDeduction, mileageDeduction };
+  }, [expenses, sales, state, filingStatus, qbiEnabled, homeOfficeSqft, businessMiles]);
 
-  const quarterlyPayment = Math.round((totalLiability / 4) * 100) / 100;
+  const quarterlyPayment = Math.round((taxCalc.totalLiability / 4) * 100) / 100;
   const now = new Date();
   const yearStart = new Date(2026, 0, 1);
   const yearEnd = new Date(2026, 11, 31);
   const yearProgress = Math.min(100, Math.max(0, ((now.getTime() - yearStart.getTime()) / (yearEnd.getTime() - yearStart.getTime())) * 100));
+
+  // Quarterly payments by quarter
+  const paidByQuarter = useMemo(() => {
+    const map: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    qPayments.forEach((p) => { map[p.quarter] = (map[p.quarter] || 0) + p.amount_paid; });
+    return map;
+  }, [qPayments]);
+  const totalPaid = Object.values(paidByQuarter).reduce((s, v) => s + v, 0);
+
+  const handleAddPayment = () => {
+    if (!paymentForm.quarter || !paymentForm.amount || !paymentForm.date) { toast.error("Fill all fields"); return; }
+    addQPayment.mutate({
+      quarter: parseInt(paymentForm.quarter),
+      amount_paid: parseFloat(paymentForm.amount),
+      date_paid: paymentForm.date,
+      tax_year: 2026,
+      payment_type: "federal",
+      notes: null,
+    }, {
+      onSuccess: () => { toast.success("Payment recorded"); setPaymentForm({ quarter: "", amount: "", date: "" }); setShowPaymentForm(false); },
+      onError: () => toast.error("Failed to record"),
+    });
+  };
 
   /* ── Schedule C ── */
   const [ssnDialog, setSsnDialog] = useState(false);
@@ -88,7 +135,7 @@ export default function TaxCenterPage() {
     const businessAddress = profile ? [profile.business_address, profile.business_city, profile.business_state, profile.business_zip].filter(Boolean).join(", ") : "";
     const ein = fullEin || (profile?.ein_last4 ? `**-***${profile.ein_last4}` : "");
     const lineRows = lineItems.filter((l) => l.amount > 0).map((l) => `<tr><td style="padding:6px 10px;border-bottom:1px solid #e5e5e5;font-size:11px;color:#666;">Line ${escapeHtml(l.line)}</td><td style="padding:6px 10px;border-bottom:1px solid #e5e5e5;">${escapeHtml(l.label)}</td><td style="padding:6px 10px;border-bottom:1px solid #e5e5e5;text-align:right;font-family:'Courier New',monospace;">$${fmt$(l.amount)}</td></tr>`).join("\n");
-    const html = `<!DOCTYPE html><html><head><title>Schedule C - ${businessName} ${taxYear}</title><style>@page{size:letter;margin:0.5in}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Courier New',monospace;font-size:11px;color:#000;background:#fff;padding:0.5in}.form{border:2px solid #000;max-width:7.5in;margin:0 auto}.header{background:#2d5016;color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center}.header h1{font-size:18px;font-weight:bold;letter-spacing:1px}.header .year{font-size:28px;font-weight:bold;color:#e8e8e8}.header .sub{font-size:9px;color:#ccc;margin-top:2px}.section{border-bottom:1px solid #000}.section-label{background:#f0f0f0;padding:6px 10px;font-size:9px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #000}.info-grid{display:grid;grid-template-columns:1fr 1fr}.info-cell{padding:8px 10px;border-right:1px solid #ccc;border-bottom:1px solid #ccc}.info-cell:nth-child(even){border-right:none}.info-label{font-size:8px;color:#666;text-transform:uppercase;margin-bottom:3px;letter-spacing:0.5px}.info-value{font-size:12px;font-weight:bold}table{width:100%;border-collapse:collapse}th{text-align:left;padding:6px 10px;font-size:9px;text-transform:uppercase;color:#666;border-bottom:2px solid #000}th:last-child{text-align:right}.total-row{font-weight:bold;font-size:13px;border-top:2px solid #000}.total-row td{padding:10px}.net-row{font-size:16px;font-weight:bold;background:#f7f7f0}.net-row td{padding:12px 10px}.footer{padding:10px;font-size:8px;color:#666;text-align:center;border-top:1px solid #ccc}@media print{body{padding:0}.no-print{display:none}}</style></head><body><div class="no-print" style="text-align:center;margin-bottom:20px;"><button onclick="window.print()" style="padding:10px 24px;font-size:14px;cursor:pointer;background:#2d5016;color:#fff;border:none;border-radius:4px;">Print / Save as PDF</button></div><div class="form"><div class="header"><div><h1>Schedule C (Form 1040)</h1><div class="sub">Profit or Loss From Business (Sole Proprietorship)</div></div><div class="year">${taxYear}</div></div><div class="section"><div class="section-label">Taxpayer / Business Information</div><div class="info-grid"><div class="info-cell"><div class="info-label">Name of proprietor</div><div class="info-value">${escapeHtml(businessName)}</div></div><div class="info-cell"><div class="info-label">Social Security Number</div><div class="info-value">${escapeHtml(fullSsn)}</div></div><div class="info-cell"><div class="info-label">Business Name (DBA)</div><div class="info-value">${escapeHtml(businessName)}</div></div><div class="info-cell"><div class="info-label">Employer ID Number (EIN)</div><div class="info-value">${escapeHtml(ein)}</div></div><div class="info-cell" style="grid-column:1/-1;border-right:none;"><div class="info-label">Business Address</div><div class="info-value">${escapeHtml(businessAddress)}</div></div></div></div><div class="section"><div class="section-label">Part I — Income</div><table><tr><td style="padding:8px 10px;font-size:11px;color:#666;">Line 1</td><td style="padding:8px 10px;">Gross receipts or sales</td><td style="padding:8px 10px;text-align:right;font-family:'Courier New',monospace;font-weight:bold;font-size:14px;">$${fmt$(totalRevenue)}</td></tr><tr class="total-row"><td></td><td>Line 7 — Gross income</td><td style="text-align:right;font-family:'Courier New',monospace;">$${fmt$(totalRevenue)}</td></tr></table></div><div class="section"><div class="section-label">Part II — Expenses</div><table><thead><tr><th>Line</th><th>Description</th><th>Amount</th></tr></thead><tbody>${lineRows}<tr class="total-row"><td></td><td>Line 28 — Total expenses</td><td style="text-align:right;font-family:'Courier New',monospace;">$${fmt$(totalExpensesC)}</td></tr></tbody></table></div><div class="section"><table><tr class="net-row"><td colspan="2">Line 31 — Net profit (or loss)</td><td style="text-align:right;font-family:'Courier New',monospace;color:${netProfit >= 0 ? '#2d5016' : '#dc2626'};">$${fmt$(netProfit)}</td></tr></table></div><div class="footer">Schedule C (Form 1040) ${taxYear} &bull; Generated by TaxDash &bull; For informational purposes — verify with a tax professional</div></div></body></html>`;
+    const html = `<!DOCTYPE html><html><head><title>Schedule C - ${businessName} ${taxYear}</title><style>@page{size:letter;margin:0.5in}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Courier New',monospace;font-size:11px;color:#000;background:#fff;padding:0.5in}.form{border:2px solid #000;max-width:7.5in;margin:0 auto}.header{background:#2d5016;color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center}.header h1{font-size:18px;font-weight:bold;letter-spacing:1px}.header .year{font-size:28px;font-weight:bold;color:#e8e8e8}.section{border-bottom:1px solid #000}.section-label{background:#f0f0f0;padding:6px 10px;font-size:9px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #000}.info-grid{display:grid;grid-template-columns:1fr 1fr}.info-cell{padding:8px 10px;border-right:1px solid #ccc;border-bottom:1px solid #ccc}.info-cell:nth-child(even){border-right:none}.info-label{font-size:8px;color:#666;text-transform:uppercase;margin-bottom:3px;letter-spacing:0.5px}.info-value{font-size:12px;font-weight:bold}table{width:100%;border-collapse:collapse}th{text-align:left;padding:6px 10px;font-size:9px;text-transform:uppercase;color:#666;border-bottom:2px solid #000}th:last-child{text-align:right}.total-row{font-weight:bold;font-size:13px;border-top:2px solid #000}.total-row td{padding:10px}.net-row{font-size:16px;font-weight:bold;background:#f7f7f0}.net-row td{padding:12px 10px}.footer{padding:10px;font-size:8px;color:#666;text-align:center;border-top:1px solid #ccc}@media print{body{padding:0}.no-print{display:none}}</style></head><body><div class="no-print" style="text-align:center;margin-bottom:20px;"><button onclick="window.print()" style="padding:10px 24px;font-size:14px;cursor:pointer;background:#2d5016;color:#fff;border:none;border-radius:4px;">Print / Save as PDF</button></div><div class="form"><div class="header"><div><h1>Schedule C (Form 1040)</h1><div class="sub" style="font-size:9px;color:#ccc;margin-top:2px;">Profit or Loss From Business (Sole Proprietorship)</div></div><div class="year">${taxYear}</div></div><div class="section"><div class="section-label">Taxpayer / Business Information</div><div class="info-grid"><div class="info-cell"><div class="info-label">Name of proprietor</div><div class="info-value">${escapeHtml(businessName)}</div></div><div class="info-cell"><div class="info-label">Social Security Number</div><div class="info-value">${escapeHtml(fullSsn)}</div></div><div class="info-cell"><div class="info-label">Business Name (DBA)</div><div class="info-value">${escapeHtml(businessName)}</div></div><div class="info-cell"><div class="info-label">Employer ID Number (EIN)</div><div class="info-value">${escapeHtml(ein)}</div></div><div class="info-cell" style="grid-column:1/-1;border-right:none;"><div class="info-label">Business Address</div><div class="info-value">${escapeHtml(businessAddress)}</div></div></div></div><div class="section"><div class="section-label">Part I — Income</div><table><tr><td style="padding:8px 10px;font-size:11px;color:#666;">Line 1</td><td style="padding:8px 10px;">Gross receipts or sales</td><td style="padding:8px 10px;text-align:right;font-family:'Courier New',monospace;font-weight:bold;font-size:14px;">$${fmt$(totalRevenue)}</td></tr><tr class="total-row"><td></td><td>Line 7 — Gross income</td><td style="text-align:right;font-family:'Courier New',monospace;">$${fmt$(totalRevenue)}</td></tr></table></div><div class="section"><div class="section-label">Part II — Expenses</div><table><thead><tr><th>Line</th><th>Description</th><th>Amount</th></tr></thead><tbody>${lineRows}<tr class="total-row"><td></td><td>Line 28 — Total expenses</td><td style="text-align:right;font-family:'Courier New',monospace;">$${fmt$(totalExpensesC)}</td></tr></tbody></table></div><div class="section"><table><tr class="net-row"><td colspan="2">Line 31 — Net profit (or loss)</td><td style="text-align:right;font-family:'Courier New',monospace;color:${netProfit >= 0 ? '#2d5016' : '#dc2626'};">$${fmt$(netProfit)}</td></tr></table></div><div class="footer">Schedule C (Form 1040) ${taxYear} &bull; Generated by TaxDash &bull; For informational purposes — verify with a tax professional</div></div></body></html>`;
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const w = window.open(url, "_blank");
@@ -101,42 +148,70 @@ export default function TaxCenterPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Tax Center</h1>
-          <p className="text-muted-foreground text-sm mt-1">Tax liability estimates, quarterly payments & Schedule C</p>
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Tax Center</h1>
+            <p className="text-muted-foreground text-sm mt-1">Tax liability estimates, quarterly payments & Schedule C</p>
+          </div>
+          <DateRangeFilter />
         </div>
 
         <Tabs defaultValue="estimate">
           <TabsList>
             <TabsTrigger value="estimate">Tax Estimate</TabsTrigger>
+            <TabsTrigger value="deductions">Deductions</TabsTrigger>
             <TabsTrigger value="schedule-c">Schedule C</TabsTrigger>
           </TabsList>
 
           {/* ── Tax Estimate Tab ── */}
           <TabsContent value="estimate" className="space-y-8 mt-4">
+            {/* Filing status & QBI */}
+            <div className="flex flex-wrap items-center gap-4 bg-muted/50 rounded-lg p-4">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-muted-foreground">Filing Status:</label>
+                <Select value={filingStatus} onValueChange={(v) => setFilingStatus(v as FilingStatus)}>
+                  <SelectTrigger className="h-8 w-[200px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(FILING_STATUS_LABELS).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch checked={qbiEnabled} onCheckedChange={setQbiEnabled} />
+                <label className="text-xs font-medium text-muted-foreground">QBI Deduction (§199A)</label>
+                {qbiEnabled && taxCalc.qbiDeduction > 0 && (
+                  <span className="text-xs font-mono text-chart-positive">-{formatCurrency(taxCalc.qbiDeduction)}</span>
+                )}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="stat-card animate-fade-in">
                 <div className="flex items-center justify-between mb-3"><span className="text-sm font-medium text-muted-foreground">Net Income</span><DollarSign className="h-4 w-4 text-muted-foreground" /></div>
-                <p className={`text-2xl font-semibold font-mono tracking-tight ${netIncome >= 0 ? "text-chart-positive" : "text-chart-negative"}`}>{formatCurrency(netIncome)}</p>
+                <p className={`text-2xl font-semibold font-mono tracking-tight ${taxCalc.netIncome >= 0 ? "text-chart-positive" : "text-chart-negative"}`}>{formatCurrency(taxCalc.netIncome)}</p>
               </div>
               <div className="stat-card animate-fade-in">
                 <div className="flex items-center justify-between mb-3"><span className="text-sm font-medium text-muted-foreground">Federal Tax</span><Landmark className="h-4 w-4 text-muted-foreground" /></div>
-                <p className="text-2xl font-semibold font-mono tracking-tight text-foreground">{formatCurrency(federalTax)}</p>
+                <p className="text-2xl font-semibold font-mono tracking-tight text-foreground">{formatCurrency(taxCalc.federalTax)}</p>
               </div>
               <div className="stat-card animate-fade-in">
                 <div className="flex items-center justify-between mb-3"><span className="text-sm font-medium text-muted-foreground">State Tax ({state})</span><Landmark className="h-4 w-4 text-muted-foreground" /></div>
-                <p className="text-2xl font-semibold font-mono tracking-tight text-foreground">{formatCurrency(stateTax)}</p>
+                <p className="text-2xl font-semibold font-mono tracking-tight text-foreground">{formatCurrency(taxCalc.stateTax)}</p>
               </div>
               <div className="stat-card animate-fade-in">
                 <div className="flex items-center justify-between mb-3"><span className="text-sm font-medium text-muted-foreground">SE Tax (15.3%)</span><Calculator className="h-4 w-4 text-muted-foreground" /></div>
-                <p className="text-2xl font-semibold font-mono tracking-tight text-foreground">{formatCurrency(seTax)}</p>
+                <p className="text-2xl font-semibold font-mono tracking-tight text-foreground">{formatCurrency(taxCalc.seTax)}</p>
               </div>
             </div>
 
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
-                  <DollarSign className="h-5 w-5" />Total Estimated Liability: {formatCurrency(totalLiability)}
+                  <DollarSign className="h-5 w-5" />Total Estimated Liability: {formatCurrency(taxCalc.totalLiability)}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -144,22 +219,182 @@ export default function TaxCenterPage() {
                   <div className="flex justify-between text-sm text-muted-foreground mb-2"><span>Tax Year Progress</span><span>{yearProgress.toFixed(0)}%</span></div>
                   <Progress value={yearProgress} />
                 </div>
-                <p className="text-sm text-muted-foreground">Accrued liability estimate: {formatCurrency(totalLiability * yearProgress / 100)} of {formatCurrency(totalLiability)}</p>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Accrued liability estimate</span>
+                  <span className="font-mono">{formatCurrency(taxCalc.totalLiability * yearProgress / 100)} of {formatCurrency(taxCalc.totalLiability)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Total paid</span>
+                  <span className="font-mono text-chart-positive">{formatCurrency(totalPaid)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-semibold">
+                  <span>Remaining owed</span>
+                  <span className={`font-mono ${taxCalc.totalLiability - totalPaid > 0 ? "text-chart-negative" : "text-chart-positive"}`}>
+                    {formatCurrency(Math.max(0, taxCalc.totalLiability - totalPaid))}
+                  </span>
+                </div>
               </CardContent>
             </Card>
 
+            {/* Quarterly Payment Schedule with tracking */}
             <div className="rounded-lg border bg-card p-6">
-              <h2 className="text-lg font-medium mb-4 flex items-center gap-2"><Calendar className="h-5 w-5" />Quarterly Payment Schedule</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-medium flex items-center gap-2"><Calendar className="h-5 w-5" />Quarterly Payment Schedule</h2>
+                <Button size="sm" variant="outline" onClick={() => setShowPaymentForm(!showPaymentForm)}>
+                  <Plus className="h-3.5 w-3.5 mr-1" />Record Payment
+                </Button>
+              </div>
+
+              {showPaymentForm && (
+                <div className="mb-4 flex items-end gap-2 bg-muted/50 rounded-lg p-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Quarter</label>
+                    <Select value={paymentForm.quarter} onValueChange={(v) => setPaymentForm({ ...paymentForm, quarter: v })}>
+                      <SelectTrigger className="h-8 w-[80px] text-xs"><SelectValue placeholder="Q" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">Q1</SelectItem>
+                        <SelectItem value="2">Q2</SelectItem>
+                        <SelectItem value="3">Q3</SelectItem>
+                        <SelectItem value="4">Q4</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Amount</label>
+                    <Input type="number" value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} className="h-8 w-[120px] text-xs" placeholder="$0" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Date Paid</label>
+                    <Input type="date" value={paymentForm.date} onChange={(e) => setPaymentForm({ ...paymentForm, date: e.target.value })} className="h-8 w-[140px] text-xs" />
+                  </div>
+                  <Button size="sm" className="h-8" onClick={handleAddPayment} disabled={addQPayment.isPending}>
+                    <Check className="h-3.5 w-3.5 mr-1" />Save
+                  </Button>
+                </div>
+              )}
+
               <Table>
-                <TableHeader><TableRow><TableHead>Quarter</TableHead><TableHead>Due Date</TableHead><TableHead className="text-right">Estimated Payment</TableHead></TableRow></TableHeader>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Quarter</TableHead>
+                    <TableHead>Due Date</TableHead>
+                    <TableHead className="text-right">Estimated</TableHead>
+                    <TableHead className="text-right">Paid</TableHead>
+                    <TableHead className="text-right">Remaining</TableHead>
+                    <TableHead className="w-10"></TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
-                  {QUARTERLY_DATES.map((q) => (
-                    <TableRow key={q.label}><TableCell className="font-medium">{q.label}</TableCell><TableCell>{q.due}</TableCell><TableCell className="text-right font-mono">{formatCurrency(quarterlyPayment)}</TableCell></TableRow>
-                  ))}
+                  {QUARTERLY_DATES.map((q) => {
+                    const paid = paidByQuarter[q.quarter] || 0;
+                    const remaining = Math.max(0, quarterlyPayment - paid);
+                    const qPmts = qPayments.filter((p) => p.quarter === q.quarter);
+                    return (
+                      <TableRow key={q.label}>
+                        <TableCell className="font-medium">{q.label}</TableCell>
+                        <TableCell>{q.due}</TableCell>
+                        <TableCell className="text-right font-mono">{formatCurrency(quarterlyPayment)}</TableCell>
+                        <TableCell className="text-right font-mono text-chart-positive">{formatCurrency(paid)}</TableCell>
+                        <TableCell className={`text-right font-mono ${remaining > 0 ? "text-chart-negative" : "text-chart-positive"}`}>
+                          {remaining > 0 ? formatCurrency(remaining) : <Check className="h-4 w-4 inline text-chart-positive" />}
+                        </TableCell>
+                        <TableCell>
+                          {qPmts.length > 0 && (
+                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => deleteQPayment.mutate(qPmts[qPmts.length - 1].id)}>
+                              <Trash2 className="h-3 w-3 text-muted-foreground" />
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
-            <p className="text-xs text-muted-foreground">⚠ These are estimates using simplified tax brackets and flat state rates. Consult a tax professional for accurate filing.</p>
+            <p className="text-xs text-muted-foreground">⚠ These are estimates using simplified tax brackets. Consult a tax professional for accurate filing.</p>
+          </TabsContent>
+
+          {/* ── Deductions Tab ── */}
+          <TabsContent value="deductions" className="space-y-6 mt-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* QBI */}
+              <div className="stat-card">
+                <h3 className="text-sm font-semibold flex items-center gap-2 mb-3"><Percent className="h-4 w-4" />QBI Deduction (§199A)</h3>
+                <p className="text-xs text-muted-foreground mb-3">Most sole proprietors can deduct 20% of qualified business income.</p>
+                <div className="flex items-center gap-2 mb-2">
+                  <Switch checked={qbiEnabled} onCheckedChange={setQbiEnabled} />
+                  <span className="text-sm">{qbiEnabled ? "Enabled" : "Disabled"}</span>
+                </div>
+                {qbiEnabled && (
+                  <div className="flex justify-between text-sm mt-3 pt-3 border-t">
+                    <span>Estimated QBI deduction</span>
+                    <span className="font-mono font-semibold text-chart-positive">{formatCurrency(taxCalc.qbiDeduction)}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Home Office */}
+              <div className="stat-card">
+                <h3 className="text-sm font-semibold flex items-center gap-2 mb-3"><Home className="h-4 w-4" />Home Office Deduction</h3>
+                <p className="text-xs text-muted-foreground mb-3">Simplified method: $5/sqft up to 300 sqft ($1,500 max).</p>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Square footage used exclusively for business</label>
+                  <Input
+                    type="number"
+                    value={homeOfficeSqft || ""}
+                    onChange={(e) => setHomeOfficeSqft(Math.min(300, Math.max(0, parseInt(e.target.value) || 0)))}
+                    placeholder="0-300 sqft"
+                    className="w-[180px]"
+                  />
+                </div>
+                {homeOfficeSqft > 0 && (
+                  <div className="flex justify-between text-sm mt-3 pt-3 border-t">
+                    <span>Home office deduction</span>
+                    <span className="font-mono font-semibold text-chart-positive">{formatCurrency(taxCalc.homeOfficeDeduction)}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Vehicle / Mileage */}
+              <div className="stat-card">
+                <h3 className="text-sm font-semibold flex items-center gap-2 mb-3"><Car className="h-4 w-4" />Vehicle / Mileage Deduction</h3>
+                <p className="text-xs text-muted-foreground mb-3">IRS standard mileage rate: ${MILEAGE_RATE_2026}/mile for 2026.</p>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Total business miles driven</label>
+                  <Input
+                    type="number"
+                    value={businessMiles || ""}
+                    onChange={(e) => setBusinessMiles(Math.max(0, parseInt(e.target.value) || 0))}
+                    placeholder="0"
+                    className="w-[180px]"
+                  />
+                </div>
+                {businessMiles > 0 && (
+                  <div className="flex justify-between text-sm mt-3 pt-3 border-t">
+                    <span>Mileage deduction</span>
+                    <span className="font-mono font-semibold text-chart-positive">{formatCurrency(taxCalc.mileageDeduction)}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Deduction summary */}
+              <div className="stat-card bg-accent/30">
+                <h3 className="text-sm font-semibold mb-3">Deduction Summary</h3>
+                <div className="space-y-2 text-sm">
+                  {taxCalc.qbiDeduction > 0 && <div className="flex justify-between"><span>QBI (20%)</span><span className="font-mono">{formatCurrency(taxCalc.qbiDeduction)}</span></div>}
+                  {taxCalc.homeOfficeDeduction > 0 && <div className="flex justify-between"><span>Home Office</span><span className="font-mono">{formatCurrency(taxCalc.homeOfficeDeduction)}</span></div>}
+                  {taxCalc.mileageDeduction > 0 && <div className="flex justify-between"><span>Vehicle Mileage</span><span className="font-mono">{formatCurrency(taxCalc.mileageDeduction)}</span></div>}
+                  <div className="flex justify-between pt-2 border-t font-semibold">
+                    <span>Total additional deductions</span>
+                    <span className="font-mono text-chart-positive">{formatCurrency(taxCalc.qbiDeduction + taxCalc.homeOfficeDeduction + taxCalc.mileageDeduction)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Estimated tax savings</span>
+                    <span className="font-mono">{formatCurrency((taxCalc.qbiDeduction + taxCalc.homeOfficeDeduction + taxCalc.mileageDeduction) * 0.25)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </TabsContent>
 
           {/* ── Schedule C Tab ── */}

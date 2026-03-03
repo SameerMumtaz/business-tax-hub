@@ -1,9 +1,13 @@
 import { useExpenses, useSales, useContractors } from "@/hooks/useData";
+import { useDateRange } from "@/contexts/DateRangeContext";
 import { formatCurrency } from "@/lib/format";
 import StatCard from "@/components/StatCard";
 import DashboardLayout from "@/components/DashboardLayout";
+import DateRangeFilter from "@/components/DateRangeFilter";
+import ExportButton from "@/components/ExportButton";
 import { TrendingUp, TrendingDown, DollarSign, Users } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { useMemo } from "react";
 
 const COLORS = [
   "hsl(160, 84%, 39%)",
@@ -17,9 +21,13 @@ const COLORS = [
 ];
 
 export default function DashboardPage() {
-  const { data: expenses = [] } = useExpenses();
-  const { data: sales = [] } = useSales();
+  const { data: allExpenses = [] } = useExpenses();
+  const { data: allSales = [] } = useSales();
   const { data: contractors = [] } = useContractors();
+  const { filterByDate } = useDateRange();
+
+  const expenses = useMemo(() => filterByDate(allExpenses), [allExpenses, filterByDate]);
+  const sales = useMemo(() => filterByDate(allSales), [allSales, filterByDate]);
 
   const totalRevenue = sales.reduce((sum, s) => sum + s.amount, 0);
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
@@ -43,12 +51,32 @@ export default function DashboardPage() {
       revenue,
     }));
 
+  const exportData = [
+    ...sales.map((s) => ({ date: s.date, description: `${s.client} — ${s.description}`, type: "Income", amount: s.amount })),
+    ...expenses.map((e) => ({ date: e.date, description: `${e.vendor} — ${e.description}`, type: "Expense", amount: -e.amount })),
+  ].sort((a, b) => b.date.localeCompare(a.date));
+
   return (
     <DashboardLayout>
       <div className="space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground text-sm mt-1">Your business tax overview for 2026</p>
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+            <p className="text-muted-foreground text-sm mt-1">Your business tax overview</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <DateRangeFilter />
+            <ExportButton
+              data={exportData}
+              filename="dashboard-transactions"
+              columns={[
+                { key: "date", label: "Date" },
+                { key: "description", label: "Description" },
+                { key: "type", label: "Type" },
+                { key: "amount", label: "Amount" },
+              ]}
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
