@@ -1,4 +1,5 @@
 import { ExpenseCategory, EXPENSE_CATEGORIES } from "@/types/tax";
+import * as XLSX from "xlsx";
 
 export interface ParsedTransaction {
   date: string;
@@ -41,6 +42,19 @@ export function parseCSV(csvText: string): ParsedTransaction[] {
   }
 
   return transactions;
+}
+
+/**
+ * Parse an Excel file (xlsx/xls) into transactions.
+ * Reads the first sheet and converts it to CSV text, then reuses parseCSV.
+ */
+export function parseExcel(data: ArrayBuffer): ParsedTransaction[] {
+  const workbook = XLSX.read(data, { type: "array" });
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) return [];
+  const sheet = workbook.Sheets[sheetName];
+  const csvText = XLSX.utils.sheet_to_csv(sheet);
+  return parseCSV(csvText);
 }
 
 // --- Separator Detection ---
