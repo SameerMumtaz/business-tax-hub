@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN account_type text DEFAULT NULL;
