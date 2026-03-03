@@ -79,6 +79,20 @@ export function useJobs() {
     fetchAll();
   };
 
+  const updateSite = async (id: string, updates: Partial<JobSite>) => {
+    const { error } = await supabase.from("job_sites").update(updates).eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Site updated");
+    fetchAll();
+  };
+
+  const deleteSite = async (id: string) => {
+    const { error } = await supabase.from("job_sites").delete().eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Site deleted");
+    fetchAll();
+  };
+
   const createJob = async (job: Omit<Job, "id" | "created_at" | "updated_at" | "user_id">) => {
     if (!user) return;
     const { error } = await supabase.from("jobs").insert({ ...job, user_id: user.id });
@@ -90,6 +104,14 @@ export function useJobs() {
   const updateJob = async (id: string, updates: Partial<Job>) => {
     const { error } = await supabase.from("jobs").update(updates).eq("id", id);
     if (error) { toast.error(error.message); return; }
+    fetchAll();
+  };
+
+  const deleteJob = async (id: string) => {
+    await supabase.from("job_assignments").delete().eq("job_id", id);
+    const { error } = await supabase.from("jobs").delete().eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Job deleted");
     fetchAll();
   };
 
@@ -110,7 +132,9 @@ export function useJobs() {
 
   return {
     sites, jobs, assignments, loading,
-    createSite, createJob, updateJob, assignWorker, removeAssignment,
+    createSite, updateSite, deleteSite,
+    createJob, updateJob, deleteJob,
+    assignWorker, removeAssignment,
     refetch: fetchAll,
   };
 }
