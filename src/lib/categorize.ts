@@ -361,28 +361,57 @@ function cacheKey(desc: string, type: string) {
 /**
  * Auto-learn: save high-confidence AI results as rules for instant future matching.
  */
+/**
+ * Strip dates, card numbers, store numbers, purchase locations, and other noise
+ * from a transaction description to extract just the vendor name.
+ */
+function extractVendorName(description: string): string | null {
+  let s = description
+    .replace(/\d{1,2}\/\d{1,2}(\/\d{2,4})?/g, "") // dates like 12/23, 08/07/2025
+    .replace(/\b(PURCHASE|DEBIT CARD|CREDIT CARD)\b/gi, "")
+    .replace(/\*\d+/g, "")              // card numbers *0821
+    .replace(/#\d+/g, "")               // store numbers #1802
+    .replace(/\bXXX+\w*/g, "")          // masked numbers XXXXX30829
+    .replace(/\b[A-Z]{2}\b(?=\s|$)/g, "") // state abbreviations like TX, WV (end of string)
+    .replace(/\bConfirmation\b/gi, "")
+    .replace(/\bID:\s*\S+/gi, "")       // ID: B15XSDXYQM36IT9
+    .replace(/\bCO ID:\S+/gi, "")
+    .replace(/\bINDN:\S+/gi, "")
+    .replace(/\bDES:\S+/gi, "")
+    .replace(/\bPPD\b|\bCCD\b|\bCKCD\b/gi, "")
+    .replace(/[^a-zA-Z0-9\s&'./-]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Take first 2-3 meaningful words (>2 chars, not pure numbers)
+  const words = s
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !/^\d+$/.test(w))
+    .slice(0, 3);
+
+  if (words.length === 0) return null;
+  const pattern = words.join(" ").toLowerCase();
+  return pattern.length >= 4 ? pattern : null;
+}
+
 async function autoLearnFromAI(
   items: CategorizeInput[],
   aiResults: { id: string; category: string; confidence: number }[]
 ) {
+  const seen = new Set<string>();
   const toSave: { vendor_pattern: string; category: string; type: string; priority: number }[] = [];
   for (const r of aiResults) {
     if (r.confidence < 0.75 || r.category === "Other") continue;
     const item = items.find((i) => i.id === r.id);
     if (!item) continue;
-    // Extract a keyword (first 2-3 significant words) for the rule
-    const words = item.description
-      .replace(/[^a-zA-Z0-9\s&'./-]/g, "")
-      .split(/\s+/)
-      .filter((w) => w.length > 2)
-      .slice(0, 3);
-    if (words.length === 0) continue;
-    const pattern = words.join(" ").toLowerCase();
-    if (pattern.length < 4) continue;
+    const pattern = extractVendorName(item.description);
+    if (!pattern) continue;
+    const key = `${pattern}:${item.type}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     toSave.push({ vendor_pattern: pattern, category: r.category, type: item.type, priority: 5 });
   }
   if (toSave.length > 0) {
-    // Upsert silently — don't block on this
     supabase
       .from("categorization_rules")
       .upsert(toSave, { onConflict: "vendor_pattern,type", ignoreDuplicates: true })
