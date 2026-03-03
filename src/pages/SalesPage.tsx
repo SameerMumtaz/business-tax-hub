@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import SuggestedRulesPanel from "@/components/SuggestedRulesPanel";
+import RuleSuggestionDialog from "@/components/RuleSuggestionDialog";
 import { extractVendorName } from "@/lib/ruleInference";
 import DashboardLayout from "@/components/DashboardLayout";
 import useSalesLogic, { PAGE_SIZE } from "@/hooks/useSalesLogic";
@@ -33,6 +34,7 @@ export default function SalesPage() {
     open, setOpen, form, setForm, handleAdd, addSale,
     sortField, sortDir, toggleSort, selected, toggleSelect, toggleAll, handleBulkDelete,
     searchQuery, setSearchQuery, auditResult, setAuditResult, persistentAudit, activeIssueCount,
+    pendingRuleSuggestion, setPendingRuleSuggestion,
     editingCategoryId, setEditingCategoryId, updateSale, removeSale, handleSingleCategoryChange,
     ruleDialogOpen, setRuleDialogOpen, ruleKeyword, setRuleKeyword, ruleCategory, setRuleCategory,
     openBulkRule, saveBulkRule, handleBatchCreateInvoices, handleInlineCreateInvoice,
@@ -254,6 +256,13 @@ export default function SalesPage() {
           </TabsContent>
         </Tabs>
       </div>
+      <RuleSuggestionDialog
+        suggestion={pendingRuleSuggestion}
+        onClose={() => setPendingRuleSuggestion(null)}
+        onApplied={() => {
+          queryClient.invalidateQueries({ queryKey: ["sales", user?.id] });
+        }}
+      />
     </DashboardLayout>
   );
 }

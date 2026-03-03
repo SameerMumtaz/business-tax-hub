@@ -208,18 +208,27 @@ export async function detectPatterns(
   return deduped.slice(0, 20);
 }
 
+export interface RuleSuggestion {
+  keyword: string;
+  category: string;
+  type: "expense" | "income";
+  userId: string;
+  evidenceCount: number;
+  matchingTransactions: { id: string; vendor: string; description?: string; amount?: number; date?: string; category: string }[];
+}
+
 /**
  * After a user manually categorizes a transaction, check if a pattern has emerged
- * and prompt via toast to create a rule.
+ * and return a RuleSuggestion for the UI to display in a dialog.
  */
 export async function checkForPatternAfterCategoryChange(
   changedVendor: string,
   newCategory: string,
-  allTransactions: { id: string; vendor: string; description?: string; category: string }[],
+  allTransactions: { id: string; vendor: string; description?: string; amount?: number; date?: string; category: string }[],
   type: "expense" | "income",
   userId: string
-) {
-  if (newCategory === "Other") return;
+): Promise<RuleSuggestion | null> {
+  if (newCategory === "Other") return null;
 
   const keywords = extractKeywords(changedVendor);
   
@@ -240,65 +249,72 @@ export async function checkForPatternAfterCategoryChange(
     );
 
     if (matching.length >= 2) {
-      // Found a pattern! Show toast with create-rule action
-      const totalOther = allTransactions.filter(t =>
-        t.category === "Other" && t.vendor.toLowerCase().includes(kw)
-      ).length;
+      // Found a pattern! Return the "Other" transactions that would be affected
+      const otherMatching = allTransactions.filter(t =>
+        (t.category === "Other" || !t.category) && t.vendor.toLowerCase().includes(kw)
+      );
 
-      const message = totalOther > 0
-        ? `${matching.length} "${kw}" transactions → ${newCategory}. ${totalOther} more could be auto-categorized.`
-        : `${matching.length} "${kw}" transactions → ${newCategory}.`;
+      if (otherMatching.length === 0) continue;
 
-      toast(message, {
-        description: "Create a rule to auto-categorize future imports?",
-        duration: 15000,
-        dismissible: true,
-        cancel: {
-          label: "Dismiss",
-          onClick: () => {},
-        },
-        action: {
-          label: "Create Rule",
-          onClick: async () => {
-            const { error } = await supabase.from("categorization_rules").upsert({
-              vendor_pattern: kw,
-              category: newCategory,
-              type,
-              priority: 10,
-              user_id: userId,
-            }, { onConflict: "vendor_pattern,type,user_id", ignoreDuplicates: false });
-            if (error) {
-              // If upsert also fails, try update
-              const { error: updateError } = await supabase
-                .from("categorization_rules")
-                .update({ category: newCategory })
-                .eq("vendor_pattern", kw)
-                .eq("type", type)
-                .eq("user_id", userId);
-              if (updateError) {
-                toast.error("Failed to create rule");
-                return;
-              }
-            }
-            invalidateRulesCache();
-
-            // Run ALL rules against ALL "Other" transactions
-            const { expenseCount, salesCount } = await applyRulesToUncategorized(userId);
-            const totalApplied = expenseCount + salesCount;
-
-            if (totalApplied > 0) {
-              toast.success(`✨ Rule created! ${totalApplied} transaction${totalApplied > 1 ? "s" : ""} auto-categorized.`);
-            } else {
-              toast.success(`Rule created: "${kw}" → ${newCategory}`);
-            }
-          },
-        },
-      });
-      return; // Only show one suggestion at a time
+      return {
+        keyword: kw,
+        category: newCategory,
+        type,
+        userId,
+        evidenceCount: matching.length,
+        matchingTransactions: otherMatching,
+      };
     }
   }
+  return null;
 }
 
+/**
+ * Apply a confirmed rule suggestion — create the rule and update selected transaction IDs.
+ */
+export async function applyRuleSuggestion(
+  suggestion: RuleSuggestion,
+  selectedIds: string[]
+): Promise<{ success: boolean; applied: number }> {
+  const { keyword, category, type, userId } = suggestion;
+
+  // Create the rule
+  const { error } = await supabase.from("categorization_rules").upsert({
+    vendor_pattern: keyword,
+    category,
+    type,
+    priority: 10,
+    user_id: userId,
+  }, { onConflict: "vendor_pattern,type,user_id", ignoreDuplicates: false });
+
+  if (error) {
+    const { error: updateError } = await supabase
+      .from("categorization_rules")
+      .update({ category })
+      .eq("vendor_pattern", keyword)
+      .eq("type", type)
+      .eq("user_id", userId);
+    if (updateError) return { success: false, applied: 0 };
+  }
+
+  invalidateRulesCache();
+
+  // Update only the selected transactions
+  if (selectedIds.length > 0) {
+    const table = type === "expense" ? "expenses" : "sales";
+    const { error: updateErr } = await supabase
+      .from(table)
+      .update({ category })
+      .in("id", selectedIds)
+      .eq("user_id", userId);
+    if (updateErr) {
+      toast.error("Rule created but failed to update some transactions");
+      return { success: true, applied: 0 };
+    }
+  }
+
+  return { success: true, applied: selectedIds.length };
+}
 /**
  * Count how many current "Other" transactions match a keyword directly.
  * This is used for UX messaging only (estimate before global re-application).
