@@ -101,44 +101,49 @@ export default function ImportPage() {
       const totalPages = Math.min(pdf.numPages, 50);
       setPdfStatus(`Rendering ${totalPages} pages…`);
 
-      // Render each page to a canvas and extract as compressed JPEG
-      const pageImages: string[] = [];
+      // Process pages one-by-one to avoid large payload timeouts
+      const allTransactions: any[] = [];
+      const MAX_RETRIES = 2;
+
       for (let p = 1; p <= totalPages; p++) {
-        setPdfProgress(Math.round((p / totalPages) * 30)); // 0-30% for rendering
+        setPdfStatus(`Rendering page ${p}/${totalPages}…`);
+        setPdfProgress(Math.round((p / totalPages) * 20)); // 0-20%
+
         const page = await pdf.getPage(p);
-        const viewport = page.getViewport({ scale: 1.5 }); // Balance quality vs size
+        const viewport = page.getViewport({ scale: 1.2 }); // Smaller payload, still readable
         const canvas = document.createElement("canvas");
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         const ctx = canvas.getContext("2d")!;
         await page.render({ canvasContext: ctx, viewport }).promise;
-        pageImages.push(canvas.toDataURL("image/jpeg", 0.65));
+        const pageImage = canvas.toDataURL("image/jpeg", 0.55);
         canvas.remove();
-      }
 
-      // Send pages in batches of 4 to avoid payload size limits
-      const BATCH = 4;
-      const allTransactions: any[] = [];
-      const totalBatches = Math.ceil(pageImages.length / BATCH);
+        let success = false;
+        for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt++) {
+          setPdfStatus(`AI extracting page ${p}/${totalPages} (attempt ${attempt})…`);
 
-      for (let i = 0; i < pageImages.length; i += BATCH) {
-        const batchNum = Math.floor(i / BATCH) + 1;
-        const batch = pageImages.slice(i, i + BATCH);
-        setPdfStatus(`AI extracting batch ${batchNum}/${totalBatches} (pages ${i + 1}–${Math.min(i + BATCH, totalPages)})…`);
-        setPdfProgress(30 + Math.round((batchNum / totalBatches) * 60)); // 30-90%
+          const { data, error } = await supabase.functions.invoke("parse-pdf", {
+            body: { pages: [pageImage] },
+          });
 
-        const { data, error } = await supabase.functions.invoke("parse-pdf", {
-          body: { pages: batch },
-        });
+          if (!error) {
+            if (data?.transactions?.length) allTransactions.push(...data.transactions);
+            success = true;
+            break;
+          }
 
-        if (error) {
-          console.error(`Batch ${batchNum} failed:`, error);
-          toast.error(`Batch ${batchNum} failed — continuing with remaining pages`);
-          continue;
+          console.error(`Page ${p} attempt ${attempt} failed:`, error);
+          if (attempt <= MAX_RETRIES) {
+            await new Promise((resolve) => setTimeout(resolve, 700 * attempt));
+          }
         }
-        if (data?.transactions?.length) {
-          allTransactions.push(...data.transactions);
+
+        if (!success) {
+          toast.error(`Page ${p} failed after retries — continuing`);
         }
+
+        setPdfProgress(20 + Math.round((p / totalPages) * 70)); // 20-90%
       }
 
       if (allTransactions.length === 0) {
