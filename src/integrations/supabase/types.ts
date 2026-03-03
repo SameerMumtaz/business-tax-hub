@@ -38,6 +38,107 @@ export type Database = {
         }
         Relationships: []
       }
+      booking_pages: {
+        Row: {
+          active: boolean
+          available_days: number[]
+          available_hours_end: string
+          available_hours_start: string
+          buffer_minutes: number
+          business_name: string
+          created_at: string
+          id: string
+          services: Json
+          slug: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          available_days?: number[]
+          available_hours_end?: string
+          available_hours_start?: string
+          buffer_minutes?: number
+          business_name?: string
+          created_at?: string
+          id?: string
+          services?: Json
+          slug: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          available_days?: number[]
+          available_hours_end?: string
+          available_hours_start?: string
+          buffer_minutes?: number
+          business_name?: string
+          created_at?: string
+          id?: string
+          services?: Json
+          slug?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      booking_requests: {
+        Row: {
+          booking_page_id: string
+          client_email: string
+          client_name: string
+          client_phone: string | null
+          created_at: string
+          duration_minutes: number
+          id: string
+          notes: string | null
+          price: number
+          requested_date: string
+          requested_time: string
+          service_name: string
+          status: string
+        }
+        Insert: {
+          booking_page_id: string
+          client_email: string
+          client_name: string
+          client_phone?: string | null
+          created_at?: string
+          duration_minutes?: number
+          id?: string
+          notes?: string | null
+          price?: number
+          requested_date: string
+          requested_time: string
+          service_name: string
+          status?: string
+        }
+        Update: {
+          booking_page_id?: string
+          client_email?: string
+          client_name?: string
+          client_phone?: string | null
+          created_at?: string
+          duration_minutes?: number
+          id?: string
+          notes?: string | null
+          price?: number
+          requested_date?: string
+          requested_time?: string
+          service_name?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_requests_booking_page_id_fkey"
+            columns: ["booking_page_id"]
+            isOneToOne: false
+            referencedRelation: "booking_pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categorization_rules: {
         Row: {
           category: string

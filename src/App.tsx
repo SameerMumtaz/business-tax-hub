@@ -38,6 +38,8 @@ import VehiclesPage from "./pages/VehiclesPage";
 import QuotesPage from "./pages/QuotesPage";
 import PublicQuotePage from "./pages/PublicQuotePage";
 import PublicInvoicePage from "./pages/PublicInvoicePage";
+import PublicBookingPage from "./pages/PublicBookingPage";
+import BookingSettingsPage from "./pages/BookingSettingsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -71,6 +73,7 @@ const App = () => (
             <Route path="/aging" element={<ProtectedRoute><AgingReportPage /></ProtectedRoute>} />
             <Route path="/reconciliation" element={<ProtectedRoute><ReconciliationPage /></ProtectedRoute>} />
             <Route path="/vehicles" element={<ProtectedRoute><VehiclesPage /></ProtectedRoute>} />
+            <Route path="/booking-settings" element={<ProtectedRoute><BookingSettingsPage /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
 
             {/* Shared business routes (admin + manager) */}
@@ -93,6 +96,7 @@ const App = () => (
 
             <Route path="/q/:token" element={<PublicQuotePage />} />
             <Route path="/invoice/view/:token" element={<PublicInvoicePage />} />
+            <Route path="/book/:slug" element={<PublicBookingPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
