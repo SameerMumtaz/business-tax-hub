@@ -23,6 +23,9 @@ import ClientsPage from "./pages/ClientsPage";
 import AgingReportPage from "./pages/AgingReportPage";
 import ReconciliationPage from "./pages/ReconciliationPage";
 import PersonalDashboardPage from "./pages/PersonalDashboardPage";
+import PersonalIncomePage from "./pages/PersonalIncomePage";
+import PersonalExpensesPage from "./pages/PersonalExpensesPage";
+import PersonalDeductionsPage from "./pages/PersonalDeductionsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -58,6 +61,9 @@ const App = () => (
 
             {/* Personal/Individual routes */}
             <Route path="/personal" element={<ProtectedRoute><PersonalDashboardPage /></ProtectedRoute>} />
+            <Route path="/personal/income" element={<ProtectedRoute><PersonalIncomePage /></ProtectedRoute>} />
+            <Route path="/personal/expenses" element={<ProtectedRoute><PersonalExpensesPage /></ProtectedRoute>} />
+            <Route path="/personal/deductions" element={<ProtectedRoute><PersonalDeductionsPage /></ProtectedRoute>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>
