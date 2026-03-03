@@ -379,6 +379,75 @@ export type Database = {
           },
         ]
       }
+      personal_deductions: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          description: string | null
+          id: string
+          tax_year: number
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          category: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          tax_year?: number
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          tax_year?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      personal_expenses: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          date: string
+          description: string | null
+          id: string
+          receipt_url: string | null
+          tax_deductible: boolean
+          user_id: string
+          vendor: string
+        }
+        Insert: {
+          amount?: number
+          category?: string
+          created_at?: string
+          date: string
+          description?: string | null
+          id?: string
+          receipt_url?: string | null
+          tax_deductible?: boolean
+          user_id: string
+          vendor: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          date?: string
+          description?: string | null
+          id?: string
+          receipt_url?: string | null
+          tax_deductible?: boolean
+          user_id?: string
+          vendor?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           account_type: string | null
@@ -535,6 +604,54 @@ export type Database = {
           id?: string
           invoice_number?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      w2_income: {
+        Row: {
+          created_at: string
+          employer_ein: string | null
+          employer_name: string
+          federal_tax_withheld: number
+          id: string
+          medicare_withheld: number
+          notes: string | null
+          social_security_withheld: number
+          state: string | null
+          state_tax_withheld: number
+          tax_year: number
+          user_id: string
+          wages: number
+        }
+        Insert: {
+          created_at?: string
+          employer_ein?: string | null
+          employer_name: string
+          federal_tax_withheld?: number
+          id?: string
+          medicare_withheld?: number
+          notes?: string | null
+          social_security_withheld?: number
+          state?: string | null
+          state_tax_withheld?: number
+          tax_year?: number
+          user_id: string
+          wages?: number
+        }
+        Update: {
+          created_at?: string
+          employer_ein?: string | null
+          employer_name?: string
+          federal_tax_withheld?: number
+          id?: string
+          medicare_withheld?: number
+          notes?: string | null
+          social_security_withheld?: number
+          state?: string | null
+          state_tax_withheld?: number
+          tax_year?: number
+          user_id?: string
+          wages?: number
         }
         Relationships: []
       }
