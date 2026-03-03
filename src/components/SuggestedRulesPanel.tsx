@@ -41,10 +41,13 @@ export default function SuggestedRulesPanel({ type, transactions }: SuggestedRul
     if (!user) return;
     const { created, applied } = await saveInferredRule(pattern, user.id);
     if (created) {
-      toast.success(`Rule created: "${pattern.keyword}" → ${pattern.category}${applied > 0 ? `. ${applied} auto-categorized.` : ""}`);
+      const msg = applied > 0
+        ? `Rule created: "${pattern.keyword}" → ${pattern.category}. ${applied} "Other" transaction${applied > 1 ? "s" : ""} auto-categorized.`
+        : `Rule created: "${pattern.keyword}" → ${pattern.category}`;
+      toast.success(msg);
       setInferredPatterns(prev => prev.filter(p => p.keyword !== pattern.keyword));
-      queryClient.invalidateQueries({ queryKey: ["expenses"] });
-      queryClient.invalidateQueries({ queryKey: ["sales"] });
+      await queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      await queryClient.invalidateQueries({ queryKey: ["sales"] });
     }
   }
 

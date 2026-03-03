@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { invalidateRulesCache } from "@/lib/categorize";
+import { invalidateRulesCache, applyRulesToUncategorized } from "@/lib/categorize";
 import { toast } from "sonner";
 
 export interface InferredPattern {
@@ -266,15 +266,12 @@ export async function checkForPatternAfterCategoryChange(
             }
             invalidateRulesCache();
 
-            // Auto-apply to remaining "Other" transactions
-            const othersToUpdate = allTransactions
-              .filter(t => t.category === "Other" && t.vendor.toLowerCase().includes(kw))
-              .map(t => t.id);
+            // Run ALL rules against ALL "Other" transactions
+            const { expenseCount, salesCount } = await applyRulesToUncategorized(userId);
+            const totalApplied = expenseCount + salesCount;
 
-            if (othersToUpdate.length > 0) {
-              const table = type === "expense" ? "expenses" : "sales";
-              await supabase.from(table).update({ category: newCategory }).in("id", othersToUpdate);
-              toast.success(`✨ Rule created! ${othersToUpdate.length} more transaction${othersToUpdate.length > 1 ? "s" : ""} auto-categorized.`);
+            if (totalApplied > 0) {
+              toast.success(`✨ Rule created! ${totalApplied} transaction${totalApplied > 1 ? "s" : ""} auto-categorized.`);
             } else {
               toast.success(`Rule created: "${kw}" → ${newCategory}`);
             }
@@ -302,7 +299,6 @@ export async function saveInferredRule(
   }, { onConflict: "vendor_pattern,type,user_id", ignoreDuplicates: false });
 
   if (error) {
-    // Fallback: try update if upsert fails
     const { error: updateError } = await supabase
       .from("categorization_rules")
       .update({ category: pattern.category })
@@ -317,33 +313,9 @@ export async function saveInferredRule(
 
   invalidateRulesCache();
 
-  // Apply to "Other" transactions
-  let toUpdate: string[] = [];
-  if (pattern.type === "expense") {
-    const { data: others } = await supabase
-      .from("expenses")
-      .select("id, vendor")
-      .eq("user_id", userId)
-      .eq("category", "Other");
-    toUpdate = (others || [])
-      .filter(t => t.vendor.toLowerCase().includes(pattern.keyword))
-      .map(t => t.id);
-  } else {
-    const { data: others } = await supabase
-      .from("sales")
-      .select("id, client")
-      .eq("user_id", userId)
-      .eq("category", "Other");
-    toUpdate = (others || [])
-      .filter(t => t.client.toLowerCase().includes(pattern.keyword))
-      .map(t => t.id);
-  }
+  // Run ALL rules (old + new) against ALL "Other" transactions
+  const { expenseCount, salesCount } = await applyRulesToUncategorized(userId);
+  const totalApplied = expenseCount + salesCount;
 
-  const table = pattern.type === "expense" ? "expenses" : "sales";
-
-  if (toUpdate.length > 0) {
-    await supabase.from(table).update({ category: pattern.category }).in("id", toUpdate);
-  }
-
-  return { created: true, applied: toUpdate.length };
+  return { created: true, applied: totalApplied };
 }
