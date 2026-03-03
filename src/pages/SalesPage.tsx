@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useSales, useAddSale, useRemoveSale, useUpdateSale, useBulkRemoveSales, useExpenses } from "@/hooks/useData";
+import { useInvoices } from "@/hooks/useInvoices";
 import { formatCurrency } from "@/lib/format";
 import { invalidateRulesCache } from "@/lib/categorize";
 import { useAuth } from "@/hooks/useAuth";
@@ -30,8 +32,10 @@ type SortField = "date" | "client" | "invoiceNumber" | "amount" | "description" 
 type SortDir = "asc" | "desc";
 
 export default function SalesPage() {
+  const navigate = useNavigate();
   const { data: sales = [] } = useSales();
   const { data: expenses = [] } = useExpenses();
+  const { data: invoices = [] } = useInvoices();
   const { user } = useAuth();
   const addSale = useAddSale();
   const removeSale = useRemoveSale();
@@ -216,7 +220,10 @@ export default function SalesPage() {
               </div>
               <Button
                 variant="outline"
-                onClick={() => setAuditResult(auditSales(sales, expenses))}
+                onClick={() => {
+                  const matchedSaleIds = new Set(invoices.filter(inv => inv.matched_sale_id).map(inv => inv.matched_sale_id!));
+                  setAuditResult(auditSales(sales, expenses, matchedSaleIds));
+                }}
               >
                 <ShieldAlert className="h-4 w-4 mr-2" />
                 Quick Audit
@@ -233,10 +240,27 @@ export default function SalesPage() {
                 }}
                 onDeleteItems={(ids) => {
                   bulkRemove.mutate(ids, {
-                    onSuccess: () => { toast.success(`Deleted ${ids.length} sale(s)`); setAuditResult(auditSales(sales.filter((s) => !ids.includes(s.id)), expenses)); },
+                    onSuccess: () => {
+                      toast.success(`Deleted ${ids.length} sale(s)`);
+                      const matchedSaleIds = new Set(invoices.filter(inv => inv.matched_sale_id).map(inv => inv.matched_sale_id!));
+                      setAuditResult(auditSales(sales.filter((s) => !ids.includes(s.id)), expenses, matchedSaleIds));
+                    },
                   });
                 }}
                 onSelectItems={(ids) => setSelected(new Set(ids))}
+                onCreateInvoice={(saleId) => {
+                  const sale = sales.find((s) => s.id === saleId);
+                  if (!sale) return;
+                  const params = new URLSearchParams({
+                    from_sale: "1",
+                    client_name: sale.client,
+                    amount: sale.amount.toString(),
+                    date: sale.date,
+                    description: sale.description || "",
+                    sale_id: sale.id,
+                  });
+                  navigate(`/invoices?${params.toString()}`);
+                }}
               />
             )}
             {/* Bulk actions bar */}

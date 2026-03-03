@@ -1,12 +1,12 @@
 import { Expense, Sale } from "@/types/tax";
 
 export interface AuditIssue {
-  type: "duplicate" | "deductibility" | "miscategorized" | "1099_compliance" | "missing_deduction" | "irs_red_flag" | "documentation" | "estimated_tax" | "anomaly" | "personal_expense" | "date_issue" | "uncategorized_income";
+  type: "duplicate" | "deductibility" | "miscategorized" | "1099_compliance" | "missing_deduction" | "irs_red_flag" | "documentation" | "estimated_tax" | "anomaly" | "personal_expense" | "date_issue" | "uncategorized_income" | "missing_invoice";
   severity: "low" | "medium" | "high";
   title: string;
   description: string;
   affected_ids: string[];
-  suggestion: "delete" | "review" | "recategorize" | "flag" | "keep" | "add_deduction" | "document" | "file_1099";
+  suggestion: "delete" | "review" | "recategorize" | "flag" | "keep" | "add_deduction" | "document" | "file_1099" | "create_invoice";
   suggestion_detail: string;
   tax_impact?: string;
   irs_reference?: string;
@@ -125,7 +125,7 @@ export function auditExpenses(expenses: Expense[]): AuditResult {
   return buildResult(issues, expenses.reduce((s, e) => s + e.amount, 0));
 }
 
-export function auditSales(sales: Sale[], expenses: Expense[]): AuditResult {
+export function auditSales(sales: Sale[], expenses: Expense[], matchedSaleIds?: Set<string>): AuditResult {
   const issues: AuditIssue[] = [];
 
   // 1. Duplicate sales
@@ -164,16 +164,18 @@ export function auditSales(sales: Sale[], expenses: Expense[]): AuditResult {
     });
   }
 
-  // 3. Missing invoice numbers
-  const noInvoice = sales.filter((s) => !s.invoiceNumber || s.invoiceNumber.startsWith("IMP-"));
-  if (noInvoice.length > 0) {
+  // 3. Sales without matched invoices
+  const unmatchedSales = matchedSaleIds
+    ? sales.filter((s) => !matchedSaleIds.has(s.id))
+    : sales.filter((s) => !s.invoiceNumber || s.invoiceNumber.startsWith("IMP-"));
+  if (unmatchedSales.length > 0) {
     issues.push({
-      type: "documentation", severity: "low",
-      title: `${noInvoice.length} sale(s) missing proper invoice numbers`,
-      description: "Income without invoice documentation may complicate audits.",
-      affected_ids: noInvoice.slice(0, 10).map((s) => s.id),
-      suggestion: "review",
-      suggestion_detail: "Create invoices for these sales to maintain proper documentation.",
+      type: "missing_invoice", severity: "medium",
+      title: `${unmatchedSales.length} sale(s) without a matched invoice`,
+      description: "Income without proper invoice documentation may complicate IRS audits and revenue tracking.",
+      affected_ids: unmatchedSales.map((s) => s.id),
+      suggestion: "create_invoice",
+      suggestion_detail: "Create invoices for these sales to maintain proper documentation and enable reconciliation.",
     });
   }
 
