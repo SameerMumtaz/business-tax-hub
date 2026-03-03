@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, FileText, Landmark, Check, X, FileUp, ArrowRight, Sparkles, Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Lightbulb, Plus, XCircle, ShieldAlert, AlertTriangle, Info, Ban } from "lucide-react";
+import { Upload, FileText, Landmark, Check, X, FileUp, ArrowRight, Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Lightbulb, Plus, XCircle, ShieldAlert, AlertTriangle, Info, Ban } from "lucide-react";
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
 
@@ -34,7 +34,7 @@ interface ReviewTransaction extends ParsedTransaction {
   id: string;
   category: ExpenseCategory;
   include: boolean;
-  catSource?: "rule" | "ai" | "keyword";
+  catSource?: "rule" | "keyword";
   userEdited?: boolean;
 }
 
@@ -133,7 +133,7 @@ export default function ImportPage() {
   const [pdfStatus, setPdfStatus] = useState("");
   const [pdfProgress, setPdfProgress] = useState(0);
   const pdfInputRef = useRef<HTMLInputElement>(null);
-  const [progressInfo, setProgressInfo] = useState<{ label: string; completed: number; total: number } | null>(null);
+  
 
   const handlePdfUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -181,10 +181,10 @@ export default function ImportPage() {
       }
 
       const fullText = pageTexts.join("\n\n--- PAGE BREAK ---\n\n");
-      setPdfStatus("AI structuring transactions…");
+      setPdfStatus("Extracting transactions…");
       setPdfProgress(40);
 
-      // Phase 2: Send text to AI for structuring (single call, very fast)
+      // Phase 2: Send text for rule-based structuring
       // Split into chunks if text is very long (>50k chars)
       const CHUNK_SIZE = 50000;
       const textChunks: string[] = [];
@@ -207,7 +207,7 @@ export default function ImportPage() {
       const chunkErrors: string[] = [];
       for (let i = 0; i < textChunks.length; i++) {
         if (textChunks.length > 1) {
-          setPdfStatus(`AI extracting chunk ${i + 1}/${textChunks.length}…`);
+          setPdfStatus(`Extracting chunk ${i + 1}/${textChunks.length}…`);
         }
         setPdfProgress(40 + Math.round(((i + 1) / textChunks.length) * 50));
 
@@ -260,7 +260,6 @@ export default function ImportPage() {
       try {
         const results = await categorizeTransactions(
           reviewed.map((t) => ({ id: t.id, description: t.description, type: t.type })),
-          false
         );
         setTransactions((prev) =>
           prev.map((t) => {
@@ -324,7 +323,6 @@ export default function ImportPage() {
       try {
         const results = await categorizeTransactions(
           reviewed.map((t) => ({ id: t.id, description: t.description, type: t.type })),
-          false // useAI = false
         );
         setTransactions((prev) =>
           prev.map((t) => {
@@ -338,7 +336,7 @@ export default function ImportPage() {
         const ruleCount = results.filter((r) => r.source === "rule").length;
         const uncategorized = results.filter((r) => r.category === "Other").length;
         if (ruleCount > 0) toast.success(`${ruleCount} matched by rules`);
-        if (uncategorized > 0) toast.info(`${uncategorized} uncategorized — use AI to auto-categorize`);
+        if (uncategorized > 0) toast.info(`${uncategorized} uncategorized — edit manually or add rules`);
       } catch {
         toast.error("Rule matching failed");
       } finally {
@@ -399,14 +397,14 @@ export default function ImportPage() {
     setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, category, catSource: "rule", userEdited: true } : t)));
   };
 
-  // Generate rule suggestions from user edits and AI categorizations
+  // Generate rule suggestions from user edits
   const ruleSuggestions = useMemo<RuleSuggestion[]>(() => {
     const map = new Map<string, { category: string; type: "expense" | "income"; count: number }>();
     for (const t of transactions) {
       if (!t.include) continue;
       if (t.category === "Other") continue;
-      // Only suggest from user edits or AI results (not existing rules)
-      if (!t.userEdited && t.catSource !== "ai") continue;
+      // Only suggest from user edits (not existing rules/keywords)
+      if (!t.userEdited) continue;
 
       // Extract a keyword from the description (first meaningful word, 3+ chars)
       const keyword = extractKeyword(t.description);
@@ -476,45 +474,127 @@ export default function ImportPage() {
     }
   };
 
-  const handleAudit = async () => {
+  /** Rule-based audit — no AI needed */
+  const handleAudit = () => {
     if (transactions.length === 0) return;
-    setAuditing(true);
     setAuditIssues([]);
     setAuditSummary("");
     setAuditRiskLevel("");
     setAuditEstimatedTax("");
     setDismissedIssues(new Set());
-    setProgressInfo({ label: "CPA Audit", completed: 0, total: 1 });
-    try {
-      const { data, error } = await supabase.functions.invoke("audit-transactions", {
-        body: {
-          transactions: transactions.map((t) => ({
-            id: t.id,
-            date: t.date,
-            description: t.description,
-            amount: t.amount,
-            type: t.type,
-            category: t.category,
-          })),
-        },
-      });
-      setProgressInfo({ label: "CPA Audit", completed: 1, total: 1 });
-      if (error) throw error;
-      setAuditIssues(data?.issues || []);
-      setAuditSummary(data?.summary || "");
-      setAuditRiskLevel(data?.risk_level || "");
-      setAuditEstimatedTax(data?.estimated_quarterly_tax || "");
-      if (data?.issues?.length === 0) {
-        toast.success("No issues detected — your data looks clean!");
-      } else {
-        toast.info(`Found ${data.issues.length} issue(s) across ${new Set((data.issues as AuditIssue[]).map((i: AuditIssue) => i.type)).size} categories`);
-      }
-    } catch {
-      toast.error("Audit failed");
-    } finally {
-      setAuditing(false);
-      setProgressInfo(null);
+
+    const issues: AuditIssue[] = [];
+
+    // 1. Duplicate detection (same date + amount)
+    const seen = new Map<string, ReviewTransaction[]>();
+    for (const t of transactions) {
+      if (!t.include) continue;
+      const key = `${t.date}|${t.amount.toFixed(2)}`;
+      const group = seen.get(key) || [];
+      group.push(t);
+      seen.set(key, group);
     }
+    for (const [, group] of seen) {
+      if (group.length >= 2) {
+        issues.push({
+          type: "duplicate", severity: "medium",
+          title: `Possible duplicate: ${group[0].description.slice(0, 40)}`,
+          description: `${group.length} transactions on ${group[0].date} for $${group[0].amount.toFixed(2)} each.`,
+          affected_ids: group.map((t) => t.id),
+          suggestion: "review",
+          suggestion_detail: "Review these — they may be duplicates from overlapping statement periods.",
+        });
+      }
+    }
+
+    // 2. Uncategorized expenses
+    const uncategorized = transactions.filter((t) => t.include && t.category === "Other" && t.type === "expense");
+    if (uncategorized.length > 5) {
+      issues.push({
+        type: "miscategorized", severity: "medium",
+        title: `${uncategorized.length} expenses uncategorized`,
+        description: "Uncategorized expenses may lead to missed deductions at tax time.",
+        affected_ids: uncategorized.slice(0, 5).map((t) => t.id),
+        suggestion: "review",
+        suggestion_detail: "Edit categories manually or add rules on the Categorization Rules page.",
+      });
+    }
+
+    // 3. Large outliers
+    const amounts = transactions.filter((t) => t.include).map((t) => t.amount);
+    const avg = amounts.length > 0 ? amounts.reduce((a, b) => a + b, 0) / amounts.length : 0;
+    const threshold = Math.max(avg * 5, 5000);
+    for (const t of transactions.filter((t) => t.include && t.amount > threshold)) {
+      issues.push({
+        type: "anomaly", severity: "low",
+        title: `Large transaction: $${t.amount.toFixed(2)}`,
+        description: `"${t.description.slice(0, 50)}" is significantly above average ($${avg.toFixed(0)}).`,
+        affected_ids: [t.id],
+        suggestion: "review",
+        suggestion_detail: "Verify this amount is correct and properly categorized.",
+      });
+    }
+
+    // 4. Potential personal expenses
+    const personalRx = /\b(netflix|hulu|disney\+|spotify|apple music|gym|fitness|personal|grocery|groceries|whole foods|trader joe)\b/i;
+    const personal = transactions.filter((t) => t.include && t.type === "expense" && personalRx.test(t.description));
+    if (personal.length > 0) {
+      issues.push({
+        type: "personal_expense", severity: "high",
+        title: `${personal.length} possible personal expense(s)`,
+        description: "These look like personal rather than business expenses — an IRS red flag.",
+        affected_ids: personal.map((t) => t.id),
+        suggestion: "review",
+        suggestion_detail: "Exclude personal expenses from business deductions.",
+        irs_reference: "IRC §262",
+      });
+    }
+
+    // 5. Round-number expenses
+    const roundExpenses = transactions.filter((t) => t.include && t.type === "expense" && t.amount >= 500 && t.amount % 100 === 0);
+    if (roundExpenses.length > 3) {
+      issues.push({
+        type: "documentation", severity: "low",
+        title: `${roundExpenses.length} round-number expenses`,
+        description: "Multiple round-number expenses may look like estimates to the IRS.",
+        affected_ids: roundExpenses.slice(0, 5).map((t) => t.id),
+        suggestion: "review",
+        suggestion_detail: "Ensure you have receipts for these amounts.",
+      });
+    }
+
+    // 6. 1099 threshold
+    const totalByVendor = new Map<string, number>();
+    for (const t of transactions) {
+      if (!t.include || t.type !== "expense") continue;
+      const vendor = t.description.toLowerCase().slice(0, 30);
+      totalByVendor.set(vendor, (totalByVendor.get(vendor) || 0) + t.amount);
+    }
+    const over600 = Array.from(totalByVendor.entries()).filter(([, amt]) => amt >= 600);
+    if (over600.length > 0) {
+      issues.push({
+        type: "1099_compliance", severity: "medium",
+        title: `${over600.length} vendor(s) over $600 — may need 1099`,
+        description: "Payments over $600 to a single vendor may require a 1099-NEC.",
+        affected_ids: [],
+        suggestion: "review",
+        suggestion_detail: "Check if these vendors are contractors and collect W-9s.",
+        irs_reference: "IRC §6041",
+      });
+    }
+
+    const totalExpenses = transactions.filter((t) => t.include && t.type === "expense").reduce((s, t) => s + t.amount, 0);
+    const totalIncomeAmt = transactions.filter((t) => t.include && t.type === "income").reduce((s, t) => s + t.amount, 0);
+    const net = totalIncomeAmt - totalExpenses;
+    const estTax = net > 0 ? net * 0.3 : 0;
+
+    setAuditIssues(issues);
+    setAuditSummary(issues.length === 0 ? "No issues detected — your data looks clean!" : `Found ${issues.length} issue(s) to review.`);
+    setAuditRiskLevel(issues.some((i) => i.severity === "high") ? "high" : issues.some((i) => i.severity === "medium") ? "medium" : "low");
+    setAuditEstimatedTax(estTax > 0 ? `~$${Math.round(estTax).toLocaleString()}` : "");
+
+    if (issues.length === 0) toast.success("No issues detected — your data looks clean!");
+    else toast.info(`Found ${issues.length} issue(s)`);
   };
 
   const applyIssueSuggestion = (issue: AuditIssue, issueIdx: number) => {
@@ -522,7 +602,6 @@ export default function ImportPage() {
       setTransactions((prev) => prev.filter((t) => !issue.affected_ids.includes(t.id)));
       toast.success(`Deleted ${issue.affected_ids.length} flagged transaction(s)`);
     } else if (issue.suggestion === "review" || issue.suggestion === "flag") {
-      // Exclude from import
       setTransactions((prev) =>
         prev.map((t) => issue.affected_ids.includes(t.id) ? { ...t, include: false } : t)
       );
@@ -535,38 +614,7 @@ export default function ImportPage() {
     setDismissedIssues((prev) => new Set(prev).add(issueIdx));
   };
 
-  const uncategorizedItems = useMemo(() => transactions.filter((t) => t.include && t.category === "Other" && !t.catSource), [transactions]);
-
-  const handleAICategorize = async () => {
-    const targets = uncategorizedItems;
-    if (targets.length === 0) return;
-
-    setCategorizing(true);
-    setProgressInfo({ label: "AI Categorizing", completed: 0, total: 1 });
-    try {
-      const results = await categorizeTransactions(
-        targets.map((t) => ({ id: t.id, description: t.description, type: t.type })),
-        true,
-        (completed, total) => setProgressInfo({ label: "AI Categorizing", completed, total })
-      );
-      setTransactions((prev) =>
-        prev.map((t) => {
-          const match = results.find((r) => r.id === t.id);
-          if (match && match.category !== "Other") {
-            return { ...t, category: match.category as ExpenseCategory, catSource: match.source };
-          }
-          return t;
-        })
-      );
-      const aiCount = results.filter((r) => r.source === "ai" && r.category !== "Other").length;
-      toast.success(`AI categorized ${aiCount} transactions`);
-    } catch {
-      toast.error("AI categorization failed");
-    } finally {
-      setCategorizing(false);
-      setProgressInfo(null);
-    }
-  };
+  const uncategorizedCount = useMemo(() => transactions.filter((t) => t.include && t.category === "Other").length, [transactions]);
 
   const handleImport = () => {
     const included = transactions.filter((t) => t.include);
@@ -705,7 +753,7 @@ export default function ImportPage() {
                 <FileUp className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-semibold mb-2">Drop your PDF here or browse</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Upload PDF bank statements and AI vision will extract transactions automatically.
+                  Upload PDF bank statements and transactions will be extracted automatically.
                   <br />
                   Supports any bank format — up to 50 pages per file.
                 </p>
@@ -762,41 +810,23 @@ export default function ImportPage() {
                   <span className="text-muted-foreground">Expenses:</span>{" "}
                   <span className="font-mono text-chart-negative">{expenseCountN} ({formatCurrency(totalExpenseAmt)})</span>
                 </div>
-                {uncategorizedItems.length > 0 && (
+                {uncategorizedCount > 0 && (
                   <div>
-                    <span className="text-chart-warning font-medium">{uncategorizedItems.length} uncategorized</span>
+                    <span className="text-chart-warning font-medium">{uncategorizedCount} uncategorized</span>
                   </div>
                 )}
               </div>
               <div className="flex gap-2 items-center flex-wrap">
-                {progressInfo && (
-                  <div className="flex items-center gap-3 min-w-[200px]">
-                    <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
-                    <div className="flex-1 space-y-1">
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>{progressInfo.label}</span>
-                        <span>{Math.round((progressInfo.completed / progressInfo.total) * 100)}%</span>
-                      </div>
-                      <Progress value={(progressInfo.completed / progressInfo.total) * 100} className="h-2" />
-                    </div>
-                  </div>
-                )}
-                {(categorizing || auditing) && !progressInfo && (
+                {categorizing && (
                   <span className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    {auditing ? "Auditing…" : "Categorizing…"}
+                    Categorizing…
                   </span>
                 )}
-                <Button variant="outline" onClick={handleAudit} disabled={auditing || categorizing}>
+                <Button variant="outline" onClick={handleAudit} disabled={categorizing}>
                   <ShieldAlert className="h-4 w-4 mr-2" />
-                  {auditing ? "Auditing…" : "CPA Audit"}
+                  Quick Audit
                 </Button>
-                {uncategorizedItems.length > 0 && !categorizing && (
-                  <Button variant="outline" onClick={handleAICategorize} disabled={auditing}>
-                    <Sparkles className="h-4 w-4 mr-2 text-primary" />
-                    AI Categorize ({uncategorizedItems.length})
-                  </Button>
-                )}
                 <Button variant="outline" onClick={() => { setStep("upload"); setTransactions([]); }}>
                   Cancel
                 </Button>
@@ -992,7 +1022,7 @@ export default function ImportPage() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Based on your edits and AI results. Save these to auto-categorize future imports.
+                  Based on your edits. Save these to auto-categorize future imports.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {visibleSuggestions.map((s) => (
