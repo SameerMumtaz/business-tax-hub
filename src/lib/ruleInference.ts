@@ -6,7 +6,8 @@ export interface InferredPattern {
   keyword: string;
   category: string;
   type: "expense" | "income";
-  count: number;
+  count: number; // categorized transactions supporting this suggestion
+  recategorizableCount: number; // current "Other" transactions likely to be updated now
   exampleVendors: string[];
 }
 
@@ -145,56 +146,66 @@ export async function detectPatterns(
     .eq("user_id", userId);
   const existingPatterns = new Set((existingRules || []).filter(r => r.type === type).map(r => r.vendor_pattern.toLowerCase()));
 
-  // Only consider non-"Other" categorized transactions
-  const categorized = transactions.filter(t => t.category && t.category !== "Other");
+  // Supporting evidence: only already categorized (non-Other) transactions
+  const categorized = transactions.filter(t => t.category && t.category.toLowerCase() !== "other");
+  // Impact estimate: current transactions still in Other
+  const uncategorized = transactions.filter(t => !t.category || t.category.toLowerCase() === "other");
 
-  // Build keyword → { category → vendors } map
-  const keywordMap: Record<string, Record<string, Set<string>>> = {};
+  // Build keyword → { category → { txCount, vendors } } map
+  const keywordMap: Record<string, Record<string, { txCount: number; vendors: Set<string> }>> = {};
   for (const t of categorized) {
     const keywords = extractKeywords(t.vendor);
     for (const kw of keywords) {
       if (existingPatterns.has(kw)) continue;
       if (!keywordMap[kw]) keywordMap[kw] = {};
-      if (!keywordMap[kw][t.category]) keywordMap[kw][t.category] = new Set();
-      keywordMap[kw][t.category].add(t.vendor);
+      if (!keywordMap[kw][t.category]) keywordMap[kw][t.category] = { txCount: 0, vendors: new Set() };
+      keywordMap[kw][t.category].txCount += 1;
+      keywordMap[kw][t.category].vendors.add(t.vendor);
     }
   }
 
-  // Find patterns: keyword maps to exactly one category with 2+ unique vendors
+  // Find stable patterns: keyword maps to exactly one category with 2+ transactions
   const patterns: InferredPattern[] = [];
   for (const [keyword, catMap] of Object.entries(keywordMap)) {
     const categories = Object.keys(catMap);
-    if (categories.length !== 1) continue; // ambiguous, skip
+    if (categories.length !== 1) continue;
+
     const category = categories[0];
-    const vendors = catMap[category];
-    if (vendors.size < 2) continue;
+    const { txCount, vendors } = catMap[category];
+    if (txCount < 2) continue;
+
+    const recategorizableCount = uncategorized.filter(t =>
+      t.vendor.toLowerCase().includes(keyword)
+    ).length;
+
     patterns.push({
       keyword,
       category,
       type,
-      count: vendors.size,
+      count: txCount,
+      recategorizableCount,
       exampleVendors: [...vendors].slice(0, 3),
     });
   }
 
-  // Sort by count desc, prefer longer keywords (more specific)
+  // Sort by evidence count desc, then longer keywords (more specific)
   patterns.sort((a, b) => {
     if (b.count !== a.count) return b.count - a.count;
     return b.keyword.length - a.keyword.length;
   });
 
-  // Deduplicate: if "home depot" covers the same vendors as "home", prefer "home depot"
+  // Deduplicate near-duplicates by category + sample vendors
   const seen = new Set<string>();
   const deduped: InferredPattern[] = [];
   for (const p of patterns) {
-    // Check if a more specific pattern already covers these vendors
     const vendorKey = [...p.exampleVendors].sort().join("|");
-    if (seen.has(vendorKey)) continue;
-    seen.add(vendorKey);
+    const signature = `${p.category}::${vendorKey}`;
+    if (seen.has(signature)) continue;
+    seen.add(signature);
     deduped.push(p);
   }
 
-  return deduped.slice(0, 20); // Cap at 20 suggestions
+  return deduped.slice(0, 20);
 }
 
 /**
@@ -284,12 +295,47 @@ export async function checkForPatternAfterCategoryChange(
 }
 
 /**
+ * Count how many current "Other" transactions match a keyword directly.
+ * This is used for UX messaging only (estimate before global re-application).
+ */
+async function estimateRuleImpact(
+  pattern: InferredPattern,
+  userId: string
+): Promise<number> {
+  const keyword = pattern.keyword.toLowerCase();
+
+  if (pattern.type === "expense") {
+    const { data } = await supabase
+      .from("expenses")
+      .select("vendor, description")
+      .eq("user_id", userId)
+      .in("category", ["Other", "other"]);
+
+    return (data || []).filter((row) =>
+      `${row.vendor || ""} ${row.description || ""}`.toLowerCase().includes(keyword)
+    ).length;
+  }
+
+  const { data } = await supabase
+    .from("sales")
+    .select("client, description")
+    .eq("user_id", userId)
+    .in("category", ["Other", "other"]);
+
+  return (data || []).filter((row) =>
+    `${row.client || ""} ${row.description || ""}`.toLowerCase().includes(keyword)
+  ).length;
+}
+
+/**
  * Save an inferred pattern as a rule and apply it to uncategorized transactions.
  */
 export async function saveInferredRule(
   pattern: InferredPattern,
   userId: string
-): Promise<{ created: boolean; applied: number }> {
+): Promise<{ created: boolean; applied: number; estimatedByPattern: number }> {
+  const estimatedByPattern = await estimateRuleImpact(pattern, userId);
+
   const { error } = await supabase.from("categorization_rules").upsert({
     vendor_pattern: pattern.keyword,
     category: pattern.category,
@@ -307,7 +353,7 @@ export async function saveInferredRule(
       .eq("user_id", userId);
     if (updateError) {
       toast.error("Failed to create rule");
-      return { created: false, applied: 0 };
+      return { created: false, applied: 0, estimatedByPattern };
     }
   }
 
@@ -317,5 +363,5 @@ export async function saveInferredRule(
   const { expenseCount, salesCount } = await applyRulesToUncategorized(userId);
   const totalApplied = expenseCount + salesCount;
 
-  return { created: true, applied: totalApplied };
+  return { created: true, applied: totalApplied, estimatedByPattern };
 }

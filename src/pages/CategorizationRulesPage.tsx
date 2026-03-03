@@ -45,8 +45,9 @@ export default function CategorizationRulesPage() {
   const salesTransactions = allSales.map(s => ({ id: s.id, vendor: s.client, category: s.category }));
 
   useEffect(() => {
+    if (!user) return;
     fetchRules();
-  }, []);
+  }, [user?.id]);
 
   function applyRulesToStore(currentRules: Rule[]) {
     invalidateRulesCache();
@@ -214,10 +215,10 @@ export default function CategorizationRulesPage() {
         {/* Suggested rules panels */}
         <div className="grid md:grid-cols-2 gap-6">
           <div className="stat-card">
-            <SuggestedRulesPanel type="expense" transactions={expenseTransactions} />
+            <SuggestedRulesPanel type="expense" transactions={expenseTransactions} onRuleSaved={fetchRules} />
           </div>
           <div className="stat-card">
-            <SuggestedRulesPanel type="income" transactions={salesTransactions} />
+            <SuggestedRulesPanel type="income" transactions={salesTransactions} onRuleSaved={fetchRules} />
           </div>
         </div>
 
