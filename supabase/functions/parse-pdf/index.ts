@@ -28,13 +28,43 @@ const parseAmount = (raw: string): { value: number; negative: boolean } => {
   return { value: Number.isFinite(numeric) ? numeric : 0, negative };
 };
 
+const DEPOSIT_HEADERS = [
+  "deposits and other credits",
+  "deposits and additions",
+  "deposits",
+  "other credits",
+  "credits",
+  "electronic deposits",
+  "direct deposits",
+  "incoming",
+];
+const WITHDRAWAL_HEADERS = [
+  "withdrawals and other debits",
+  "withdrawals and subtractions",
+  "withdrawals",
+  "other debits",
+  "debits",
+  "checks and debits",
+  "electronic withdrawals",
+  "purchases",
+  "outgoing",
+];
+
 const inferSectionHint = (fullText: string, index: number): TxType | null => {
-  const start = Math.max(0, index - 3500);
+  const start = Math.max(0, index - 5000);
   const lookback = fullText.slice(start, index).toLowerCase();
-  const dep = lookback.lastIndexOf("deposits and other credits");
-  const wit = lookback.lastIndexOf("withdrawals and other debits");
-  if (wit > dep) return "expense";
-  if (dep > wit) return "income";
+  let lastDep = -1;
+  let lastWit = -1;
+  for (const h of DEPOSIT_HEADERS) {
+    const pos = lookback.lastIndexOf(h);
+    if (pos > lastDep) lastDep = pos;
+  }
+  for (const h of WITHDRAWAL_HEADERS) {
+    const pos = lookback.lastIndexOf(h);
+    if (pos > lastWit) lastWit = pos;
+  }
+  if (lastWit > lastDep) return "expense";
+  if (lastDep > lastWit) return "income";
   return null;
 };
 
@@ -42,13 +72,20 @@ const inferType = (description: string, negative: boolean, sectionHint: TxType |
   if (negative) return "expense";
 
   const d = description.toLowerCase();
-  if (/(checkcard|purchase|payment to|wire out|zelle recurring payment to|zelle payment to|withdrawal|debit|service fee|shell|qt\s|walmart|home depot|autozone|lowe|motel|love's|7-eleven)/i.test(d)) {
-    return "expense";
-  }
-  if (/(deposit|bkofamerica mobile|wire in|online transfer from|counter credit|refund|payment received|ach credit|square inc|payables|zelle received|zelle from)/i.test(d)) {
+
+  // Strong income signals
+  if (/(deposit|bkofamerica mobile|wire in|online transfer from|counter credit|refund|payment received|ach credit|square inc|payables|zelle received|zelle from|direct dep|payroll|venmo cashout|cash deposit|atm deposit|interest earned|dividend|insurance claim|tax refund|reimbursement|incoming wire)/i.test(d)) {
     return "income";
   }
+
+  // Strong expense signals
+  if (/(checkcard|purchase|payment to|wire out|zelle recurring payment to|zelle payment to|withdrawal|debit|service fee|shell|qt\s|walmart|home depot|autozone|lowe|motel|love's|7-eleven|pos purchase|card purchase|ach debit|bill pay|autopay|recurring payment|online payment to)/i.test(d)) {
+    return "expense";
+  }
+
+  // Section headers are the strongest contextual signal
   if (sectionHint) return sectionHint;
+
   return "expense";
 };
 
