@@ -20,6 +20,7 @@ import ProfilePage from "./pages/ProfilePage";
 import InvoicesPage from "./pages/InvoicesPage";
 import ClientsPage from "./pages/ClientsPage";
 import AgingReportPage from "./pages/AgingReportPage";
+import ReconciliationPage from "./pages/ReconciliationPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,7 @@ const App = () => (
             <Route path="/tax-center" element={<ProtectedRoute><TaxCenterPage /></ProtectedRoute>} />
             <Route path="/1099" element={<ProtectedRoute><Report1099Page /></ProtectedRoute>} />
             <Route path="/aging" element={<ProtectedRoute><AgingReportPage /></ProtectedRoute>} />
+            <Route path="/reconciliation" element={<ProtectedRoute><ReconciliationPage /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -16,12 +16,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { EXPENSE_CATEGORIES } from "@/types/tax";
 import StatCard from "@/components/StatCard";
-import { Plus, Trash2, ArrowDownLeft, ArrowUpRight, Activity, Wallet, ArrowUpDown, ArrowUp, ArrowDown, Tag, Search, ShieldAlert, Pencil, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, ArrowDownLeft, ArrowUpRight, Activity, Wallet, ArrowUpDown, ArrowUp, ArrowDown, Tag, Search, ShieldAlert, Pencil, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { auditSales, AuditResult } from "@/lib/audit";
 import AuditIssuesPanel from "@/components/AuditIssuesPanel";
@@ -34,6 +35,7 @@ import {
 
 type SortField = "date" | "client" | "invoiceNumber" | "amount" | "description" | "category";
 type SortDir = "asc" | "desc";
+const PAGE_SIZE = 50;
 
 export default function SalesPage() {
   const navigate = useNavigate();
@@ -59,8 +61,9 @@ export default function SalesPage() {
   const [auditResult, setAuditResult] = useState<AuditResult | null>(null);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [batchCreating, setBatchCreating] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
 
-  // Persistent audit: auto-compute on data change
+  // Persistent audit
   const matchedSaleIds = useMemo(
     () => new Set(invoices.filter(inv => inv.matched_sale_id).map(inv => inv.matched_sale_id!)) as Set<string>,
     [invoices]
@@ -71,7 +74,6 @@ export default function SalesPage() {
   );
   const activeIssueCount = persistentAudit?.issues.length ?? 0;
 
-  // Helper: find matching client for a sale
   const findClientForSale = (clientName: string) => {
     const lower = clientName.toLowerCase();
     return clients.find((c) => {
@@ -80,13 +82,11 @@ export default function SalesPage() {
     });
   };
 
-  // Batch create invoices for multiple sales
   const handleBatchCreateInvoices = async (saleIds: string[]) => {
     const salesToInvoice = sales.filter((s) => saleIds.includes(s.id));
     if (salesToInvoice.length === 0) return;
     setBatchCreating(true);
-    let created = 0;
-    let failed = 0;
+    let created = 0, failed = 0;
     for (const sale of salesToInvoice) {
       const matchedClient = findClientForSale(sale.client);
       try {
@@ -97,30 +97,19 @@ export default function SalesPage() {
           client_id: matchedClient?.id || undefined,
           issue_date: sale.date,
           matched_sale_id: sale.id,
-          line_items: [{
-            description: sale.description || `Sale to ${sale.client}`,
-            quantity: 1,
-            unit_price: sale.amount,
-          }],
+          line_items: [{ description: sale.description || `Sale to ${sale.client}`, quantity: 1, unit_price: sale.amount }],
         });
         created++;
-      } catch {
-        failed++;
-      }
+      } catch { failed++; }
     }
     setBatchCreating(false);
-    if (failed > 0) {
-      toast.warning(`Created ${created} invoices, ${failed} failed`);
-    } else {
-      toast.success(`Created ${created} invoices — all matched & marked as Paid`);
-    }
-    // Re-run audit
+    if (failed > 0) toast.warning(`Created ${created} invoices, ${failed} failed`);
+    else toast.success(`Created ${created} invoices — all matched & marked as Paid`);
     const newMatched = new Set(matchedSaleIds);
     salesToInvoice.forEach((s) => newMatched.add(s.id));
     setAuditResult(auditSales(sales, expenses, newMatched));
   };
 
-  // Inline single invoice creation (no navigation)
   const handleInlineCreateInvoice = async (saleId: string) => {
     const sale = sales.find((s) => s.id === saleId);
     if (!sale) return;
@@ -133,42 +122,29 @@ export default function SalesPage() {
         client_id: matchedClient?.id || undefined,
         issue_date: sale.date,
         matched_sale_id: sale.id,
-        line_items: [{
-          description: sale.description || `Sale to ${sale.client}`,
-          quantity: 1,
-          unit_price: sale.amount,
-        }],
+        line_items: [{ description: sale.description || `Sale to ${sale.client}`, quantity: 1, unit_price: sale.amount }],
       });
       toast.success(`Invoice created for ${sale.client}${matchedClient ? ` (matched to saved client)` : ""}`);
-      // Re-run audit
       const newMatched = new Set(matchedSaleIds);
       newMatched.add(saleId);
       setAuditResult(auditSales(sales, expenses, newMatched));
-    } catch {
-      toast.error("Failed to create invoice");
-    }
+    } catch { toast.error("Failed to create invoice"); }
   };
 
   const searchedSales = useMemo(() => {
     if (!searchQuery.trim()) return sales;
     const q = searchQuery.trim().toLowerCase();
     return sales.filter((s) =>
-      s.client.toLowerCase().includes(q) ||
-      s.description.toLowerCase().includes(q) ||
-      s.date.includes(q) ||
-      s.amount.toString().includes(q) ||
-      formatCurrency(s.amount).toLowerCase().includes(q) ||
-      (s.invoiceNumber || "").toLowerCase().includes(q)
+      s.client.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) ||
+      s.date.includes(q) || s.amount.toString().includes(q) ||
+      formatCurrency(s.amount).toLowerCase().includes(q) || (s.invoiceNumber || "").toLowerCase().includes(q)
     );
   }, [sales, searchQuery]);
 
   const totalSales = searchedSales.reduce((sum, s) => sum + s.amount, 0);
 
   const handleAdd = () => {
-    if (!form.date || !form.client || !form.amount) {
-      toast.error("Please fill required fields");
-      return;
-    }
+    if (!form.date || !form.client || !form.amount) { toast.error("Please fill required fields"); return; }
     addSale.mutate({
       date: form.date, client: form.client, description: form.description,
       amount: parseFloat(form.amount),
@@ -183,6 +159,7 @@ export default function SalesPage() {
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir((d) => d === "asc" ? "desc" : "asc");
     else { setSortField(field); setSortDir("asc"); }
+    setCurrentPage(0);
   };
 
   const SortIcon = ({ field }: { field: SortField }) => {
@@ -205,14 +182,12 @@ export default function SalesPage() {
     });
   }, [searchedSales, sortField, sortDir]);
 
-  const toggleSelect = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const paginatedRows = sorted.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
 
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  };
   const toggleAll = () => {
     if (selected.size === sorted.length) setSelected(new Set());
     else setSelected(new Set(sorted.map((s) => s.id)));
@@ -226,36 +201,26 @@ export default function SalesPage() {
     });
   };
 
-  // Create rule from selected sales (keyword → category)
+  // Rule creation
   const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
   const [ruleKeyword, setRuleKeyword] = useState("");
   const [ruleCategory, setRuleCategory] = useState("");
 
   const openBulkRule = () => {
     const selectedSales = sales.filter((s) => selected.has(s.id));
-    if (selectedSales.length > 0) {
-      const first = selectedSales[0].client.split(/\s+/)[0]?.toLowerCase() || "";
-      setRuleKeyword(first);
-    }
-    setRuleCategory("");
-    setRuleDialogOpen(true);
+    if (selectedSales.length > 0) { setRuleKeyword(selectedSales[0].client.split(/\s+/)[0]?.toLowerCase() || ""); }
+    setRuleCategory(""); setRuleDialogOpen(true);
   };
 
   const saveBulkRule = async () => {
     if (!ruleKeyword || !ruleCategory) { toast.error("Enter keyword and category"); return; }
     const { error } = await supabase.from("categorization_rules").insert({
-      vendor_pattern: ruleKeyword,
-      category: ruleCategory,
-      type: "income",
-      priority: 10,
-      user_id: user?.id,
+      vendor_pattern: ruleKeyword, category: ruleCategory, type: "income", priority: 10, user_id: user?.id,
     });
     if (error) { toast.error("Failed to save rule"); return; }
     invalidateRulesCache();
     toast.success(`Rule saved: "${ruleKeyword}" → ${ruleCategory}`);
-    setRuleDialogOpen(false);
-    setRuleKeyword("");
-    setRuleCategory("");
+    setRuleDialogOpen(false); setRuleKeyword(""); setRuleCategory("");
   };
 
   /* ── Cash Flow data ── */
@@ -278,9 +243,7 @@ export default function SalesPage() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Sales</h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              Total: <span className="font-mono text-chart-positive">{formatCurrency(totalSales)}</span>
-            </p>
+            <p className="text-muted-foreground text-sm mt-1">Total: <span className="font-mono text-chart-positive">{formatCurrency(totalSales)}</span></p>
           </div>
           <div className="flex items-center gap-2">
             <DateRangeFilter />
@@ -295,9 +258,7 @@ export default function SalesPage() {
             />
           </div>
           <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="h-4 w-4 mr-2" />Add Sale</Button>
-            </DialogTrigger>
+            <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-2" />Add Sale</Button></DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>Add Sale</DialogTitle></DialogHeader>
               <div className="space-y-3">
@@ -319,14 +280,10 @@ export default function SalesPage() {
             <AlertTitle className="flex items-center gap-2">
               {activeIssueCount} audit issue{activeIssueCount !== 1 ? "s" : ""} detected
               {persistentAudit.totalDollarImpact > 0 && (
-                <Badge variant="outline" className="text-[10px] font-mono ml-1">
-                  {formatCurrency(persistentAudit.totalDollarImpact)} impacted
-                </Badge>
+                <Badge variant="outline" className="text-[10px] font-mono ml-1">{formatCurrency(persistentAudit.totalDollarImpact)} impacted</Badge>
               )}
             </AlertTitle>
-            <AlertDescription className="text-xs">
-              Click to review and resolve — issues are ranked by dollar impact.
-            </AlertDescription>
+            <AlertDescription className="text-xs">Click to review and resolve — issues are ranked by dollar impact.</AlertDescription>
           </Alert>
         )}
 
@@ -335,9 +292,7 @@ export default function SalesPage() {
             <TabsTrigger value="sales">
               Sales
               {activeIssueCount > 0 && (
-                <Badge variant="destructive" className="ml-2 text-[10px] h-5 w-5 rounded-full p-0 flex items-center justify-center">
-                  {activeIssueCount}
-                </Badge>
+                <Badge variant="destructive" className="ml-2 text-[10px] h-5 w-5 rounded-full p-0 flex items-center justify-center">{activeIssueCount}</Badge>
               )}
             </TabsTrigger>
             <TabsTrigger value="cashflow">Cash Flow</TabsTrigger>
@@ -347,42 +302,24 @@ export default function SalesPage() {
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by client, description, date, or amount…"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
+                <Input placeholder="Search by client, description, date, or amount…" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-9" />
               </div>
-              <Button
-                variant="outline"
-                onClick={() => setAuditResult(persistentAudit || auditSales(sales, expenses, matchedSaleIds))}
-              >
-                <ShieldAlert className="h-4 w-4 mr-2" />
-                Quick Audit
+              <Button variant="outline" onClick={() => setAuditResult(persistentAudit || auditSales(sales, expenses, matchedSaleIds))}>
+                <ShieldAlert className="h-4 w-4 mr-2" />Quick Audit
               </Button>
             </div>
 
             {auditResult && (
               <AuditIssuesPanel
                 result={auditResult}
-                getItemLabel={(id) => {
-                  const s = sales.find((x) => x.id === id);
-                  if (!s) return null;
-                  return { date: s.date, label: `${s.client} — ${s.description}`, amount: s.amount };
-                }}
-                onDeleteItems={(ids) => {
-                  bulkRemove.mutate(ids, {
-                    onSuccess: () => {
-                      toast.success(`Deleted ${ids.length} sale(s)`);
-                    },
-                  });
-                }}
+                getItemLabel={(id) => { const s = sales.find((x) => x.id === id); if (!s) return null; return { date: s.date, label: `${s.client} — ${s.description}`, amount: s.amount }; }}
+                onDeleteItems={(ids) => { bulkRemove.mutate(ids, { onSuccess: () => toast.success(`Deleted ${ids.length} sale(s)`) }); }}
                 onSelectItems={(ids) => setSelected(new Set(ids))}
                 onCreateInvoice={handleInlineCreateInvoice}
                 onBatchCreateInvoices={(ids) => handleBatchCreateInvoices(ids)}
               />
             )}
+
             {/* Bulk actions bar */}
             {selected.size > 0 && (
               <div className="flex items-center gap-3 bg-muted rounded-lg px-4 py-2">
@@ -390,12 +327,24 @@ export default function SalesPage() {
                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={openBulkRule}>
                   <Tag className="h-3 w-3 mr-1" /> Create Rule
                 </Button>
-                <Button variant="outline" size="sm" className="h-7 text-xs text-destructive" onClick={handleBulkDelete}>
-                  <Trash2 className="h-3 w-3 mr-1" /> Delete
-                </Button>
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelected(new Set())}>
-                  Clear
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-7 text-xs text-destructive">
+                      <Trash2 className="h-3 w-3 mr-1" /> Delete
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete {selected.size} sale(s)?</AlertDialogTitle>
+                      <AlertDialogDescription>This action cannot be undone. The selected sales will be permanently removed.</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelected(new Set())}>Clear</Button>
               </div>
             )}
 
@@ -405,17 +354,11 @@ export default function SalesPage() {
                 <DialogHeader><DialogTitle>Create Categorization Rule</DialogTitle></DialogHeader>
                 <p className="text-sm text-muted-foreground">This rule will auto-categorize future imports matching the keyword.</p>
                 <div className="space-y-3">
-                  <div>
-                    <label className="text-xs text-muted-foreground mb-1 block">Keyword pattern</label>
-                    <Input value={ruleKeyword} onChange={(e) => setRuleKeyword(e.target.value)} placeholder="e.g. acme" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground mb-1 block">Category</label>
+                  <div><label className="text-xs text-muted-foreground mb-1 block">Keyword pattern</label><Input value={ruleKeyword} onChange={(e) => setRuleKeyword(e.target.value)} placeholder="e.g. acme" /></div>
+                  <div><label className="text-xs text-muted-foreground mb-1 block">Category</label>
                     <Select value={ruleCategory} onValueChange={setRuleCategory}>
                       <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
-                      <SelectContent>
-                        {EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                      </SelectContent>
+                      <SelectContent>{EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <Button onClick={saveBulkRule} className="w-full" disabled={!ruleKeyword || !ruleCategory}>Save Rule</Button>
@@ -427,68 +370,32 @@ export default function SalesPage() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th className="w-10">
-                      <Checkbox
-                        checked={sorted.length > 0 && selected.size === sorted.length}
-                        onCheckedChange={toggleAll}
-                      />
-                    </th>
-                    <th className="cursor-pointer select-none" onClick={() => toggleSort("date")}>
-                      <span className="inline-flex items-center">Date<SortIcon field="date" /></span>
-                    </th>
-                    <th className="cursor-pointer select-none" onClick={() => toggleSort("invoiceNumber")}>
-                      <span className="inline-flex items-center">Invoice<SortIcon field="invoiceNumber" /></span>
-                    </th>
-                    <th className="cursor-pointer select-none" onClick={() => toggleSort("client")}>
-                      <span className="inline-flex items-center">Client<SortIcon field="client" /></span>
-                    </th>
-                    <th className="cursor-pointer select-none" onClick={() => toggleSort("description")}>
-                      <span className="inline-flex items-center">Description<SortIcon field="description" /></span>
-                    </th>
-                    <th className="cursor-pointer select-none" onClick={() => toggleSort("category")}>
-                      <span className="inline-flex items-center">Category<SortIcon field="category" /></span>
-                    </th>
-                    <th className="text-right cursor-pointer select-none" onClick={() => toggleSort("amount")}>
-                      <span className="inline-flex items-center justify-end">Amount<SortIcon field="amount" /></span>
-                    </th>
+                    <th className="w-10"><Checkbox checked={sorted.length > 0 && selected.size === sorted.length} onCheckedChange={toggleAll} /></th>
+                    <th className="cursor-pointer select-none" onClick={() => toggleSort("date")}><span className="inline-flex items-center">Date<SortIcon field="date" /></span></th>
+                    <th className="cursor-pointer select-none" onClick={() => toggleSort("invoiceNumber")}><span className="inline-flex items-center">Invoice<SortIcon field="invoiceNumber" /></span></th>
+                    <th className="cursor-pointer select-none" onClick={() => toggleSort("client")}><span className="inline-flex items-center">Client<SortIcon field="client" /></span></th>
+                    <th className="cursor-pointer select-none" onClick={() => toggleSort("description")}><span className="inline-flex items-center">Description<SortIcon field="description" /></span></th>
+                    <th className="cursor-pointer select-none" onClick={() => toggleSort("category")}><span className="inline-flex items-center">Category<SortIcon field="category" /></span></th>
+                    <th className="text-right cursor-pointer select-none" onClick={() => toggleSort("amount")}><span className="inline-flex items-center justify-end">Amount<SortIcon field="amount" /></span></th>
                     <th className="w-10"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sorted.map((s) => (
+                  {paginatedRows.map((s) => (
                     <tr key={s.id} className={selected.has(s.id) ? "bg-primary/5" : ""}>
-                      <td>
-                        <Checkbox
-                          checked={selected.has(s.id)}
-                          onCheckedChange={() => toggleSelect(s.id)}
-                        />
-                      </td>
+                      <td><Checkbox checked={selected.has(s.id)} onCheckedChange={() => toggleSelect(s.id)} /></td>
                       <td className="font-mono text-xs text-muted-foreground">{s.date}</td>
                       <td className="font-mono text-xs">{s.invoiceNumber}</td>
                       <td className="font-medium">{s.client}</td>
                       <td className="text-muted-foreground">{s.description}</td>
                       <td>
                         {editingCategoryId === s.id ? (
-                          <Select
-                            value={s.category}
-                            onValueChange={(v) => {
-                              updateSale.mutate({ id: s.id, category: v }, {
-                                onSuccess: () => { toast.success("Category updated"); setEditingCategoryId(null); },
-                              });
-                            }}
-                          >
-                            <SelectTrigger className="h-7 text-xs w-[150px]">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                            </SelectContent>
+                          <Select value={s.category} onValueChange={(v) => { updateSale.mutate({ id: s.id, category: v }, { onSuccess: () => { toast.success("Category updated"); setEditingCategoryId(null); } }); }}>
+                            <SelectTrigger className="h-7 text-xs w-[150px]"><SelectValue /></SelectTrigger>
+                            <SelectContent>{EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                           </Select>
                         ) : (
-                          <button
-                            onClick={() => setEditingCategoryId(s.id)}
-                            className="group flex items-center gap-1"
-                          >
+                          <button onClick={() => setEditingCategoryId(s.id)} className="group flex items-center gap-1">
                             <Badge variant="secondary" className="text-xs font-normal">{s.category}</Badge>
                             <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                           </button>
@@ -496,15 +403,43 @@ export default function SalesPage() {
                       </td>
                       <td className="text-right font-mono text-chart-positive">{formatCurrency(s.amount)}</td>
                       <td>
-                        <Button variant="ghost" size="icon" onClick={() => { removeSale.mutate(s.id); toast.success("Removed"); }}>
-                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon"><Trash2 className="h-3.5 w-3.5 text-muted-foreground" /></Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete sale?</AlertDialogTitle>
+                              <AlertDialogDescription>{s.client} — {formatCurrency(s.amount)} on {s.date}</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => { removeSale.mutate(s.id); toast.success("Removed"); }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-xs text-muted-foreground">Showing {currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, sorted.length)} of {sorted.length}</p>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => p - 1)}>
+                    <ChevronLeft className="h-4 w-4 mr-1" />Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground">Page {currentPage + 1} of {totalPages}</span>
+                  <Button variant="outline" size="sm" disabled={currentPage >= totalPages - 1} onClick={() => setCurrentPage((p) => p + 1)}>
+                    Next<ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="cashflow" className="space-y-8 mt-4">
@@ -550,9 +485,7 @@ export default function SalesPage() {
                           <TableCell className="font-medium">{row.month}</TableCell>
                           <TableCell className="text-right text-chart-positive">{formatCurrency(row.inflows)}</TableCell>
                           <TableCell className="text-right text-chart-negative">{formatCurrency(row.outflows)}</TableCell>
-                          <TableCell className={`text-right ${row.inflows - row.outflows >= 0 ? "text-chart-positive" : "text-chart-negative"}`}>
-                            {formatCurrency(row.inflows - row.outflows)}
-                          </TableCell>
+                          <TableCell className={`text-right ${row.inflows - row.outflows >= 0 ? "text-chart-positive" : "text-chart-negative"}`}>{formatCurrency(row.inflows - row.outflows)}</TableCell>
                           <TableCell className="text-right font-mono">{formatCurrency(row.balance)}</TableCell>
                         </TableRow>
                       ))}
@@ -561,9 +494,7 @@ export default function SalesPage() {
                 </div>
               </>
             ) : (
-              <div className="rounded-lg border bg-card p-12 text-center text-muted-foreground">
-                No transaction data yet. Import sales and expenses to see your cash flow.
-              </div>
+              <div className="rounded-lg border bg-card p-12 text-center text-muted-foreground">No transaction data yet. Import sales and expenses to see your cash flow.</div>
             )}
           </TabsContent>
         </Tabs>

@@ -463,6 +463,42 @@ export type Database = {
         }
         Relationships: []
       }
+      reconciliation_periods: {
+        Row: {
+          account_name: string
+          created_at: string
+          id: string
+          period_end: string
+          period_start: string
+          reconciled_at: string | null
+          statement_balance: number
+          status: string
+          user_id: string
+        }
+        Insert: {
+          account_name: string
+          created_at?: string
+          id?: string
+          period_end: string
+          period_start: string
+          reconciled_at?: string | null
+          statement_balance?: number
+          status?: string
+          user_id: string
+        }
+        Update: {
+          account_name?: string
+          created_at?: string
+          id?: string
+          period_end?: string
+          period_start?: string
+          reconciled_at?: string | null
+          statement_balance?: number
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       sales: {
         Row: {
           amount: number

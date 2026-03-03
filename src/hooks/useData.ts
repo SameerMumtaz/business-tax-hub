@@ -15,7 +15,8 @@ export function useExpenses() {
         .from("expenses")
         .select("*")
         .eq("user_id", user!.id)
-        .order("date", { ascending: false });
+        .order("date", { ascending: false })
+        .limit(5000);
       if (error) throw error;
       return (data || []).map((r) => ({
         id: r.id,
@@ -114,7 +115,8 @@ export function useSales() {
         .from("sales")
         .select("*")
         .eq("user_id", user!.id)
-        .order("date", { ascending: false });
+        .order("date", { ascending: false })
+        .limit(5000);
       if (error) throw error;
       return (data || []).map((r) => ({
         id: r.id,

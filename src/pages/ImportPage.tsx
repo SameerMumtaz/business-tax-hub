@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef, memo, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { useAddExpense, useAddSale } from "@/hooks/useData";
+import { useAddExpense, useAddSale, useExpenses, useSales } from "@/hooks/useData";
 import { useAuth } from "@/hooks/useAuth";
 import { parseCSV, parseExcel, ParsedTransaction } from "@/lib/csvParser";
 import { categorizeTransactions, invalidateRulesCache } from "@/lib/categorize";
@@ -37,6 +37,7 @@ interface ReviewTransaction extends ParsedTransaction {
   include: boolean;
   catSource?: "rule" | "keyword";
   userEdited?: boolean;
+  isDuplicate?: boolean;
 }
 
 interface RuleSuggestion {
@@ -45,6 +46,33 @@ interface RuleSuggestion {
   type: "expense" | "income";
   count: number;
   saved?: boolean;
+}
+
+function detectDuplicates(
+  transactions: ReviewTransaction[],
+  existingExpenses: { date: string; amount: number; description: string; vendor: string }[],
+  existingSales: { date: string; amount: number; description: string; client: string }[],
+) {
+  // Build a lookup set from existing records: "date|amount"
+  const existingKeys = new Set<string>();
+  for (const e of existingExpenses) {
+    existingKeys.add(`${e.date}|${Math.abs(e.amount).toFixed(2)}`);
+  }
+  for (const s of existingSales) {
+    existingKeys.add(`${s.date}|${Math.abs(s.amount).toFixed(2)}`);
+  }
+
+  let dupeCount = 0;
+  const withDupeFlags = transactions.map((t) => {
+    const key = `${t.date}|${Math.abs(t.amount).toFixed(2)}`;
+    if (existingKeys.has(key)) {
+      dupeCount++;
+      return { ...t, include: false, isDuplicate: true };
+    }
+    return t;
+  });
+
+  return { dupeCount, withDupeFlags };
 }
 
 function extractKeyword(description: string): string | null {
@@ -86,7 +114,10 @@ const TransactionRow = memo(function TransactionRow({
         </button>
       </td>
       <td className="font-mono text-xs text-muted-foreground">{t.date}</td>
-      <td className="max-w-[250px] truncate">{t.description}</td>
+      <td className="max-w-[250px] truncate">
+        {t.description}
+        {t.isDuplicate && <span className="ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-600">Duplicate</span>}
+      </td>
       <td>
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
           t.type === "income" ? "bg-accent text-accent-foreground" : "bg-destructive/10 text-destructive"
@@ -126,6 +157,8 @@ export default function ImportPage() {
   const addExpenseMutation = useAddExpense();
   const addSaleMutation = useAddSale();
   const { user } = useAuth();
+  const { data: existingExpenses = [] } = useExpenses();
+  const { data: existingSales = [] } = useSales();
   const [transactions, setTransactions] = useState<ReviewTransaction[]>([]);
   const [step, setStep] = useState<"upload" | "review">("upload");
   const [importing, setImporting] = useState(false);
@@ -330,9 +363,12 @@ export default function ImportPage() {
         include: true,
       }));
 
-      setTransactions(reviewed);
+      // Duplicate detection against existing DB records
+      const { dupeCount, withDupeFlags } = detectDuplicates(reviewed, existingExpenses, existingSales);
+      setTransactions(withDupeFlags);
       setStep("review");
-      toast.success(`Extracted ${reviewed.length} transactions from ${totalPages} pages`);
+      const dupeMsg = dupeCount > 0 ? ` (${dupeCount} potential duplicates excluded)` : "";
+      toast.success(`Extracted ${reviewed.length} transactions from ${totalPages} pages${dupeMsg}`);
 
       setCategorizing(true);
       try {
@@ -394,8 +430,11 @@ export default function ImportPage() {
         include: true,
       }));
 
-      setTransactions(reviewed);
+      // Duplicate detection against existing DB records
+      const { dupeCount, withDupeFlags } = detectDuplicates(reviewed, existingExpenses, existingSales);
+      setTransactions(withDupeFlags);
       setStep("review");
+      if (dupeCount > 0) toast.warning(`${dupeCount} potential duplicates found and excluded`);
 
       setCategorizing(true);
       try {
