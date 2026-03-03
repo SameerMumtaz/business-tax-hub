@@ -10,6 +10,7 @@ import {
   Tag,
   Building2,
   LogOut,
+  ClipboardList,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ const links = [
   { to: "/expenses", label: "Expenses", icon: TrendingDown },
   { to: "/profit-loss", label: "Profit & Loss", icon: DollarSign },
   { to: "/1099", label: "Tax Forms", icon: FileText },
+  { to: "/schedule-c", label: "Schedule C", icon: ClipboardList },
   { to: "/profile", label: "Company Profile", icon: Building2 },
 ];
 

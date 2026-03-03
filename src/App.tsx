@@ -12,6 +12,7 @@ import SalesPage from "./pages/SalesPage";
 import ExpensesPage from "./pages/ExpensesPage";
 import ProfitLossPage from "./pages/ProfitLossPage";
 import Report1099Page from "./pages/Report1099Page";
+import ScheduleCPage from "./pages/ScheduleCPage";
 import ImportPage from "./pages/ImportPage";
 import CategorizationRulesPage from "./pages/CategorizationRulesPage";
 import ProfilePage from "./pages/ProfilePage";
@@ -37,6 +38,7 @@ const App = () => (
             <Route path="/expenses" element={<ProtectedRoute><ExpensesPage /></ProtectedRoute>} />
             <Route path="/profit-loss" element={<ProtectedRoute><ProfitLossPage /></ProtectedRoute>} />
             <Route path="/1099" element={<ProtectedRoute><Report1099Page /></ProtectedRoute>} />
+            <Route path="/schedule-c" element={<ProtectedRoute><ScheduleCPage /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
