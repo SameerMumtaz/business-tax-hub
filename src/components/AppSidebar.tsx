@@ -6,10 +6,12 @@ import {
   Receipt,
   FileText,
   DollarSign,
+  Upload,
 } from "lucide-react";
 
 const links = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/import", label: "Import", icon: Upload },
   { to: "/sales", label: "Sales", icon: TrendingUp },
   { to: "/expenses", label: "Expenses", icon: TrendingDown },
   { to: "/profit-loss", label: "Profit & Loss", icon: DollarSign },

@@ -8,6 +8,7 @@ import SalesPage from "./pages/SalesPage";
 import ExpensesPage from "./pages/ExpensesPage";
 import ProfitLossPage from "./pages/ProfitLossPage";
 import Report1099Page from "./pages/Report1099Page";
+import ImportPage from "./pages/ImportPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -20,6 +21,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<DashboardPage />} />
+          <Route path="/import" element={<ImportPage />} />
           <Route path="/sales" element={<SalesPage />} />
           <Route path="/expenses" element={<ExpensesPage />} />
           <Route path="/profit-loss" element={<ProfitLossPage />} />
