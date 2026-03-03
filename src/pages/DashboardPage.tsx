@@ -1,5 +1,6 @@
 import { useExpenses, useSales, useContractors, useProfile } from "@/hooks/useData";
 import { useQuotes } from "@/hooks/useQuotes";
+import { useInvoices } from "@/hooks/useInvoices";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { formatCurrency } from "@/lib/format";
 import { CHART_COLORS, AXIS_STYLE, GRID_STYLE, TOOLTIP_STYLE } from "@/lib/chartTheme";
@@ -11,7 +12,8 @@ import SmartAlerts from "@/components/SmartAlerts";
 import OnboardingWizard from "@/components/OnboardingWizard";
 import HelpTooltip from "@/components/HelpTooltip";
 import ExpenseBreakdownDialog from "@/components/ExpenseBreakdownDialog";
-import { TrendingUp, TrendingDown, DollarSign, Users, Expand, ClipboardList } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, Users, Expand, ClipboardList, CreditCard } from "lucide-react";
+import { Link } from "react-router-dom";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { useMemo, useState } from "react";
 
@@ -22,6 +24,7 @@ export default function DashboardPage() {
   const { data: profile } = useProfile();
   const { filterByDate } = useDateRange();
   const { data: quotes = [] } = useQuotes();
+  const { data: allInvoices = [] } = useInvoices();
   const [showOnboarding, setShowOnboarding] = useState(true);
   const [showBreakdown, setShowBreakdown] = useState(false);
 
@@ -43,6 +46,9 @@ export default function DashboardPage() {
 
   const pendingQuotes = quotes.filter(q => q.status === "sent" || q.status === "draft");
   const pendingQuotesValue = pendingQuotes.reduce((s, q) => s + q.total, 0);
+
+  const outstandingInvoices = allInvoices.filter(i => i.status !== "paid" && i.pay_status !== "paid" && i.status !== "draft");
+  const outstandingBalance = outstandingInvoices.reduce((s, i) => s + i.total, 0);
 
   const categoryMap: Record<string, number> = {};
   expenses.forEach((e) => { categoryMap[e.category] = (categoryMap[e.category] || 0) + e.amount; });
@@ -79,11 +85,14 @@ export default function DashboardPage() {
 
         <SmartAlerts />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
           <StatCard title="Total Revenue" value={totalRevenue} icon={TrendingUp} variant="positive" trend={`${sales.length} transactions`} />
           <StatCard title="Total Expenses" value={totalExpenses} icon={TrendingDown} variant="negative" trend={`${expenses.length} transactions`} />
           <StatCard title="Net Profit" value={netIncome} icon={DollarSign} variant={netIncome >= 0 ? "positive" : "negative"} />
           <StatCard title="Pending Quotes" value={pendingQuotesValue} icon={ClipboardList} trend={`${pendingQuotes.length} quotes`} />
+          <Link to="/invoices" className="no-underline">
+            <StatCard title="Collect Payment" value={outstandingBalance} icon={CreditCard} variant="negative" trend={`${outstandingInvoices.length} unpaid invoices`} />
+          </Link>
           <StatCard title="Contractor Payments" value={contractors.reduce((s, c) => s + c.totalPaid, 0)} icon={Users} trend={`${contractors.length} contractors`} />
         </div>
 

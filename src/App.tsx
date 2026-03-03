@@ -37,6 +37,7 @@ import CrewMapPage from "./pages/CrewMapPage";
 import VehiclesPage from "./pages/VehiclesPage";
 import QuotesPage from "./pages/QuotesPage";
 import PublicQuotePage from "./pages/PublicQuotePage";
+import PublicInvoicePage from "./pages/PublicInvoicePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -91,6 +92,7 @@ const App = () => (
             <Route path="/personal/profile" element={<ProtectedRoute><PersonalProfilePage /></ProtectedRoute>} />
 
             <Route path="/q/:token" element={<PublicQuotePage />} />
+            <Route path="/invoice/view/:token" element={<PublicInvoicePage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

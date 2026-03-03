@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Send, FileText, Link2, CheckCircle2, AlertCircle, Clock, X, RefreshCw, Repeat } from "lucide-react";
+import { Plus, Trash2, Send, FileText, Link2, CheckCircle2, AlertCircle, Clock, X, RefreshCw, Repeat, CreditCard } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
@@ -409,9 +409,19 @@ ${inv.notes ? `\nNotes: ${inv.notes}` : ""}
                                 <AlertCircle className="h-3.5 w-3.5" />
                               </Button>
                             )}
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleCopyLink(inv.share_token)} title="Copy Link">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleCopyLink(inv.share_token)} title="Copy Share Link">
                               <Link2 className="h-3.5 w-3.5" />
                             </Button>
+                            {inv.status !== "paid" && inv.pay_status !== "paid" && (
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
+                                if (!inv.share_token) return;
+                                const url = `${window.location.origin}/invoice/view/${inv.share_token}`;
+                                navigator.clipboard.writeText(url);
+                                toast.success("Payment link copied");
+                              }} title="Copy Payment Link">
+                                <CreditCard className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleGeneratePDF(inv)} title="Download">
                               <FileText className="h-3.5 w-3.5" />
                             </Button>
