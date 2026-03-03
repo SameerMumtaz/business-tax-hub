@@ -21,6 +21,7 @@ const links = [
   { to: "/import", label: "Import", icon: Upload },
   { to: "/categorization", label: "Categories", icon: Tag },
   { to: "/sales", label: "Sales", icon: TrendingUp },
+  { to: "/invoices", label: "Invoices", icon: FileText },
   { to: "/expenses", label: "Expenses", icon: TrendingDown },
   { to: "/profit-loss", label: "Profit & Loss", icon: DollarSign },
   { to: "/tax-center", label: "Tax Center", icon: Calculator },
