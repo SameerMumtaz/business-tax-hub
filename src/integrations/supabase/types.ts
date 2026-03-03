@@ -389,12 +389,14 @@ export type Database = {
           issue_date: string
           matched_sale_id: string | null
           notes: string | null
+          pay_status: string
           recurring_end_date: string | null
           recurring_interval: string | null
           recurring_next_date: string | null
           recurring_parent_id: string | null
           share_token: string | null
           status: string
+          stripe_payment_intent_id: string | null
           subtotal: number
           tax_amount: number
           tax_rate: number
@@ -414,12 +416,14 @@ export type Database = {
           issue_date: string
           matched_sale_id?: string | null
           notes?: string | null
+          pay_status?: string
           recurring_end_date?: string | null
           recurring_interval?: string | null
           recurring_next_date?: string | null
           recurring_parent_id?: string | null
           share_token?: string | null
           status?: string
+          stripe_payment_intent_id?: string | null
           subtotal?: number
           tax_amount?: number
           tax_rate?: number
@@ -439,12 +443,14 @@ export type Database = {
           issue_date?: string
           matched_sale_id?: string | null
           notes?: string | null
+          pay_status?: string
           recurring_end_date?: string | null
           recurring_interval?: string | null
           recurring_next_date?: string | null
           recurring_parent_id?: string | null
           share_token?: string | null
           status?: string
+          stripe_payment_intent_id?: string | null
           subtotal?: number
           tax_amount?: number
           tax_rate?: number

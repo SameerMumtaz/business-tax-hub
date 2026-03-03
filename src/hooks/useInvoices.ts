@@ -28,6 +28,8 @@ export interface Invoice {
   total: number;
   share_token: string | null;
   matched_sale_id: string | null;
+  pay_status: string;
+  stripe_payment_intent_id: string | null;
   client_id: string | null;
   is_recurring: boolean;
   recurring_interval: string | null;
@@ -57,6 +59,7 @@ export function useInvoices() {
         tax_rate: Number(r.tax_rate),
         tax_amount: Number(r.tax_amount),
         total: Number(r.total),
+        pay_status: r.pay_status || "unpaid",
         status: r.status as Invoice["status"],
         line_items: (r.invoice_line_items || []).map((li: any) => ({
           ...li,
