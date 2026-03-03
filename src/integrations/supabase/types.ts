@@ -21,6 +21,7 @@ export type Database = {
           id: string
           priority: number
           type: string
+          user_id: string | null
           vendor_pattern: string
         }
         Insert: {
@@ -29,6 +30,7 @@ export type Database = {
           id?: string
           priority?: number
           type?: string
+          user_id?: string | null
           vendor_pattern: string
         }
         Update: {
@@ -37,7 +39,200 @@ export type Database = {
           id?: string
           priority?: number
           type?: string
+          user_id?: string | null
           vendor_pattern?: string
+        }
+        Relationships: []
+      }
+      contractors: {
+        Row: {
+          address: string | null
+          created_at: string
+          id: string
+          name: string
+          pay_rate: number | null
+          tin_last4: string | null
+          total_paid: number
+          user_id: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          pay_rate?: number | null
+          tin_last4?: string | null
+          total_paid?: number
+          user_id: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          pay_rate?: number | null
+          tin_last4?: string | null
+          total_paid?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      employees: {
+        Row: {
+          address: string | null
+          created_at: string
+          federal_withholding: number
+          id: string
+          medicare: number
+          name: string
+          salary: number
+          social_security: number
+          ssn_last4: string | null
+          start_date: string | null
+          state_withholding: number
+          user_id: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          federal_withholding?: number
+          id?: string
+          medicare?: number
+          name: string
+          salary?: number
+          social_security?: number
+          ssn_last4?: string | null
+          start_date?: string | null
+          state_withholding?: number
+          user_id: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          federal_withholding?: number
+          id?: string
+          medicare?: number
+          name?: string
+          salary?: number
+          social_security?: number
+          ssn_last4?: string | null
+          start_date?: string | null
+          state_withholding?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      expenses: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          date: string
+          description: string | null
+          id: string
+          user_id: string
+          vendor: string
+        }
+        Insert: {
+          amount?: number
+          category?: string
+          created_at?: string
+          date: string
+          description?: string | null
+          id?: string
+          user_id: string
+          vendor: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          date?: string
+          description?: string | null
+          id?: string
+          user_id?: string
+          vendor?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          business_address: string | null
+          business_city: string | null
+          business_email: string | null
+          business_name: string | null
+          business_phone: string | null
+          business_state: string | null
+          business_type: string | null
+          business_zip: string | null
+          created_at: string
+          ein_last4: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          business_address?: string | null
+          business_city?: string | null
+          business_email?: string | null
+          business_name?: string | null
+          business_phone?: string | null
+          business_state?: string | null
+          business_type?: string | null
+          business_zip?: string | null
+          created_at?: string
+          ein_last4?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          business_address?: string | null
+          business_city?: string | null
+          business_email?: string | null
+          business_name?: string | null
+          business_phone?: string | null
+          business_state?: string | null
+          business_type?: string | null
+          business_zip?: string | null
+          created_at?: string
+          ein_last4?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      sales: {
+        Row: {
+          amount: number
+          client: string
+          created_at: string
+          date: string
+          description: string | null
+          id: string
+          invoice_number: string | null
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          client: string
+          created_at?: string
+          date: string
+          description?: string | null
+          id?: string
+          invoice_number?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          client?: string
+          created_at?: string
+          date?: string
+          description?: string | null
+          id?: string
+          invoice_number?: string | null
+          user_id?: string
         }
         Relationships: []
       }

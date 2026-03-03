@@ -1,0 +1,231 @@
+import { useState, useEffect } from "react";
+import DashboardLayout from "@/components/DashboardLayout";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Building2, Save } from "lucide-react";
+import { toast } from "sonner";
+
+const BUSINESS_TYPES = ["Sole Proprietor", "LLC", "S-Corp", "C-Corp", "Partnership", "Nonprofit"];
+
+interface Profile {
+  business_name: string;
+  ein_last4: string;
+  business_address: string;
+  business_city: string;
+  business_state: string;
+  business_zip: string;
+  business_type: string;
+  business_phone: string;
+  business_email: string;
+}
+
+const emptyProfile: Profile = {
+  business_name: "",
+  ein_last4: "",
+  business_address: "",
+  business_city: "",
+  business_state: "",
+  business_zip: "",
+  business_type: "",
+  business_phone: "",
+  business_email: "",
+};
+
+export default function ProfilePage() {
+  const { user } = useAuth();
+  const [profile, setProfile] = useState<Profile>(emptyProfile);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [einFull, setEinFull] = useState("");
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_id", user.id)
+        .single();
+      if (data) {
+        setProfile({
+          business_name: data.business_name || "",
+          ein_last4: data.ein_last4 || "",
+          business_address: data.business_address || "",
+          business_city: data.business_city || "",
+          business_state: data.business_state || "",
+          business_zip: data.business_zip || "",
+          business_type: data.business_type || "",
+          business_phone: data.business_phone || "",
+          business_email: data.business_email || "",
+        });
+      }
+      setLoading(false);
+    })();
+  }, [user]);
+
+  const handleSave = async () => {
+    if (!user) return;
+    setSaving(true);
+
+    // Store only last 4 of EIN if user entered full EIN
+    let ein_last4 = profile.ein_last4;
+    if (einFull) {
+      const digits = einFull.replace(/\D/g, "");
+      ein_last4 = digits.slice(-4);
+    }
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        ...profile,
+        ein_last4,
+      })
+      .eq("user_id", user.id);
+
+    if (error) {
+      toast.error("Failed to save profile");
+    } else {
+      setProfile((p) => ({ ...p, ein_last4 }));
+      setEinFull("");
+      toast.success("Profile saved");
+    }
+    setSaving(false);
+  };
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64 text-muted-foreground">Loading…</div>
+      </DashboardLayout>
+    );
+  }
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-6 max-w-2xl">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Company Profile</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            This information is used on generated 1099-NEC and W-2 forms
+          </p>
+        </div>
+
+        <div className="stat-card space-y-5">
+          <h2 className="section-title flex items-center gap-2">
+            <Building2 className="h-4 w-4" /> Business Information
+          </h2>
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Business Name *</label>
+              <Input
+                value={profile.business_name}
+                onChange={(e) => setProfile({ ...profile, business_name: e.target.value })}
+                placeholder="Your Business LLC"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Business Type</label>
+                <Select value={profile.business_type} onValueChange={(v) => setProfile({ ...profile, business_type: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                  <SelectContent>
+                    {BUSINESS_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  EIN {profile.ein_last4 && <span className="text-primary">(stored: ***-**{profile.ein_last4})</span>}
+                </label>
+                <Input
+                  value={einFull}
+                  onChange={(e) => setEinFull(e.target.value)}
+                  placeholder={profile.ein_last4 ? `***-**${profile.ein_last4} — enter new to update` : "XX-XXXXXXX"}
+                />
+                <p className="text-xs text-muted-foreground mt-1">Only last 4 digits are stored for security</p>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Street Address</label>
+              <Input
+                value={profile.business_address}
+                onChange={(e) => setProfile({ ...profile, business_address: e.target.value })}
+                placeholder="123 Main St"
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">City</label>
+                <Input
+                  value={profile.business_city}
+                  onChange={(e) => setProfile({ ...profile, business_city: e.target.value })}
+                  placeholder="City"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">State</label>
+                <Input
+                  value={profile.business_state}
+                  onChange={(e) => setProfile({ ...profile, business_state: e.target.value })}
+                  placeholder="TX"
+                  maxLength={2}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">ZIP</label>
+                <Input
+                  value={profile.business_zip}
+                  onChange={(e) => setProfile({ ...profile, business_zip: e.target.value })}
+                  placeholder="78701"
+                  maxLength={10}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Phone</label>
+                <Input
+                  value={profile.business_phone}
+                  onChange={(e) => setProfile({ ...profile, business_phone: e.target.value })}
+                  placeholder="(555) 123-4567"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Business Email</label>
+                <Input
+                  type="email"
+                  value={profile.business_email}
+                  onChange={(e) => setProfile({ ...profile, business_email: e.target.value })}
+                  placeholder="info@yourbusiness.com"
+                />
+              </div>
+            </div>
+          </div>
+
+          <Button onClick={handleSave} disabled={saving} className="w-full">
+            <Save className="h-4 w-4 mr-2" />
+            {saving ? "Saving…" : "Save Profile"}
+          </Button>
+        </div>
+
+        <div className="rounded-lg border border-chart-info/30 bg-chart-info/5 p-4">
+          <p className="text-sm">
+            <span className="font-semibold">Privacy note:</span> Only the last 4 digits of your EIN are stored. 
+            SSNs and TINs for contractors/employees are also stored as last-4 only. 
+            Full values must be re-entered when generating tax forms.
+          </p>
+        </div>
+      </div>
+    </DashboardLayout>
+  );
+}
