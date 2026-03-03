@@ -128,6 +128,9 @@ export default function ImportPage() {
   const { user } = useAuth();
   const [transactions, setTransactions] = useState<ReviewTransaction[]>([]);
   const [step, setStep] = useState<"upload" | "review">("upload");
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importStatus, setImportStatus] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [pdfDragOver, setPdfDragOver] = useState(false);
   const [categorizing, setCategorizing] = useState(false);
@@ -684,32 +687,55 @@ export default function ImportPage() {
 
   const handleImport = async () => {
     const included = transactions.filter((t) => t.include);
+    if (included.length === 0) { toast.error("No transactions to import"); return; }
+
+    setImporting(true);
+    setImportProgress(0);
+    setImportStatus(`Importing 0 of ${included.length} transactions…`);
+
     let expenseCount = 0;
     let saleCount = 0;
+    let errorCount = 0;
 
-    for (const t of included) {
-      if (t.type === "expense") {
-        await addExpenseMutation.mutateAsync({
-          date: t.date,
-          vendor: t.description,
-          description: t.originalDescription,
-          amount: t.amount,
-          category: t.category,
-        });
-        expenseCount++;
-      } else {
-        await addSaleMutation.mutateAsync({
-          date: t.date,
-          client: t.description,
-          description: t.originalDescription,
-          amount: t.amount,
-          invoiceNumber: `IMP-${Date.now().toString().slice(-4)}`,
-        });
-        saleCount++;
+    for (let i = 0; i < included.length; i++) {
+      const t = included[i];
+      setImportProgress(Math.round(((i + 1) / included.length) * 100));
+      setImportStatus(`Importing ${i + 1} of ${included.length} transactions…`);
+
+      try {
+        if (t.type === "expense") {
+          await addExpenseMutation.mutateAsync({
+            date: t.date,
+            vendor: t.description,
+            description: t.originalDescription,
+            amount: t.amount,
+            category: t.category,
+          });
+          expenseCount++;
+        } else {
+          await addSaleMutation.mutateAsync({
+            date: t.date,
+            client: t.description,
+            description: t.originalDescription,
+            amount: t.amount,
+            invoiceNumber: `IMP-${Date.now().toString().slice(-4)}`,
+          });
+          saleCount++;
+        }
+      } catch {
+        errorCount++;
       }
     }
 
-    toast.success(`Imported ${expenseCount} expenses and ${saleCount} income transactions`);
+    setImporting(false);
+    setImportProgress(0);
+    setImportStatus("");
+
+    if (errorCount > 0) {
+      toast.warning(`Imported ${expenseCount + saleCount} transactions, ${errorCount} failed`);
+    } else {
+      toast.success(`Imported ${expenseCount} expenses and ${saleCount} income transactions`);
+    }
     setTransactions([]);
     setStep("upload");
   };
@@ -883,10 +909,28 @@ export default function ImportPage() {
                 <Button variant="outline" onClick={() => { setStep("upload"); setTransactions([]); }}>
                   Cancel
                 </Button>
-                <Button onClick={handleImport} disabled={categorizing || auditing}>
-                  <ArrowRight className="h-4 w-4 mr-2" />Import {transactions.filter((t) => t.include).length} Transactions
+                <Button onClick={handleImport} disabled={categorizing || auditing || importing}>
+                  {importing ? (
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importing…</>
+                  ) : (
+                    <><ArrowRight className="h-4 w-4 mr-2" />Import {transactions.filter((t) => t.include).length} Transactions</>
+                  )}
                 </Button>
               </div>
+
+              {/* Import progress bar */}
+              {importing && (
+                <div className="space-y-2 mt-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground flex items-center gap-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      {importStatus}
+                    </span>
+                    <span className="font-mono text-xs">{importProgress}%</span>
+                  </div>
+                  <Progress value={importProgress} className="h-2" />
+                </div>
+              )}
             </div>
 
             {/* Audit issues */}
