@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useContractors, useAddContractor, useRemoveContractor, useUpdateContractor, useEmployees, useAddEmployee, useRemoveEmployee, useUpdateEmployee, useProfile } from "@/hooks/useData";
 import { formatCurrency } from "@/lib/format";
+import { calculateWithholdings, US_STATES } from "@/lib/taxCalc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Plus, Trash2, FileDown, FileText } from "lucide-react";
@@ -137,15 +139,47 @@ export default function Report1099Page() {
   const updateEmployee = useUpdateEmployee();
 
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", tin: "", totalPaid: "", address: "", payRate: "" });
+  const [form, setForm] = useState({ name: "", tin: "", totalPaid: "", address: "", payRate: "", stateEmployed: "" });
   const [editId, setEditId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", tin_last4: "", totalPaid: "", address: "", payRate: "" });
+  const [editForm, setEditForm] = useState({ name: "", tin_last4: "", totalPaid: "", address: "", payRate: "", stateEmployed: "" });
 
   // Employee state
   const [empOpen, setEmpOpen] = useState(false);
-  const [empForm, setEmpForm] = useState({ name: "", ssn: "", address: "", salary: "", federalWithholding: "", stateWithholding: "", socialSecurity: "", medicare: "" });
+  const [empForm, setEmpForm] = useState({ name: "", ssn: "", address: "", salary: "", stateEmployed: "", federalWithholding: "", stateWithholding: "", socialSecurity: "", medicare: "" });
   const [empEditId, setEmpEditId] = useState<string | null>(null);
-  const [empEditForm, setEmpEditForm] = useState({ name: "", ssn_last4: "", address: "", salary: "", federalWithholding: "", stateWithholding: "", socialSecurity: "", medicare: "" });
+  const [empEditForm, setEmpEditForm] = useState({ name: "", ssn_last4: "", address: "", salary: "", stateEmployed: "", federalWithholding: "", stateWithholding: "", socialSecurity: "", medicare: "" });
+
+  // Auto-calculate withholdings when salary or state changes (add form)
+  useEffect(() => {
+    const salary = parseFloat(empForm.salary);
+    if (salary > 0 && empForm.stateEmployed) {
+      const w = calculateWithholdings(salary, empForm.stateEmployed);
+      setEmpForm((f) => ({
+        ...f,
+        federalWithholding: String(w.federalWithholding),
+        stateWithholding: String(w.stateWithholding),
+        socialSecurity: String(w.socialSecurity),
+        medicare: String(w.medicare),
+      }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empForm.salary, empForm.stateEmployed]);
+
+  // Auto-calculate withholdings when salary or state changes (edit form)
+  useEffect(() => {
+    const salary = parseFloat(empEditForm.salary);
+    if (salary > 0 && empEditForm.stateEmployed) {
+      const w = calculateWithholdings(salary, empEditForm.stateEmployed);
+      setEmpEditForm((f) => ({
+        ...f,
+        federalWithholding: String(w.federalWithholding),
+        stateWithholding: String(w.stateWithholding),
+        socialSecurity: String(w.socialSecurity),
+        medicare: String(w.medicare),
+      }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empEditForm.salary, empEditForm.stateEmployed]);
 
   // Full TIN/SSN entry for form generation (never stored)
   const [genDialog, setGenDialog] = useState<{ type: "1099" | "w2"; id: string } | null>(null);
@@ -162,9 +196,10 @@ export default function Report1099Page() {
       total_paid: parseFloat(form.totalPaid),
       address: form.address,
       pay_rate: form.payRate ? parseFloat(form.payRate) : undefined,
+      state_employed: form.stateEmployed || undefined,
     }, {
       onSuccess: () => {
-        setForm({ name: "", tin: "", totalPaid: "", address: "", payRate: "" });
+        setForm({ name: "", tin: "", totalPaid: "", address: "", payRate: "", stateEmployed: "" });
         setOpen(false);
         toast.success("Contractor added");
       },
@@ -173,12 +208,12 @@ export default function Report1099Page() {
 
   const startEdit = (c: Contractor) => {
     setEditId(c.id);
-    setEditForm({ name: c.name, tin_last4: "", totalPaid: String(c.totalPaid), address: c.address, payRate: c.payRate ? String(c.payRate) : "" });
+    setEditForm({ name: c.name, tin_last4: "", totalPaid: String(c.totalPaid), address: c.address, payRate: c.payRate ? String(c.payRate) : "", stateEmployed: c.stateEmployed || "" });
   };
 
   const saveEdit = () => {
     if (!editId) return;
-    const update: any = { id: editId, name: editForm.name, total_paid: parseFloat(editForm.totalPaid) || 0, address: editForm.address, pay_rate: editForm.payRate ? parseFloat(editForm.payRate) : undefined };
+    const update: any = { id: editId, name: editForm.name, total_paid: parseFloat(editForm.totalPaid) || 0, address: editForm.address, pay_rate: editForm.payRate ? parseFloat(editForm.payRate) : undefined, state_employed: editForm.stateEmployed || undefined };
     if (editForm.tin_last4) {
       const digits = editForm.tin_last4.replace(/\D/g, "");
       update.tin_last4 = digits.slice(-4);
@@ -199,9 +234,10 @@ export default function Report1099Page() {
       state_withholding: parseFloat(empForm.stateWithholding) || 0,
       social_security: parseFloat(empForm.socialSecurity) || 0,
       medicare: parseFloat(empForm.medicare) || 0,
+      state_employed: empForm.stateEmployed || undefined,
     }, {
       onSuccess: () => {
-        setEmpForm({ name: "", ssn: "", address: "", salary: "", federalWithholding: "", stateWithholding: "", socialSecurity: "", medicare: "" });
+        setEmpForm({ name: "", ssn: "", address: "", salary: "", stateEmployed: "", federalWithholding: "", stateWithholding: "", socialSecurity: "", medicare: "" });
         setEmpOpen(false);
         toast.success("Employee added");
       },
@@ -210,7 +246,7 @@ export default function Report1099Page() {
 
   const startEmpEdit = (e: Employee) => {
     setEmpEditId(e.id);
-    setEmpEditForm({ name: e.name, ssn_last4: "", address: e.address, salary: String(e.salary), federalWithholding: String(e.federalWithholding), stateWithholding: String(e.stateWithholding), socialSecurity: String(e.socialSecurity), medicare: String(e.medicare) });
+    setEmpEditForm({ name: e.name, ssn_last4: "", address: e.address, salary: String(e.salary), stateEmployed: e.stateEmployed || "", federalWithholding: String(e.federalWithholding), stateWithholding: String(e.stateWithholding), socialSecurity: String(e.socialSecurity), medicare: String(e.medicare) });
   };
 
   const saveEmpEdit = () => {
@@ -219,7 +255,7 @@ export default function Report1099Page() {
       id: empEditId, name: empEditForm.name, address: empEditForm.address,
       salary: parseFloat(empEditForm.salary) || 0, federal_withholding: parseFloat(empEditForm.federalWithholding) || 0,
       state_withholding: parseFloat(empEditForm.stateWithholding) || 0, social_security: parseFloat(empEditForm.socialSecurity) || 0,
-      medicare: parseFloat(empEditForm.medicare) || 0,
+      medicare: parseFloat(empEditForm.medicare) || 0, state_employed: empEditForm.stateEmployed || undefined,
     };
     if (empEditForm.ssn_last4) {
       const digits = empEditForm.ssn_last4.replace(/\D/g, "");
@@ -338,6 +374,13 @@ export default function Report1099Page() {
                       <Input type="number" placeholder="Total paid" value={form.totalPaid} onChange={(e) => setForm({ ...form, totalPaid: e.target.value })} />
                       <Input type="number" placeholder="Pay rate ($/hr, optional)" value={form.payRate} onChange={(e) => setForm({ ...form, payRate: e.target.value })} />
                       <Input placeholder="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">State Employed</label>
+                        <Select value={form.stateEmployed} onValueChange={(v) => setForm({ ...form, stateEmployed: v })}>
+                          <SelectTrigger><SelectValue placeholder="Select state" /></SelectTrigger>
+                          <SelectContent>{US_STATES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
                       <Button onClick={handleAdd} className="w-full" disabled={addContractor.isPending}>Add Contractor</Button>
                     </div>
                   </DialogContent>
@@ -353,7 +396,7 @@ export default function Report1099Page() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Contractor</th><th>TIN (last 4)</th><th>Address</th><th className="text-right">Pay Rate</th><th className="text-right">Total Paid</th><th>1099 Required</th><th></th>
+                    <th>Contractor</th><th>TIN (last 4)</th><th>State</th><th>Address</th><th className="text-right">Pay Rate</th><th className="text-right">Total Paid</th><th>1099 Required</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -364,6 +407,12 @@ export default function Report1099Page() {
                         <tr key={c.id} className="bg-accent/30">
                           <td><Input className="h-8 text-sm" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></td>
                           <td><Input className="h-8 text-sm font-mono" placeholder="New TIN (optional)" value={editForm.tin_last4} onChange={(e) => setEditForm({ ...editForm, tin_last4: e.target.value })} /></td>
+                          <td>
+                            <Select value={editForm.stateEmployed} onValueChange={(v) => setEditForm({ ...editForm, stateEmployed: v })}>
+                              <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="State" /></SelectTrigger>
+                              <SelectContent>{US_STATES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                            </Select>
+                          </td>
                           <td><Input className="h-8 text-sm" value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} /></td>
                           <td><Input className="h-8 text-sm text-right" type="number" value={editForm.payRate} onChange={(e) => setEditForm({ ...editForm, payRate: e.target.value })} /></td>
                           <td><Input className="h-8 text-sm text-right" type="number" value={editForm.totalPaid} onChange={(e) => setEditForm({ ...editForm, totalPaid: e.target.value })} /></td>
@@ -375,6 +424,7 @@ export default function Report1099Page() {
                       <tr key={c.id} className="cursor-pointer hover:bg-accent/20" onDoubleClick={() => startEdit(c)}>
                         <td className="font-medium">{c.name}</td>
                         <td className="font-mono text-xs text-muted-foreground">{c.tin}</td>
+                        <td className="text-xs text-muted-foreground">{c.stateEmployed || "—"}</td>
                         <td className="text-sm text-muted-foreground">{c.address || <span className="italic text-chart-warning">Missing</span>}</td>
                         <td className="text-right font-mono text-sm text-muted-foreground">{c.payRate ? `$${c.payRate}/hr` : "—"}</td>
                         <td className="text-right font-mono">{formatCurrency(c.totalPaid)}</td>
@@ -416,6 +466,14 @@ export default function Report1099Page() {
                     <Input placeholder="SSN (full — only last 4 stored) *" value={empForm.ssn} onChange={(e) => setEmpForm({ ...empForm, ssn: e.target.value })} />
                     <Input placeholder="Address" value={empForm.address} onChange={(e) => setEmpForm({ ...empForm, address: e.target.value })} />
                     <Input type="number" placeholder="Annual salary *" value={empForm.salary} onChange={(e) => setEmpForm({ ...empForm, salary: e.target.value })} />
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">State Employed *</label>
+                      <Select value={empForm.stateEmployed} onValueChange={(v) => setEmpForm({ ...empForm, stateEmployed: v })}>
+                        <SelectTrigger><SelectValue placeholder="Select state" /></SelectTrigger>
+                        <SelectContent>{US_STATES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground mt-1">Withholdings auto-calculate when salary & state are set</p>
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
                       <Input type="number" placeholder="Federal withholding" value={empForm.federalWithholding} onChange={(e) => setEmpForm({ ...empForm, federalWithholding: e.target.value })} />
                       <Input type="number" placeholder="State withholding" value={empForm.stateWithholding} onChange={(e) => setEmpForm({ ...empForm, stateWithholding: e.target.value })} />
@@ -436,7 +494,7 @@ export default function Report1099Page() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Employee</th><th>SSN (last 4)</th><th>Address</th><th className="text-right">Salary</th><th className="text-right">Fed. W/H</th><th className="text-right">State W/H</th><th className="text-right">SS + Med</th><th></th>
+                    <th>Employee</th><th>SSN (last 4)</th><th>State</th><th>Address</th><th className="text-right">Salary</th><th className="text-right">Fed. W/H</th><th className="text-right">State W/H</th><th className="text-right">SS + Med</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -447,6 +505,12 @@ export default function Report1099Page() {
                         <tr key={e.id} className="bg-accent/30">
                           <td><Input className="h-8 text-sm" value={empEditForm.name} onChange={(ev) => setEmpEditForm({ ...empEditForm, name: ev.target.value })} /></td>
                           <td><Input className="h-8 text-sm font-mono" placeholder="New SSN (optional)" value={empEditForm.ssn_last4} onChange={(ev) => setEmpEditForm({ ...empEditForm, ssn_last4: ev.target.value })} /></td>
+                          <td>
+                            <Select value={empEditForm.stateEmployed} onValueChange={(v) => setEmpEditForm({ ...empEditForm, stateEmployed: v })}>
+                              <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="State" /></SelectTrigger>
+                              <SelectContent>{US_STATES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                            </Select>
+                          </td>
                           <td><Input className="h-8 text-sm" value={empEditForm.address} onChange={(ev) => setEmpEditForm({ ...empEditForm, address: ev.target.value })} /></td>
                           <td><Input className="h-8 text-sm text-right" type="number" value={empEditForm.salary} onChange={(ev) => setEmpEditForm({ ...empEditForm, salary: ev.target.value })} /></td>
                           <td><Input className="h-8 text-sm text-right" type="number" value={empEditForm.federalWithholding} onChange={(ev) => setEmpEditForm({ ...empEditForm, federalWithholding: ev.target.value })} /></td>
@@ -460,6 +524,7 @@ export default function Report1099Page() {
                       <tr key={e.id} className="cursor-pointer hover:bg-accent/20" onDoubleClick={() => startEmpEdit(e)}>
                         <td className="font-medium">{e.name}</td>
                         <td className="font-mono text-xs text-muted-foreground">{e.ssn}</td>
+                        <td className="text-xs text-muted-foreground">{e.stateEmployed || "—"}</td>
                         <td className="text-sm text-muted-foreground">{e.address || <span className="italic text-chart-warning">Missing</span>}</td>
                         <td className="text-right font-mono">{formatCurrency(e.salary)}</td>
                         <td className="text-right font-mono text-sm">{formatCurrency(e.federalWithholding)}</td>

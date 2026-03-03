@@ -136,6 +136,7 @@ export function useContractors() {
         totalPaid: Number(r.total_paid),
         address: r.address || "",
         payRate: r.pay_rate ? Number(r.pay_rate) : undefined,
+        stateEmployed: r.state_employed || undefined,
       })) as Contractor[];
     },
   });
@@ -145,7 +146,7 @@ export function useAddContractor() {
   const { user } = useAuth();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (c: { name: string; tin_last4: string; total_paid: number; address: string; pay_rate?: number }) => {
+    mutationFn: async (c: { name: string; tin_last4: string; total_paid: number; address: string; pay_rate?: number; state_employed?: string }) => {
       const { error } = await supabase.from("contractors").insert({
         user_id: user!.id,
         name: c.name,
@@ -153,6 +154,7 @@ export function useAddContractor() {
         total_paid: c.total_paid,
         address: c.address,
         pay_rate: c.pay_rate,
+        state_employed: c.state_employed,
       });
       if (error) throw error;
     },
@@ -163,7 +165,7 @@ export function useAddContractor() {
 export function useUpdateContractor() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...data }: { id: string; name?: string; tin_last4?: string; total_paid?: number; address?: string; pay_rate?: number }) => {
+    mutationFn: async ({ id, ...data }: { id: string; name?: string; tin_last4?: string; total_paid?: number; address?: string; pay_rate?: number; state_employed?: string }) => {
       const { error } = await supabase.from("contractors").update(data).eq("id", id);
       if (error) throw error;
     },
@@ -207,6 +209,7 @@ export function useEmployees() {
         socialSecurity: Number(r.social_security),
         medicare: Number(r.medicare),
         startDate: r.start_date || undefined,
+        stateEmployed: r.state_employed || undefined,
       })) as Employee[];
     },
   });
@@ -216,7 +219,7 @@ export function useAddEmployee() {
   const { user } = useAuth();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (e: { name: string; ssn_last4: string; address: string; salary: number; federal_withholding: number; state_withholding: number; social_security: number; medicare: number }) => {
+    mutationFn: async (e: { name: string; ssn_last4: string; address: string; salary: number; federal_withholding: number; state_withholding: number; social_security: number; medicare: number; state_employed?: string }) => {
       const { error } = await supabase.from("employees").insert({
         user_id: user!.id,
         ...e,
@@ -230,7 +233,7 @@ export function useAddEmployee() {
 export function useUpdateEmployee() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...data }: { id: string; name?: string; ssn_last4?: string; address?: string; salary?: number; federal_withholding?: number; state_withholding?: number; social_security?: number; medicare?: number }) => {
+    mutationFn: async ({ id, ...data }: { id: string; name?: string; ssn_last4?: string; address?: string; salary?: number; federal_withholding?: number; state_withholding?: number; social_security?: number; medicare?: number; state_employed?: string }) => {
       const { error } = await supabase.from("employees").update(data).eq("id", id);
       if (error) throw error;
     },
