@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useTaxStore } from "@/store/taxStore";
-import { parseCSV, ParsedTransaction } from "@/lib/csvParser";
+import { parseCSV, parseExcel, ParsedTransaction } from "@/lib/csvParser";
 import { categorizeTransactions } from "@/lib/categorize";
 import { formatCurrency, generateId } from "@/lib/format";
 import { EXPENSE_CATEGORIES, ExpenseCategory } from "@/types/tax";
@@ -67,15 +67,21 @@ export default function ImportPage() {
   const [dismissedIssues, setDismissedIssues] = useState<Set<number>>(new Set());
   const [progressInfo, setProgressInfo] = useState<{ label: string; completed: number; total: number } | null>(null);
   const processFile = useCallback((file: File) => {
-    if (!file.name.endsWith(".csv") && !file.name.endsWith(".tsv") && !file.name.endsWith(".txt")) {
-      toast.error("Please upload a CSV file");
+    const isExcel = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
+    const isCsv = file.name.endsWith(".csv") || file.name.endsWith(".tsv") || file.name.endsWith(".txt");
+    if (!isCsv && !isExcel) {
+      toast.error("Please upload a CSV or Excel file");
       return;
     }
 
     const reader = new FileReader();
     reader.onload = async (e) => {
-      const text = e.target?.result as string;
-      const parsed = parseCSV(text);
+      let parsed: ParsedTransaction[];
+      if (isExcel) {
+        parsed = parseExcel(e.target?.result as ArrayBuffer);
+      } else {
+        parsed = parseCSV(e.target?.result as string);
+      }
       if (parsed.length === 0) {
         toast.error("No transactions found. Check the CSV format.");
         return;
@@ -117,7 +123,11 @@ export default function ImportPage() {
         setCategorizing(false);
       }
     };
-    reader.readAsText(file);
+    if (isExcel) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
   }, []);
 
   const handleDrop = useCallback(
@@ -395,14 +405,14 @@ export default function ImportPage() {
                 onDrop={handleDrop}
               >
                 <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Drop your CSV file here</h3>
+                <h3 className="text-lg font-semibold mb-2">Drop your CSV or Excel file here</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Export transactions from your bank as CSV and upload them here.
+                  Export transactions from your bank as CSV or Excel and upload them here.
                   <br />
-                  Supports most bank formats (Date, Description, Amount columns).
+                  Supports CSV, TSV, XLSX, and XLS formats.
                 </p>
                 <label>
-                  <input type="file" accept=".csv,.tsv,.txt" className="hidden" onChange={handleFileInput} />
+                  <input type="file" accept=".csv,.tsv,.txt,.xlsx,.xls" className="hidden" onChange={handleFileInput} />
                   <Button variant="outline" asChild>
                     <span>Browse Files</span>
                   </Button>
