@@ -60,6 +60,7 @@ export default function ImportPage() {
   const [transactions, setTransactions] = useState<ReviewTransaction[]>([]);
   const [step, setStep] = useState<"upload" | "review">("upload");
   const [dragOver, setDragOver] = useState(false);
+  const [pdfDragOver, setPdfDragOver] = useState(false);
   const [categorizing, setCategorizing] = useState(false);
   const [sortField, setSortField] = useState<SortField>("date");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -542,11 +543,29 @@ export default function ImportPage() {
             <TabsContent value="pdf" className="mt-6">
               <div
                 className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
-                  pdfProcessing ? "border-primary bg-accent/50" : "border-border"
+                  pdfProcessing ? "border-primary bg-accent/50" : pdfDragOver ? "border-primary bg-accent" : "border-border"
                 }`}
+                onDragOver={(e) => { e.preventDefault(); setPdfDragOver(true); }}
+                onDragLeave={() => setPdfDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setPdfDragOver(false);
+                  const file = e.dataTransfer.files[0];
+                  if (file?.name.toLowerCase().endsWith(".pdf")) {
+                    // Trigger the same handler by creating a synthetic event
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    if (pdfInputRef.current) {
+                      pdfInputRef.current.files = dt.files;
+                      pdfInputRef.current.dispatchEvent(new Event("change", { bubbles: true }));
+                    }
+                  } else if (file) {
+                    toast.error("Please drop a PDF file");
+                  }
+                }}
               >
                 <FileUp className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">PDF Bank Statements</h3>
+                <h3 className="text-lg font-semibold mb-2">Drop your PDF here or browse</h3>
                 <p className="text-sm text-muted-foreground mb-4">
                   Upload PDF bank statements and AI vision will extract transactions automatically.
                   <br />
