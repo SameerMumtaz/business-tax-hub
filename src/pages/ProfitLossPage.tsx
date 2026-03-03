@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { ArrowUp, ArrowDown, Minus, BarChart3 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import JobProfitabilityTab from "@/components/JobProfitabilityTab";
 
 function pctChange(curr: number, prev: number) {
   if (prev === 0) return curr > 0 ? 100 : 0;
@@ -82,6 +83,7 @@ export default function ProfitLossPage() {
           <TabsList>
             <TabsTrigger value="statement">Income Statement</TabsTrigger>
             <TabsTrigger value="compare">P&L Compare</TabsTrigger>
+            <TabsTrigger value="by-job">By Job</TabsTrigger>
           </TabsList>
 
           <TabsContent value="statement" className="space-y-8 mt-4">
@@ -196,6 +198,9 @@ export default function ProfitLossPage() {
                 </div>
               </div>
             )}
+          </TabsContent>
+          <TabsContent value="by-job" className="mt-4">
+            <JobProfitabilityTab />
           </TabsContent>
         </Tabs>
       </div>
