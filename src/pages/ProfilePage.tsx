@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useProfileGate } from "@/components/ProtectedRoute";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -36,6 +37,7 @@ const emptyProfile: Profile = {
 
 export default function ProfilePage() {
   const { user } = useAuth();
+  const { recheckProfile } = useProfileGate();
   const [profile, setProfile] = useState<Profile>(emptyProfile);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -90,6 +92,7 @@ export default function ProfilePage() {
     } else {
       setProfile((p) => ({ ...p, ein_last4 }));
       setEinFull("");
+      recheckProfile();
       toast.success("Profile saved");
     }
     setSaving(false);
