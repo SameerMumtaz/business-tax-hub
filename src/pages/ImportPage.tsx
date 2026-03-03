@@ -10,8 +10,18 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, FileText, Landmark, Check, X, FileUp, ArrowRight, Sparkles, Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Lightbulb, Plus, XCircle } from "lucide-react";
+import { Upload, FileText, Landmark, Check, X, FileUp, ArrowRight, Sparkles, Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Lightbulb, Plus, XCircle, ShieldAlert, AlertTriangle, Info, Ban } from "lucide-react";
 import { toast } from "sonner";
+
+interface AuditIssue {
+  type: "duplicate" | "anomaly" | "balance" | "unknown" | "personal" | "date_issue";
+  severity: "low" | "medium" | "high";
+  title: string;
+  description: string;
+  affected_ids: string[];
+  suggestion: "delete" | "review" | "recategorize" | "flag" | "keep";
+  suggestion_detail: string;
+}
 
 type SortField = "date" | "description" | "type" | "category" | "amount";
 type SortDir = "asc" | "desc";
@@ -50,6 +60,10 @@ export default function ImportPage() {
   const [categorizing, setCategorizing] = useState(false);
   const [sortField, setSortField] = useState<SortField>("date");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [auditIssues, setAuditIssues] = useState<AuditIssue[]>([]);
+  const [auditSummary, setAuditSummary] = useState<string>("");
+  const [auditing, setAuditing] = useState(false);
+  const [dismissedIssues, setDismissedIssues] = useState<Set<number>>(new Set());
 
   const processFile = useCallback((file: File) => {
     if (!file.name.endsWith(".csv") && !file.name.endsWith(".tsv") && !file.name.endsWith(".txt")) {
@@ -226,6 +240,57 @@ export default function ImportPage() {
     }
   };
 
+  const handleAudit = async () => {
+    if (transactions.length === 0) return;
+    setAuditing(true);
+    setAuditIssues([]);
+    setAuditSummary("");
+    setDismissedIssues(new Set());
+    try {
+      const { data, error } = await supabase.functions.invoke("audit-transactions", {
+        body: {
+          transactions: transactions.map((t) => ({
+            id: t.id,
+            date: t.date,
+            description: t.description,
+            amount: t.amount,
+            type: t.type,
+          })),
+        },
+      });
+      if (error) throw error;
+      setAuditIssues(data?.issues || []);
+      setAuditSummary(data?.summary || "");
+      if (data?.issues?.length === 0) {
+        toast.success("No issues detected — your data looks clean!");
+      } else {
+        toast.info(`Found ${data.issues.length} potential issue(s)`);
+      }
+    } catch {
+      toast.error("Audit failed");
+    } finally {
+      setAuditing(false);
+    }
+  };
+
+  const applyIssueSuggestion = (issue: AuditIssue, issueIdx: number) => {
+    if (issue.suggestion === "delete") {
+      setTransactions((prev) => prev.filter((t) => !issue.affected_ids.includes(t.id)));
+      toast.success(`Deleted ${issue.affected_ids.length} flagged transaction(s)`);
+    } else if (issue.suggestion === "review" || issue.suggestion === "flag") {
+      // Exclude from import
+      setTransactions((prev) =>
+        prev.map((t) => issue.affected_ids.includes(t.id) ? { ...t, include: false } : t)
+      );
+      toast.success(`Excluded ${issue.affected_ids.length} transaction(s) from import`);
+    }
+    setDismissedIssues((prev) => new Set(prev).add(issueIdx));
+  };
+
+  const dismissIssue = (issueIdx: number) => {
+    setDismissedIssues((prev) => new Set(prev).add(issueIdx));
+  };
+
   const uncategorizedItems = transactions.filter((t) => t.include && t.category === "Other" && !t.catSource);
 
   const handleAICategorize = async () => {
@@ -385,15 +450,19 @@ export default function ImportPage() {
                   </div>
                 )}
               </div>
-              <div className="flex gap-2 items-center">
-                {categorizing && (
+              <div className="flex gap-2 items-center flex-wrap">
+                {(categorizing || auditing) && (
                   <span className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Categorizing…
+                    {auditing ? "Auditing…" : "Categorizing…"}
                   </span>
                 )}
+                <Button variant="outline" onClick={handleAudit} disabled={auditing || categorizing}>
+                  <ShieldAlert className="h-4 w-4 mr-2" />
+                  {auditing ? "Auditing…" : "AI Audit"}
+                </Button>
                 {uncategorizedItems.length > 0 && !categorizing && (
-                  <Button variant="outline" onClick={handleAICategorize}>
+                  <Button variant="outline" onClick={handleAICategorize} disabled={auditing}>
                     <Sparkles className="h-4 w-4 mr-2 text-primary" />
                     AI Categorize ({uncategorizedItems.length})
                   </Button>
@@ -401,7 +470,7 @@ export default function ImportPage() {
                 <Button variant="outline" onClick={() => { setStep("upload"); setTransactions([]); }}>
                   Cancel
                 </Button>
-                <Button onClick={handleImport} disabled={categorizing}>
+                <Button onClick={handleImport} disabled={categorizing || auditing}>
                   <ArrowRight className="h-4 w-4 mr-2" />Import {transactions.filter((t) => t.include).length} Transactions
                 </Button>
               </div>
@@ -493,6 +562,80 @@ export default function ImportPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Audit issues */}
+            {auditIssues.length > 0 && (
+              <div className="stat-card space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="section-title flex items-center gap-2">
+                    <ShieldAlert className="h-4 w-4 text-destructive" />
+                    Audit Results ({auditIssues.filter((_, i) => !dismissedIssues.has(i)).length} issues)
+                  </h3>
+                  {auditSummary && (
+                    <span className="text-xs text-muted-foreground max-w-[300px] truncate">{auditSummary}</span>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {auditIssues.map((issue, idx) => {
+                    if (dismissedIssues.has(idx)) return null;
+                    const SeverityIcon = issue.severity === "high" ? Ban
+                      : issue.severity === "medium" ? AlertTriangle : Info;
+                    const severityColor = issue.severity === "high" ? "text-destructive"
+                      : issue.severity === "medium" ? "text-chart-warning" : "text-chart-info";
+                    return (
+                      <div key={idx} className="flex items-start gap-3 bg-muted rounded-lg p-3">
+                        <SeverityIcon className={`h-4 w-4 mt-0.5 shrink-0 ${severityColor}`} />
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">{issue.title}</span>
+                            <Badge variant="outline" className="text-[10px]">{issue.type.replace("_", " ")}</Badge>
+                            <Badge
+                              variant={issue.severity === "high" ? "destructive" : "secondary"}
+                              className="text-[10px]"
+                            >
+                              {issue.severity}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{issue.description}</p>
+                          <p className="text-xs font-medium">
+                            💡 {issue.suggestion_detail}
+                          </p>
+                          {issue.affected_ids.length > 0 && (
+                            <p className="text-[10px] text-muted-foreground">
+                              Affects {issue.affected_ids.length} transaction(s)
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          {(issue.suggestion === "delete" || issue.suggestion === "review" || issue.suggestion === "flag") && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-xs h-7"
+                              onClick={() => applyIssueSuggestion(issue, idx)}
+                            >
+                              {issue.suggestion === "delete" ? (
+                                <><Trash2 className="h-3 w-3 mr-1" /> Delete</>
+                              ) : (
+                                <><X className="h-3 w-3 mr-1" /> Exclude</>
+                              )}
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs h-7"
+                            onClick={() => dismissIssue(idx)}
+                          >
+                            Dismiss
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Rule suggestions */}
             {visibleSuggestions.length > 0 && (
