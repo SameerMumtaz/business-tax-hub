@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useTaxStore } from "@/store/taxStore";
 import { parseCSV, parseExcel, ParsedTransaction } from "@/lib/csvParser";
@@ -69,7 +69,117 @@ export default function ImportPage() {
   const [auditEstimatedTax, setAuditEstimatedTax] = useState<string>("");
   const [auditing, setAuditing] = useState(false);
   const [dismissedIssues, setDismissedIssues] = useState<Set<number>>(new Set());
+  const [pdfProcessing, setPdfProcessing] = useState(false);
+  const [pdfStatus, setPdfStatus] = useState("");
+  const [pdfProgress, setPdfProgress] = useState(0);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
   const [progressInfo, setProgressInfo] = useState<{ label: string; completed: number; total: number } | null>(null);
+
+  const handlePdfUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.name.toLowerCase().endsWith(".pdf")) {
+      toast.error("Please select a PDF file");
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("File too large — max 20MB");
+      return;
+    }
+
+    setPdfProcessing(true);
+    setPdfStatus("Loading PDF…");
+    setPdfProgress(0);
+
+    try {
+      // Dynamically import pdf.js
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const totalPages = Math.min(pdf.numPages, 50);
+      setPdfStatus(`Rendering ${totalPages} pages…`);
+
+      // Render each page to a canvas and extract as base64
+      const pageImages: string[] = [];
+      for (let p = 1; p <= totalPages; p++) {
+        setPdfProgress(Math.round((p / totalPages) * 40)); // 0-40% for rendering
+        const page = await pdf.getPage(p);
+        const viewport = page.getViewport({ scale: 2.0 }); // Higher res for AI
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext("2d")!;
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        pageImages.push(canvas.toDataURL("image/png", 0.9));
+        canvas.remove();
+      }
+
+      setPdfStatus(`Extracting transactions with AI (${totalPages} pages)…`);
+      setPdfProgress(50);
+
+      const { data, error } = await supabase.functions.invoke("parse-pdf", {
+        body: { pages: pageImages },
+      });
+
+      if (error) throw error;
+      if (!data?.transactions?.length) {
+        toast.error("No transactions found in the PDF");
+        return;
+      }
+
+      setPdfProgress(90);
+      setPdfStatus("Processing results…");
+
+      // Convert to ReviewTransaction format
+      const reviewed: ReviewTransaction[] = data.transactions.map((t: any) => ({
+        date: t.date || "",
+        description: t.description || "",
+        originalDescription: t.description || "",
+        amount: Math.abs(t.amount || 0),
+        type: t.type === "income" ? "income" : "expense",
+        id: generateId(),
+        category: "Other" as ExpenseCategory,
+        include: true,
+      }));
+
+      setTransactions(reviewed);
+      setStep("review");
+      toast.success(`Extracted ${reviewed.length} transactions from ${totalPages} pages`);
+
+      // Auto-categorize with rules
+      setCategorizing(true);
+      try {
+        const results = await categorizeTransactions(
+          reviewed.map((t) => ({ id: t.id, description: t.description, type: t.type })),
+          false
+        );
+        setTransactions((prev) =>
+          prev.map((t) => {
+            const match = results.find((r) => r.id === t.id);
+            if (match && match.category !== "Other") {
+              return { ...t, category: match.category as ExpenseCategory, catSource: match.source };
+            }
+            return t;
+          })
+        );
+        const ruleCount = results.filter((r) => r.source === "rule").length;
+        if (ruleCount > 0) toast.success(`${ruleCount} matched by rules`);
+      } catch {
+        // Non-critical
+      } finally {
+        setCategorizing(false);
+      }
+    } catch (err) {
+      console.error("PDF parsing error:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to parse PDF");
+    } finally {
+      setPdfProcessing(false);
+      setPdfStatus("");
+      setPdfProgress(0);
+      if (pdfInputRef.current) pdfInputRef.current.value = "";
+    }
+  }, []);
   const processFile = useCallback((file: File) => {
     const isExcel = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
     const isCsv = file.name.endsWith(".csv") || file.name.endsWith(".tsv") || file.name.endsWith(".txt");
@@ -430,15 +540,40 @@ export default function ImportPage() {
             </TabsContent>
 
             <TabsContent value="pdf" className="mt-6">
-              <div className="border-2 border-dashed rounded-lg p-12 text-center border-border">
+              <div
+                className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
+                  pdfProcessing ? "border-primary bg-accent/50" : "border-border"
+                }`}
+              >
                 <FileUp className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-semibold mb-2">PDF Bank Statements</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Upload PDF bank statements and we'll extract the transactions automatically.
+                  Upload PDF bank statements and AI vision will extract transactions automatically.
                   <br />
-                  Supports up to 12 months of statements.
+                  Supports any bank format — up to 50 pages per file.
                 </p>
-                <Badge variant="secondary" className="text-xs">Coming soon — requires AI parsing</Badge>
+                {pdfProcessing ? (
+                  <div className="flex flex-col items-center gap-3 max-w-xs mx-auto">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    <p className="text-sm text-muted-foreground">{pdfStatus}</p>
+                    {pdfProgress > 0 && (
+                      <Progress value={pdfProgress} className="h-2 w-full" />
+                    )}
+                  </div>
+                ) : (
+                  <label>
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      className="hidden"
+                      ref={pdfInputRef}
+                      onChange={handlePdfUpload}
+                    />
+                    <Button variant="outline" asChild>
+                      <span>Browse PDF Files</span>
+                    </Button>
+                  </label>
+                )}
               </div>
             </TabsContent>
 
