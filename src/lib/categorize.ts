@@ -5,7 +5,7 @@ export interface CategorizationResult {
   id: string;
   category: string;
   confidence: number;
-  source: "rule" | "ai" | "keyword";
+  source: "rule" | "keyword";
 }
 
 interface CategorizeInput {
@@ -14,12 +14,9 @@ interface CategorizeInput {
   type: "income" | "expense";
 }
 
-/**
- * Fetch user-defined rules from the database.
- */
 let cachedRules: { vendor_pattern: string; category: string; type: string }[] | null = null;
 let rulesCacheTime = 0;
-const RULES_CACHE_TTL = 60_000; // 1 minute
+const RULES_CACHE_TTL = 60_000;
 
 async function fetchRules() {
   if (cachedRules && Date.now() - rulesCacheTime < RULES_CACHE_TTL) return cachedRules;
@@ -32,15 +29,11 @@ async function fetchRules() {
   return cachedRules;
 }
 
-/** Invalidate rule cache (call after saving new rules) */
 export function invalidateRulesCache() {
   cachedRules = null;
   rulesCacheTime = 0;
 }
 
-/**
- * Match a description against custom rules.
- */
 function matchRule(
   description: string,
   type: string,
@@ -345,18 +338,14 @@ const INCOME_KEYWORDS: Record<string, string[]> = {
   ],
 };
 
-/**
- * Clean a transaction description for better keyword matching.
- * Strips card numbers, store numbers, locations, and noise.
- */
 function cleanForMatching(description: string): string {
   return description
     .toLowerCase()
-    .replace(/\d{10,}/g, "")                    // long card/ref numbers
-    .replace(/#\d+/g, "")                        // store numbers
-    .replace(/\bxxxx+\w*/gi, "")                 // masked card XXXX
-    .replace(/\bckcd\s*\d*/gi, "")               // CKCD codes
-    .replace(/\b\d{4}\s+\d{4}\s+\d{4}\s+\d{4}\b/g, "") // card patterns
+    .replace(/\d{10,}/g, "")
+    .replace(/#\d+/g, "")
+    .replace(/\bxxxx+\w*/gi, "")
+    .replace(/\bckcd\s*\d*/gi, "")
+    .replace(/\b\d{4}\s+\d{4}\s+\d{4}\s+\d{4}\b/g, "")
     .replace(/\bconfirmation#?\s*\S+/gi, "")
     .replace(/\bconf#?\s*\S+/gi, "")
     .replace(/\bID:\s*\S+/gi, "")
@@ -389,7 +378,6 @@ function matchKeyword(description: string, type: string): { category: string; co
   return null;
 }
 
-// Session-level cache: description+type → result (avoids re-processing duplicates)
 const sessionCache = new Map<string, CategorizationResult>();
 
 function cacheKey(desc: string, type: string) {
@@ -397,84 +385,15 @@ function cacheKey(desc: string, type: string) {
 }
 
 /**
- * Auto-learn: save high-confidence AI results as rules for instant future matching.
- */
-/**
- * Strip dates, card numbers, store numbers, purchase locations, and other noise
- * from a transaction description to extract just the vendor name.
- */
-function extractVendorName(description: string): string | null {
-  let s = description
-    .replace(/\d{1,2}\/\d{1,2}(\/\d{2,4})?/g, "") // dates like 12/23, 08/07/2025
-    .replace(/\b(PURCHASE|DEBIT CARD|CREDIT CARD)\b/gi, "")
-    .replace(/\*\d+/g, "")              // card numbers *0821
-    .replace(/#\d+/g, "")               // store numbers #1802
-    .replace(/\bXXX+\w*/g, "")          // masked numbers XXXXX30829
-    .replace(/\b[A-Z]{2}\b(?=\s|$)/g, "") // state abbreviations like TX, WV (end of string)
-    .replace(/\bConfirmation\b/gi, "")
-    .replace(/\bID:\s*\S+/gi, "")       // ID: B15XSDXYQM36IT9
-    .replace(/\bCO ID:\S+/gi, "")
-    .replace(/\bINDN:\S+/gi, "")
-    .replace(/\bDES:\S+/gi, "")
-    .replace(/\bPPD\b|\bCCD\b|\bCKCD\b/gi, "")
-    .replace(/[^a-zA-Z0-9\s&'./-]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  // Take first 2-3 meaningful words (>2 chars, not pure numbers)
-  const words = s
-    .split(/\s+/)
-    .filter((w) => w.length > 2 && !/^\d+$/.test(w))
-    .slice(0, 3);
-
-  if (words.length === 0) return null;
-  const pattern = words.join(" ").toLowerCase();
-  return pattern.length >= 4 ? pattern : null;
-}
-
-async function autoLearnFromAI(
-  items: CategorizeInput[],
-  aiResults: { id: string; category: string; confidence: number }[]
-) {
-  const seen = new Set<string>();
-  const toSave: { vendor_pattern: string; category: string; type: string; priority: number }[] = [];
-  for (const r of aiResults) {
-    if (r.confidence < 0.75 || r.category === "Other") continue;
-    const item = items.find((i) => i.id === r.id);
-    if (!item) continue;
-    const pattern = extractVendorName(item.description);
-    if (!pattern) continue;
-    const key = `${pattern}:${item.type}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    toSave.push({ vendor_pattern: pattern, category: r.category, type: item.type, priority: 5 });
-  }
-  if (toSave.length > 0) {
-    supabase
-      .from("categorization_rules")
-      .upsert(toSave, { onConflict: "vendor_pattern,type", ignoreDuplicates: true })
-      .then(() => {});
-  }
-}
-
-/**
- * Categorize transactions using a priority chain:
- * 1. Session cache (instant for repeated descriptions)
- * 2. Custom rules from the database
- * 3. Built-in keyword dictionary (instant, no API call)
- * 4. AI categorization (parallel batches, only for remaining unknowns)
- * 5. Fallback to "Other"
+ * Categorize transactions using rules + keywords only. No AI.
+ * Priority: Session cache → Custom rules → Keyword dictionary → "Other"
  */
 export async function categorizeTransactions(
   items: CategorizeInput[],
-  useAI = true,
-  onProgress?: (completed: number, total: number) => void
 ): Promise<CategorizationResult[]> {
   const rules = await fetchRules();
   const results: CategorizationResult[] = [];
-  const needsAI: CategorizeInput[] = [];
 
-  // Step 1: Cache → Rules → Keywords
   for (const item of items) {
     const ck = cacheKey(item.description, item.type);
     const cached = sessionCache.get(ck);
@@ -499,85 +418,7 @@ export async function categorizeTransactions(
       continue;
     }
 
-    needsAI.push(item);
-  }
-
-  // Step 2: AI categorization — parallel batches with concurrency limit
-  if (useAI && needsAI.length > 0) {
-    const BATCH_SIZE = 40;
-    const MAX_CONCURRENT = 3;
-    const MAX_RETRIES = 3;
-    const BASE_DELAY = 1500;
-    const batches: CategorizeInput[][] = [];
-    for (let i = 0; i < needsAI.length; i += BATCH_SIZE) {
-      batches.push(needsAI.slice(i, i + BATCH_SIZE));
-    }
-
-    let completedBatches = 0;
-
-    async function processBatch(batch: CategorizeInput[]): Promise<{ id: string; category: string; confidence: number }[]> {
-      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        try {
-          const { data, error } = await supabase.functions.invoke("categorize", {
-            body: {
-              descriptions: batch.map((t) => ({ id: t.id, description: t.description, type: t.type })),
-            },
-          });
-
-          const errMsg = error ? (typeof error === "object" && "message" in error ? (error as any).message : String(error)) : "";
-          const isRateLimit = errMsg.includes("429") || errMsg.includes("Rate limit") || data?.error?.includes?.("Rate limit");
-
-          if (isRateLimit) {
-            await new Promise((r) => setTimeout(r, BASE_DELAY * Math.pow(2, attempt)));
-            continue;
-          }
-
-          if (!error && data?.results) {
-            completedBatches++;
-            onProgress?.(completedBatches, batches.length);
-            return data.results;
-          }
-          return []; // non-retryable error
-        } catch {
-          await new Promise((r) => setTimeout(r, BASE_DELAY * Math.pow(2, attempt)));
-        }
-      }
-      completedBatches++;
-      onProgress?.(completedBatches, batches.length);
-      return [];
-    }
-
-    // Run batches with concurrency limit
-    const allAIResults: { id: string; category: string; confidence: number }[] = [];
-    for (let i = 0; i < batches.length; i += MAX_CONCURRENT) {
-      const chunk = batches.slice(i, i + MAX_CONCURRENT);
-      const chunkResults = await Promise.all(chunk.map(processBatch));
-      allAIResults.push(...chunkResults.flat());
-    }
-
-    // Auto-learn high-confidence results
-    autoLearnFromAI(needsAI, allAIResults);
-
-    const aiIds = new Set(allAIResults.map((r) => r.id));
-    for (const r of allAIResults) {
-      const item = needsAI.find((n) => n.id === r.id);
-      if (item?.type === "expense" && !EXPENSE_CATEGORIES.includes(r.category as ExpenseCategory)) {
-        r.category = "Other";
-      }
-      const result: CategorizationResult = { id: r.id, category: r.category, confidence: r.confidence, source: "ai" };
-      results.push(result);
-      if (item) sessionCache.set(cacheKey(item.description, item.type), result);
-    }
-
-    for (const item of needsAI) {
-      if (!aiIds.has(item.id)) {
-        results.push({ id: item.id, category: "Other", confidence: 0, source: "keyword" });
-      }
-    }
-  } else {
-    for (const item of needsAI) {
-      results.push({ id: item.id, category: "Other", confidence: 0, source: "keyword" });
-    }
+    results.push({ id: item.id, category: "Other", confidence: 0, source: "keyword" });
   }
 
   return results;
