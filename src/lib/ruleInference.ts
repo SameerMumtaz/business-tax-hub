@@ -106,6 +106,10 @@ function extractKeywords(vendor: string): string[] {
   const noise = new Set([
     "the", "of", "and", "a", "an", "inc", "llc", "ltd", "corp", "co",
     "store", "shop", "market", "marketplace", "services", "service",
+    // Transaction-type words that appear across all categories
+    "purchase", "payment", "debit", "credit", "pos", "online", "recurring",
+    "autopay", "bill", "pay", "transfer", "transaction", "check", "deposit",
+    "withdrawal", "refund", "fee", "charge", "order", "sale", "return",
   ]);
 
   const keywords: string[] = [];
