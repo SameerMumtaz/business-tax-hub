@@ -7,9 +7,11 @@ import {
   MapPin,
   LogOut,
   Receipt,
+  Link2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import LinkToBusinessCard from "@/components/LinkToBusinessCard";
 
 const links = [
   { to: "/invoices", label: "Invoices", icon: FileText },
@@ -59,6 +61,12 @@ export default function ManagerSidebar() {
       </nav>
 
       <div className="p-4 border-t border-sidebar-border space-y-3">
+        <div className="space-y-1">
+          <p className="text-xs text-sidebar-foreground font-medium flex items-center gap-1">
+            <Link2 className="h-3 w-3" /> Link to Business
+          </p>
+          <LinkToBusinessCard compact />
+        </div>
         {user && (
           <p className="text-xs text-sidebar-foreground truncate">{user.email}</p>
         )}
