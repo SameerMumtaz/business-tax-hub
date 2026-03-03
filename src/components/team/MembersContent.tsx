@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { UserPlus, Shield, Users, DollarSign, History, MoreHorizontal, Pencil, RefreshCw, Copy } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { UserPlus, Shield, Users, DollarSign, History, MoreHorizontal, Pencil, RefreshCw, Copy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/format";
 
@@ -79,6 +80,11 @@ export default function MembersContent() {
 
   // Resend state
   const [resending, setResending] = useState<string | null>(null);
+
+  // Delete state
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteMember, setDeleteMember] = useState<TeamMember | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchMembers = async () => {
     if (!user) return;
@@ -311,6 +317,33 @@ export default function MembersContent() {
       .eq("team_member_id", member.id)
       .order("effective_date", { ascending: false });
     setRateHistory((data || []) as PayRateChange[]);
+  };
+
+  const handleDeleteMember = async () => {
+    if (!user || !deleteMember) return;
+    setDeleting(true);
+    try {
+      // Delete associated contractor/employee record
+      if (deleteMember.worker_type === "1099") {
+        await supabase.from("contractors").delete()
+          .eq("user_id", user.id).eq("name", deleteMember.name);
+      } else {
+        await supabase.from("employees").delete()
+          .eq("user_id", user.id).eq("name", deleteMember.name);
+      }
+      // Delete pay rate history
+      await supabase.from("pay_rate_changes").delete()
+        .eq("team_member_id", deleteMember.id);
+      // Delete the team member
+      const { error } = await supabase.from("team_members").delete().eq("id", deleteMember.id);
+      if (error) throw error;
+      toast.success(`${deleteMember.name} has been removed`);
+      setDeleteConfirmOpen(false);
+      setDeleteMember(null);
+      fetchMembers();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to remove member");
+    } finally { setDeleting(false); }
   };
 
   const roleBadgeColor = (role: string) => role === "admin" ? "default" : role === "manager" ? "secondary" : "outline";
@@ -622,6 +655,12 @@ export default function MembersContent() {
                               Reactivate
                             </DropdownMenuItem>
                           )}
+                          <DropdownMenuItem
+                            onClick={() => { setDeleteMember(m); setDeleteConfirmOpen(true); }}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 mr-2" /> Remove Member
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -632,6 +671,27 @@ export default function MembersContent() {
           )}
         </CardContent>
       </Card>
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {deleteMember?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove this member from your team, along with their pay rate history and associated worker record. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteMember}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? "Removing…" : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
