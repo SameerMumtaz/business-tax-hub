@@ -1,20 +1,10 @@
 import PersonalDashboardLayout from "@/components/PersonalDashboardLayout";
 import { useW2Income, usePersonalExpenses, usePersonalDeductions } from "@/hooks/usePersonalData";
 import { formatCurrency } from "@/lib/format";
+import { CHART_COLORS, TOOLTIP_STYLE } from "@/lib/chartTheme";
 import { Wallet, TrendingDown, Receipt, Calculator } from "lucide-react";
 import { useMemo } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-
-const COLORS = [
-  "hsl(160, 84%, 39%)",
-  "hsl(217, 91%, 60%)",
-  "hsl(38, 92%, 50%)",
-  "hsl(0, 72%, 51%)",
-  "hsl(280, 65%, 60%)",
-  "hsl(200, 70%, 50%)",
-  "hsl(340, 75%, 55%)",
-  "hsl(160, 40%, 55%)",
-];
 
 const STANDARD_DEDUCTION = 15700;
 
@@ -29,40 +19,27 @@ export default function PersonalDashboardPage() {
   const itemizedTotal = deductions.reduce((s, d) => s + d.amount, 0);
   const bestDeduction = Math.max(itemizedTotal, STANDARD_DEDUCTION);
   const taxableIncome = Math.max(0, totalIncome - bestDeduction);
-
   const totalWithheld = w2s.reduce((s, w) => s + w.federal_tax_withheld, 0);
 
-  // Simple federal estimate (2026 single brackets)
   const estFederalTax = useMemo(() => {
     const brackets = [
-      { limit: 11925, rate: 0.10 },
-      { limit: 48475, rate: 0.12 },
-      { limit: 103350, rate: 0.22 },
-      { limit: 197300, rate: 0.24 },
-      { limit: 250525, rate: 0.32 },
-      { limit: 626350, rate: 0.35 },
+      { limit: 11925, rate: 0.10 }, { limit: 48475, rate: 0.12 }, { limit: 103350, rate: 0.22 },
+      { limit: 197300, rate: 0.24 }, { limit: 250525, rate: 0.32 }, { limit: 626350, rate: 0.35 },
       { limit: Infinity, rate: 0.37 },
     ];
-    let remaining = taxableIncome;
-    let tax = 0;
-    let prev = 0;
+    let remaining = taxableIncome, tax = 0, prev = 0;
     for (const b of brackets) {
       const span = Math.min(remaining, b.limit - prev);
       if (span <= 0) break;
-      tax += span * b.rate;
-      remaining -= span;
-      prev = b.limit;
+      tax += span * b.rate; remaining -= span; prev = b.limit;
     }
     return tax;
   }, [taxableIncome]);
 
   const estOwed = Math.max(0, estFederalTax - totalWithheld);
 
-  // Expense category pie
   const categoryMap: Record<string, number> = {};
-  expenses.forEach((e) => {
-    categoryMap[e.category] = (categoryMap[e.category] || 0) + e.amount;
-  });
+  expenses.forEach((e) => { categoryMap[e.category] = (categoryMap[e.category] || 0) + e.amount; });
   const pieData = Object.entries(categoryMap).map(([name, value]) => ({ name, value }));
 
   const cards = [
@@ -106,17 +83,17 @@ export default function PersonalDashboardPage() {
                   <PieChart>
                     <Pie data={pieData} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3}>
                       {pieData.map((_, i) => (
-                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ borderRadius: "8px", fontSize: "13px" }} />
+                    <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={TOOLTIP_STYLE} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="flex-1 space-y-2">
                   {pieData.map((item, i) => (
                     <div key={item.name} className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2">
-                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
                         <span className="text-muted-foreground truncate max-w-[120px]">{item.name}</span>
                       </div>
                       <span className="font-mono text-xs">{formatCurrency(item.value)}</span>
