@@ -118,6 +118,7 @@ export default function useSalesLogic() {
   const paginatedRows = sorted.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
 
   const toggleSelect = (id: string) => setSelected((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const selectItems = (ids: string[]) => setSelected(new Set(ids));
   const toggleAll = () => { if (selected.size === sorted.length) setSelected(new Set()); else setSelected(new Set(sorted.map((s) => s.id))); };
 
   const handleBulkDelete = () => {
@@ -154,7 +155,7 @@ export default function useSalesLogic() {
   return {
     sales, expenses, sorted, paginatedRows, totalPages, currentPage, setCurrentPage, totalSales,
     open, setOpen, form, setForm, handleAdd, addSale,
-    sortField, sortDir, toggleSort, selected, toggleSelect, toggleAll, handleBulkDelete,
+    sortField, sortDir, toggleSort, selected, toggleSelect, selectItems, toggleAll, handleBulkDelete,
     searchQuery, setSearchQuery, auditResult, setAuditResult, persistentAudit, activeIssueCount,
     editingCategoryId, setEditingCategoryId, batchCreating, updateSale, removeSale, bulkRemove,
     ruleDialogOpen, setRuleDialogOpen, ruleKeyword, setRuleKeyword, ruleCategory, setRuleCategory,

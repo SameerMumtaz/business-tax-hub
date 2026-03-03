@@ -28,7 +28,7 @@ export default function ExpensesPage() {
     open, setOpen, form, setForm, handleAdd, addExpense,
     editDialogOpen, setEditDialogOpen, editForm, setEditForm, handleEditSave, openEditDialog,
     filterCategory, setFilterCategory, sortField, sortDir, toggleSort,
-    selected, toggleSelect, toggleAll, handleBulkDelete, handleBulkCategoryChange,
+    selected, toggleSelect, selectItems, toggleAll, handleBulkDelete, handleBulkCategoryChange,
     editingCategoryId, setEditingCategoryId, handleSingleCategoryChange,
     searchQuery, setSearchQuery, auditResult, setAuditResult,
     ruleDialogOpen, setRuleDialogOpen, ruleKeyword, setRuleKeyword, ruleCategory, setRuleCategory,
@@ -100,7 +100,7 @@ export default function ExpensesPage() {
             {auditResult && (
               <AuditIssuesPanel result={auditResult} getItemLabel={(id) => { const e = expenses.find((x) => x.id === id); if (!e) return null; return { date: e.date, label: `${e.vendor} — ${e.description}`, amount: e.amount }; }}
                 onDeleteItems={(ids) => { bulkRemove.mutate(ids, { onSuccess: () => { toast.success(`Deleted ${ids.length} expense(s)`); setAuditResult(auditExpenses(expenses.filter((e) => !ids.includes(e.id)))); } }); }}
-                onSelectItems={(ids) => { /* select items */ }}
+                onSelectItems={(ids) => { selectItems(ids); toast.info(`Selected ${ids.length} item(s)`); }}
               />
             )}
 
