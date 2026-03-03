@@ -9,7 +9,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
-import { AlertTriangle, Clock } from "lucide-react";
+import { AlertTriangle, Clock, CheckCircle2 } from "lucide-react";
 
 const AGING_BUCKETS = ["Current", "1-30 Days", "31-60 Days", "61-90 Days", "90+ Days"] as const;
 const BUCKET_COLORS = [
@@ -90,9 +90,9 @@ export default function AgingReportPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">A/R Aging Report</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Unpaid Invoices</h1>
             <p className="text-muted-foreground text-sm mt-1">
-              Accounts receivable summary — {formatCurrency(totalOutstanding)} outstanding
+              Invoices your clients haven't paid yet — {formatCurrency(totalOutstanding)} outstanding
             </p>
           </div>
           <ExportButton
@@ -152,7 +152,15 @@ export default function AgingReportPage() {
             Outstanding Invoices
           </h2>
           {agingData.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No outstanding invoices — you're all caught up!</p>
+            <div className="flex flex-col items-center py-12 gap-3">
+              <div className="rounded-full bg-accent p-4">
+                <CheckCircle2 className="h-8 w-8 text-chart-positive" />
+              </div>
+              <h3 className="font-semibold text-lg">All caught up!</h3>
+              <p className="text-muted-foreground text-sm max-w-sm text-center">
+                All your invoices have been paid. When clients owe you money, it'll show up here so you can follow up.
+              </p>
+            </div>
           ) : (
             <Table>
               <TableHeader>

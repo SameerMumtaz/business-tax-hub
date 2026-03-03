@@ -8,7 +8,7 @@ import DateRangeFilter from "@/components/DateRangeFilter";
 import ExportButton from "@/components/ExportButton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
-import { ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { ArrowUp, ArrowDown, Minus, BarChart3 } from "lucide-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -76,8 +76,8 @@ export default function ProfitLossPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Profit & Loss</h1>
-            <p className="text-muted-foreground text-sm mt-1">Financial summary</p>
+            <h1 className="text-2xl font-bold tracking-tight">Income vs Expenses</h1>
+            <p className="text-muted-foreground text-sm mt-1">See where your money comes from and where it goes</p>
           </div>
           <div className="flex items-center gap-2">
             <DateRangeFilter />
@@ -204,8 +204,14 @@ export default function ProfitLossPage() {
             )}
 
             {periods.length === 0 && (
-              <div className="rounded-lg border bg-card p-12 text-center text-muted-foreground">
-                No data yet. Import transactions to compare periods.
+              <div className="rounded-lg border bg-card p-12 text-center">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="rounded-full bg-muted p-3">
+                    <BarChart3 className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                  <p className="font-medium">No data to compare yet</p>
+                  <p className="text-sm text-muted-foreground max-w-sm">Import transactions to see how your income and expenses change over time.</p>
+                </div>
               </div>
             )}
           </TabsContent>
