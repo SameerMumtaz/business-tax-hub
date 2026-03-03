@@ -17,15 +17,27 @@ import {
   ChevronDown,
   Clock,
   Scale,
+  BarChart3,
+  AlertTriangle,
+  FileBarChart,
+  Percent,
+  Home,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+
+interface NavChild {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+}
 
 interface NavItem {
   to: string;
   label: string;
   icon: typeof LayoutDashboard;
-  children?: { to: string; label: string; icon: typeof LayoutDashboard }[];
+  children?: NavChild[];
+  matchPaths?: string[];
 }
 
 const links: NavItem[] = [
@@ -34,16 +46,40 @@ const links: NavItem[] = [
   { to: "/categorization", label: "Categories", icon: Tag },
   {
     to: "/sales", label: "Sales", icon: TrendingUp,
+    matchPaths: ["/sales", "/invoices", "/clients", "/aging"],
     children: [
+      { to: "/sales", label: "Overview", icon: TrendingUp },
       { to: "/invoices", label: "Invoices", icon: FileText },
       { to: "/clients", label: "Clients", icon: UserCircle },
       { to: "/aging", label: "A/R Aging", icon: Clock },
     ],
   },
-  { to: "/expenses", label: "Expenses", icon: TrendingDown },
-  { to: "/reconciliation", label: "Reconciliation", icon: Scale },
-  { to: "/profit-loss", label: "Profit & Loss", icon: DollarSign },
-  { to: "/tax-center", label: "Tax Center", icon: Calculator },
+  {
+    to: "/expenses", label: "Expenses", icon: TrendingDown,
+    matchPaths: ["/expenses"],
+    children: [
+      { to: "/expenses", label: "Overview", icon: TrendingDown },
+      { to: "/expenses?tab=trends", label: "Trends & Alerts", icon: AlertTriangle },
+    ],
+  },
+  {
+    to: "/profit-loss", label: "Reports", icon: BarChart3,
+    matchPaths: ["/profit-loss", "/reconciliation"],
+    children: [
+      { to: "/profit-loss", label: "Profit & Loss", icon: DollarSign },
+      { to: "/profit-loss?tab=compare", label: "P&L Compare", icon: FileBarChart },
+      { to: "/reconciliation", label: "Reconciliation", icon: Scale },
+    ],
+  },
+  {
+    to: "/tax-center", label: "Tax Center", icon: Calculator,
+    matchPaths: ["/tax-center"],
+    children: [
+      { to: "/tax-center", label: "Estimates", icon: Calculator },
+      { to: "/tax-center?tab=deductions", label: "Deductions", icon: Percent },
+      { to: "/tax-center?tab=schedule-c", label: "Schedule C", icon: Home },
+    ],
+  },
   { to: "/1099", label: "Employees/Contractors", icon: Users },
   { to: "/profile", label: "Company Profile", icon: Building2 },
 ];
@@ -51,28 +87,47 @@ const links: NavItem[] = [
 export default function AppSidebar() {
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const currentFull = location.pathname + location.search;
 
-  const salesPaths = ["/sales", "/invoices", "/clients", "/aging"];
-  const isSalesActive = salesPaths.includes(location.pathname);
-  const [salesOpen, setSalesOpen] = useState(isSalesActive);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    links.forEach((item) => {
+      if (item.children && item.matchPaths) {
+        if (item.matchPaths.some((p) => location.pathname === p || location.pathname.startsWith(p + "/"))) {
+          init[item.to] = true;
+        }
+      }
+    });
+    return init;
+  });
 
-  const renderLink = (to: string, label: string, Icon: typeof LayoutDashboard, indent = false) => {
-    const isActive = location.pathname === to;
-    return (
-      <NavLink
-        key={to}
-        to={to}
-        className={`flex items-center gap-3 ${indent ? "pl-9 pr-3" : "px-3"} py-2 rounded-md text-sm font-medium transition-colors ${
-          isActive
-            ? "bg-sidebar-accent text-sidebar-primary"
-            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-        }`}
-      >
-        <Icon className="h-4 w-4" />
-        {label}
-      </NavLink>
-    );
+  const toggleGroup = (key: string) =>
+    setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  const isChildActive = (child: NavChild) => {
+    if (child.to.includes("?")) {
+      return currentFull === child.to || currentFull.startsWith(child.to + "&");
+    }
+    return location.pathname === child.to && !location.search;
   };
+
+  const isGroupActive = (item: NavItem) =>
+    item.matchPaths?.some((p) => location.pathname === p) ?? false;
+
+  const renderLink = (to: string, label: string, Icon: typeof LayoutDashboard, active: boolean, indent = false) => (
+    <NavLink
+      key={to + label}
+      to={to}
+      className={`flex items-center gap-3 ${indent ? "pl-9 pr-3" : "px-3"} py-2 rounded-md text-sm font-medium transition-colors ${
+        active
+          ? "bg-sidebar-accent text-sidebar-primary"
+          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+      }`}
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </NavLink>
+  );
 
   return (
     <aside className="w-64 min-h-screen bg-sidebar border-r border-sidebar-border flex flex-col">
@@ -86,33 +141,37 @@ export default function AppSidebar() {
         <p className="text-xs text-sidebar-foreground mt-1">Business Tax Filing</p>
       </div>
 
-      <nav className="flex-1 p-3 space-y-0.5">
+      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         {links.map((item) => {
           if (item.children) {
+            const groupOpen = openGroups[item.to] ?? false;
+            const groupActive = isGroupActive(item);
             return (
               <div key={item.to}>
                 <button
-                  onClick={() => setSalesOpen((o) => !o)}
+                  onClick={() => toggleGroup(item.to)}
                   className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors w-full ${
-                    isSalesActive
+                    groupActive
                       ? "bg-sidebar-accent text-sidebar-primary"
                       : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   }`}
                 >
                   <item.icon className="h-4 w-4" />
                   {item.label}
-                  <ChevronDown className={`h-3.5 w-3.5 ml-auto transition-transform ${salesOpen ? "rotate-180" : ""}`} />
+                  <ChevronDown className={`h-3.5 w-3.5 ml-auto transition-transform ${groupOpen ? "rotate-180" : ""}`} />
                 </button>
-                {salesOpen && (
+                {groupOpen && (
                   <div className="mt-0.5 space-y-0.5">
-                    {renderLink(item.to, "Overview", item.icon, true)}
-                    {item.children.map((child) => renderLink(child.to, child.label, child.icon, true))}
+                    {item.children.map((child) =>
+                      renderLink(child.to, child.label, child.icon, isChildActive(child), true)
+                    )}
                   </div>
                 )}
               </div>
             );
           }
-          return renderLink(item.to, item.label, item.icon);
+          const isActive = location.pathname === item.to;
+          return renderLink(item.to, item.label, item.icon, isActive);
         })}
       </nav>
 
