@@ -64,19 +64,33 @@ export default function InvoicesPage() {
       const description = searchParams.get("description") || "";
       const saleId = searchParams.get("sale_id") || null;
 
+      // Try to match to an existing saved client
+      const clientNameLower = clientName.toLowerCase();
+      const matchedClient = clients.find((c) => {
+        const cName = c.name.toLowerCase();
+        return cName === clientNameLower
+          || cName.includes(clientNameLower)
+          || clientNameLower.includes(cName);
+      });
+
       setForm((prev) => ({
         ...prev,
         invoice_number: `INV-${Date.now().toString().slice(-6)}`,
-        client_name: clientName,
+        client_name: matchedClient ? matchedClient.name : clientName,
+        client_email: matchedClient?.email || "",
+        client_id: matchedClient?.id || "",
         issue_date: date,
         line_items: [{ description: description || `Sale to ${clientName}`, quantity: "1", unit_price: amount }],
       }));
       setPrefillSaleId(saleId);
       setCreateOpen(true);
+      if (matchedClient) {
+        toast.info(`Matched to saved client: ${matchedClient.name}`);
+      }
       // Clear params so refresh doesn't re-trigger
       setSearchParams({}, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, clients]);
 
   const handleSelectClient = (clientId: string) => {
     const client = clients.find(c => c.id === clientId);
