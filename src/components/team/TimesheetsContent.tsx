@@ -54,18 +54,45 @@ export default function TimesheetsContent() {
   useEffect(() => {
     if (!user) return;
     const load = async () => {
-      const [empRes, conRes, jobRes] = await Promise.all([
+      // Pull workers from team_members (primary source), plus standalone employees/contractors
+      const [teamRes, empRes, conRes, jobRes] = await Promise.all([
+        supabase.from("team_members").select("id, name, worker_type, pay_rate").eq("business_user_id", user.id).in("status", ["active", "invited"]),
         supabase.from("employees").select("id, name, salary").eq("user_id", user.id),
         supabase.from("contractors").select("id, name, pay_rate").eq("user_id", user.id),
         supabase.from("jobs").select("id, title").eq("user_id", user.id).in("status", ["scheduled", "in_progress"]),
       ]);
+
       const w: Worker[] = [];
-      (empRes.data || []).forEach((e: any) =>
-        w.push({ id: e.id, name: e.name, type: "employee", pay_rate: e.salary ? e.salary / 2080 : 0 })
-      );
-      (conRes.data || []).forEach((c: any) =>
-        w.push({ id: c.id, name: c.name, type: "contractor", pay_rate: c.pay_rate || 0 })
-      );
+      const seen = new Set<string>();
+
+      // Team members first (these are the crew)
+      (teamRes.data || []).forEach((tm: any) => {
+        const isContractor = tm.worker_type === "1099";
+        w.push({
+          id: tm.id,
+          name: tm.name,
+          type: isContractor ? "contractor" : "employee",
+          pay_rate: isContractor ? (tm.pay_rate || 0) : (tm.pay_rate ? tm.pay_rate / 2080 : 0),
+        });
+        seen.add(tm.name.toLowerCase());
+      });
+
+      // Add standalone employees not already in team_members
+      (empRes.data || []).forEach((e: any) => {
+        if (!seen.has(e.name.toLowerCase())) {
+          w.push({ id: e.id, name: e.name, type: "employee", pay_rate: e.salary ? e.salary / 2080 : 0 });
+          seen.add(e.name.toLowerCase());
+        }
+      });
+
+      // Add standalone contractors not already in team_members
+      (conRes.data || []).forEach((c: any) => {
+        if (!seen.has(c.name.toLowerCase())) {
+          w.push({ id: c.id, name: c.name, type: "contractor", pay_rate: c.pay_rate || 0 });
+          seen.add(c.name.toLowerCase());
+        }
+      });
+
       setWorkers(w);
       setJobs((jobRes.data || []) as Job[]);
     };
@@ -161,10 +188,10 @@ export default function TimesheetsContent() {
             </div>
             <div>
               <label className="text-sm text-muted-foreground">Assign to Job (optional)</label>
-              <Select value={selectedJobId} onValueChange={setSelectedJobId}>
+              <Select value={selectedJobId || "none"} onValueChange={(v) => setSelectedJobId(v === "none" ? "" : v)}>
                 <SelectTrigger><SelectValue placeholder="No job assigned" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No job</SelectItem>
+                  <SelectItem value="none">No job</SelectItem>
                   {jobs.map((j) => (
                     <SelectItem key={j.id} value={j.id}>{j.title}</SelectItem>
                   ))}
