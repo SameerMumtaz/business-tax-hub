@@ -15,6 +15,10 @@ import Report1099Page from "./pages/Report1099Page";
 import ScheduleCPage from "./pages/ScheduleCPage";
 import ImportPage from "./pages/ImportPage";
 import CategorizationRulesPage from "./pages/CategorizationRulesPage";
+import CashFlowPage from "./pages/CashFlowPage";
+import PLComparePage from "./pages/PLComparePage";
+import ExpenseTrendsPage from "./pages/ExpenseTrendsPage";
+import TaxEstimatePage from "./pages/TaxEstimatePage";
 import ProfilePage from "./pages/ProfilePage";
 import NotFound from "./pages/NotFound";
 
@@ -37,6 +41,10 @@ const App = () => (
             <Route path="/sales" element={<ProtectedRoute><SalesPage /></ProtectedRoute>} />
             <Route path="/expenses" element={<ProtectedRoute><ExpensesPage /></ProtectedRoute>} />
             <Route path="/profit-loss" element={<ProtectedRoute><ProfitLossPage /></ProtectedRoute>} />
+            <Route path="/cash-flow" element={<ProtectedRoute><CashFlowPage /></ProtectedRoute>} />
+            <Route path="/pl-compare" element={<ProtectedRoute><PLComparePage /></ProtectedRoute>} />
+            <Route path="/expense-trends" element={<ProtectedRoute><ExpenseTrendsPage /></ProtectedRoute>} />
+            <Route path="/tax-estimate" element={<ProtectedRoute><TaxEstimatePage /></ProtectedRoute>} />
             <Route path="/1099" element={<ProtectedRoute><Report1099Page /></ProtectedRoute>} />
             <Route path="/schedule-c" element={<ProtectedRoute><ScheduleCPage /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
