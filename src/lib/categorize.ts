@@ -50,7 +50,8 @@ function matchRule(
  */
 export async function categorizeTransactions(
   items: CategorizeInput[],
-  useAI = true
+  useAI = true,
+  onProgress?: (completed: number, total: number) => void
 ): Promise<CategorizationResult[]> {
   const rules = await fetchRules();
   const results: CategorizationResult[] = [];
@@ -81,7 +82,8 @@ export async function categorizeTransactions(
 
     const aiResults: { id: string; category: string; confidence: number }[] = [];
 
-    for (const batch of batches) {
+    for (let bIdx = 0; bIdx < batches.length; bIdx++) {
+      const batch = batches[bIdx];
       try {
         const { data, error } = await supabase.functions.invoke("categorize", {
           body: {
@@ -99,6 +101,7 @@ export async function categorizeTransactions(
       } catch {
         // Batch failed, will fallback below
       }
+      onProgress?.((bIdx + 1), batches.length);
     }
 
     const aiIds = new Set(aiResults.map((r) => r.id));

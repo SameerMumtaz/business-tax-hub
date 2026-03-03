@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Upload, FileText, Landmark, Check, X, FileUp, ArrowRight, Sparkles, Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Lightbulb, Plus, XCircle, ShieldAlert, AlertTriangle, Info, Ban } from "lucide-react";
 import { toast } from "sonner";
+import { Progress } from "@/components/ui/progress";
 
 interface AuditIssue {
   type: "duplicate" | "anomaly" | "balance" | "unknown" | "personal" | "date_issue";
@@ -64,7 +65,7 @@ export default function ImportPage() {
   const [auditSummary, setAuditSummary] = useState<string>("");
   const [auditing, setAuditing] = useState(false);
   const [dismissedIssues, setDismissedIssues] = useState<Set<number>>(new Set());
-
+  const [progressInfo, setProgressInfo] = useState<{ label: string; completed: number; total: number } | null>(null);
   const processFile = useCallback((file: File) => {
     if (!file.name.endsWith(".csv") && !file.name.endsWith(".tsv") && !file.name.endsWith(".txt")) {
       toast.error("Please upload a CSV file");
@@ -246,6 +247,7 @@ export default function ImportPage() {
     setAuditIssues([]);
     setAuditSummary("");
     setDismissedIssues(new Set());
+    setProgressInfo({ label: "AI Auditing", completed: 0, total: 1 });
     try {
       const { data, error } = await supabase.functions.invoke("audit-transactions", {
         body: {
@@ -258,6 +260,7 @@ export default function ImportPage() {
           })),
         },
       });
+      setProgressInfo({ label: "AI Auditing", completed: 1, total: 1 });
       if (error) throw error;
       setAuditIssues(data?.issues || []);
       setAuditSummary(data?.summary || "");
@@ -270,6 +273,7 @@ export default function ImportPage() {
       toast.error("Audit failed");
     } finally {
       setAuditing(false);
+      setProgressInfo(null);
     }
   };
 
@@ -298,10 +302,12 @@ export default function ImportPage() {
     if (targets.length === 0) return;
 
     setCategorizing(true);
+    setProgressInfo({ label: "AI Categorizing", completed: 0, total: 1 });
     try {
       const results = await categorizeTransactions(
         targets.map((t) => ({ id: t.id, description: t.description, type: t.type })),
-        true // useAI = true
+        true,
+        (completed, total) => setProgressInfo({ label: "AI Categorizing", completed, total })
       );
       setTransactions((prev) =>
         prev.map((t) => {
@@ -318,6 +324,7 @@ export default function ImportPage() {
       toast.error("AI categorization failed");
     } finally {
       setCategorizing(false);
+      setProgressInfo(null);
     }
   };
 
@@ -451,7 +458,19 @@ export default function ImportPage() {
                 )}
               </div>
               <div className="flex gap-2 items-center flex-wrap">
-                {(categorizing || auditing) && (
+                {progressInfo && (
+                  <div className="flex items-center gap-3 min-w-[200px]">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+                    <div className="flex-1 space-y-1">
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>{progressInfo.label}</span>
+                        <span>{Math.round((progressInfo.completed / progressInfo.total) * 100)}%</span>
+                      </div>
+                      <Progress value={(progressInfo.completed / progressInfo.total) * 100} className="h-2" />
+                    </div>
+                  </div>
+                )}
+                {(categorizing || auditing) && !progressInfo && (
                   <span className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     {auditing ? "Auditing…" : "Categorizing…"}
