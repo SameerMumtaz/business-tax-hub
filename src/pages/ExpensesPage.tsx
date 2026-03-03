@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useExpenses, useAddExpense, useRemoveExpense, useUpdateExpense, useBulkRemoveExpenses, useBulkUpdateExpenseCategory } from "@/hooks/useData";
 import { useDateRange } from "@/contexts/DateRangeContext";
@@ -300,7 +301,7 @@ export default function ExpensesPage() {
           </DialogContent>
         </Dialog>
 
-        <Tabs defaultValue="expenses">
+        <Tabs defaultValue={new URLSearchParams(window.location.search).get("tab") || "expenses"}>
           <TabsList>
             <TabsTrigger value="expenses">Expenses</TabsTrigger>
             <TabsTrigger value="trends">Trends & Alerts</TabsTrigger>

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useExpenses, useSales } from "@/hooks/useData";
 import { useDateRange } from "@/contexts/DateRangeContext";
@@ -93,7 +94,7 @@ export default function ProfitLossPage() {
           </div>
         </div>
 
-        <Tabs defaultValue="statement">
+        <Tabs defaultValue={new URLSearchParams(window.location.search).get("tab") || "statement"}>
           <TabsList>
             <TabsTrigger value="statement">Income Statement</TabsTrigger>
             <TabsTrigger value="compare">P&L Compare</TabsTrigger>

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useExpenses, useSales, useProfile } from "@/hooks/useData";
 import { useDateRange } from "@/contexts/DateRangeContext";
@@ -186,7 +187,7 @@ export default function TaxCenterPage() {
           </Alert>
         ))}
 
-        <Tabs defaultValue="estimate">
+        <Tabs defaultValue={new URLSearchParams(window.location.search).get("tab") || "estimate"}>
           <TabsList>
             <TabsTrigger value="estimate">Tax Estimate</TabsTrigger>
             <TabsTrigger value="deductions">Deductions</TabsTrigger>
