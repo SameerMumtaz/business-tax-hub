@@ -32,6 +32,7 @@ async function fetchRules() {
 export function invalidateRulesCache() {
   cachedRules = null;
   rulesCacheTime = 0;
+  sessionCache.clear();
 }
 
 function matchRule(
