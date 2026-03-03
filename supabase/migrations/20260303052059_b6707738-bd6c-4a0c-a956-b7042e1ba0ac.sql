@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS idx_categorization_rules_pattern_type ON public.categorization_rules (vendor_pattern, type);
