@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import SuggestedRulesPanel from "@/components/SuggestedRulesPanel";
+import { extractVendorName } from "@/lib/ruleInference";
 import DashboardLayout from "@/components/DashboardLayout";
 import useExpensesLogic, { PAGE_SIZE } from "@/hooks/useExpensesLogic";
 import { LINE_COLORS } from "@/lib/chartTheme";
@@ -167,7 +168,7 @@ export default function ExpensesPage() {
                     <tr key={e.id} className={selected.has(e.id) ? "bg-primary/5" : ""}>
                       <td><Checkbox checked={selected.has(e.id)} onCheckedChange={() => toggleSelect(e.id)} /></td>
                       <td className="font-mono text-xs text-muted-foreground">{e.date}</td>
-                      <td className="font-medium">{e.vendor}</td>
+                      <td className="font-medium" title={e.vendor}>{extractVendorName(e.vendor) || e.vendor}</td>
                       <td className="text-muted-foreground">{e.description}</td>
                       <td>
                         {editingCategoryId === e.id ? (

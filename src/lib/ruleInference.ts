@@ -12,21 +12,17 @@ export interface InferredPattern {
 
 /**
  * Extract the likely vendor/company name from a raw bank transaction description.
- * Strips bank prefixes (POS, DEBIT, VISA, etc.), trailing reference numbers,
+ * Strips bank prefixes (POS, DEBIT, VISA, CHECKCARD, etc.), trailing reference numbers,
  * dates, and noise to isolate the actual business name.
  */
-function extractVendorName(raw: string): string | null {
-  // Common bank/payment prefixes to strip
-  const prefixNoise = /^(pos|point of sale|debit|credit|purchase|payment|check|chk|ach|wire|txn|tran|transaction|recurring|autopay|bill pay|online|electronic|sq\s*\*|sp\s*\*|tst\s*\*|in\s*\*|pp\s*\*|paypal\s*\*?|zelle\s*(to|from)?|venmo|cash app|apple pay|google pay)\s*/gi;
+export function extractVendorName(raw: string): string | null {
+  // Common bank/payment prefixes to strip (order matters — longer first)
+  const prefixNoise = /^(checkcard\s+\d{4}\s*|pos|point of sale|debit|credit|purchase\s+\d{4}\s*|purchase|payment|check|chk|ach|wire|txn|tran|transaction|recurring|autopay|bill pay|online\s+scheduled\s+payment\s+to|online|electronic|transfer|sq\s*\*|sp\s*\*|tst\s*\*|in\s*\*|pp\s*\*|paypal\s*\*?|zelle\s*(to|from)?|venmo|cash app|apple pay|google pay)\s*/gi;
   // Card brand prefixes
   const cardNoise = /^(visa|mastercard|amex|discover|mc)\s+/gi;
-  // Trailing noise: dates, ref numbers, locations, card last4
-  const suffixNoise = /\s+(ref\s*#?\s*\w+|seq\s*#?\s*\w+|trace\s*#?\s*\w+|conf\s*#?\s*\w+|#\w+|\d{2}\/\d{2}(\/\d{2,4})?|\d{4,}|x{2,}\d{2,4}|\*{2,}\d{2,4}|card\s*\d+|ending\s+in\s+\d+).*$/gi;
-  // State/city suffixes like "NY US", "CA", "US"
-  const locationSuffix = /\s+[A-Z]{2}\s+(US|USA)?\s*$/gi;
 
   let cleaned = raw
-    .replace(/[*#_.\/\\]+/g, " ")   // normalize special chars
+    .replace(/[*#_.\/\\:]+/g, " ")   // normalize special chars including colons
     .replace(/\s+/g, " ")
     .trim();
 
@@ -37,21 +33,55 @@ function extractVendorName(raw: string): string | null {
     cleaned = cleaned.replace(prefixNoise, "").replace(cardNoise, "").trim();
   }
 
-  // Strip suffixes
-  cleaned = cleaned
-    .replace(suffixNoise, "")
-    .replace(locationSuffix, "")
-    .replace(/\s+\d+\s*$/, "")       // trailing standalone numbers
-    .replace(/\s+/g, " ")
-    .trim();
+  // Strip CKCD and everything after it
+  cleaned = cleaned.replace(/\s+CKCD\s+.*/i, "");
+  
+  // Strip Confirmation# and everything after
+  cleaned = cleaned.replace(/\s+Confirmation\s*.*/i, "");
+  
+  // Strip long numeric sequences (11+ digits, like bank reference numbers)
+  cleaned = cleaned.replace(/\s+\d{11,}/g, "");
+  
+  // Strip phone numbers (xxx-xxx-xxxx or xxxxxxxxxx)
+  cleaned = cleaned.replace(/\s+\d{3}-\d{3}-\d{4}/g, "");
+  cleaned = cleaned.replace(/\s+\d{10,}/g, "");
+  
+  // Strip masked card numbers (XXXXXXXXXXXX1234)
+  cleaned = cleaned.replace(/\s+X{4,}\d{2,}/gi, "");
+  cleaned = cleaned.replace(/\s+XXXX\s+XXXX\s+XXXX\s+\d{4}/gi, "");
+  
+  // Strip date patterns (MM/DD, MM/DD/YY, MM/DD/YYYY)
+  cleaned = cleaned.replace(/\s+\d{2}\/\d{2}(\/\d{2,4})?/g, "");
+  
+  // Strip standalone state codes at end (2 letter + optional US)
+  cleaned = cleaned.replace(/\s+[A-Z]{2}\s*$/i, "");
+  cleaned = cleaned.replace(/\s+(US|USA)\s*$/i, "");
+  
+  // Strip ref/seq/trace numbers
+  cleaned = cleaned.replace(/\s+(ref|seq|trace|conf)\s*#?\s*\w+/gi, "");
+  
+  // Strip store/location numbers after vendor name (e.g. "QT 378 OUTSIDE" → keep "QT", "ONCUE 0123" → keep "ONCUE")
+  // But keep multi-word brand names intact
+  
+  // Strip trailing # followed by digits
+  cleaned = cleaned.replace(/\s+#\d+/g, "");
+  
+  // Strip standalone numbers
+  cleaned = cleaned.replace(/\s+\d+\s*/g, " ");
 
-  // Remove any remaining pure-numeric tokens
-  const tokens = cleaned.split(/\s+/).filter(t => !/^\d+$/.test(t));
-  cleaned = tokens.join(" ");
+  // Remove location words that follow vendor names
+  const locationWords = /\s+(inside|outside|drive thru|drive through|drv thru)\b/gi;
+  cleaned = cleaned.replace(locationWords, "");
+  
+  // Strip city names that appear after the vendor (heuristic: known pattern of "VENDOR CITY STATE")
+  // Remove trailing words that look like city/address (after vendor extracted)
+  
+  // Remove remaining special chars and normalize
+  cleaned = cleaned.replace(/[^a-zA-Z\s'-]/g, " ").replace(/\s+/g, " ").trim();
 
-  // Final cleanup: lowercase, remove very short results
+  // Final: remove very short results or empty
   const result = cleaned.toLowerCase().trim();
-  if (result.length < 3) return null;
+  if (result.length < 2) return null;
 
   return result;
 }
@@ -206,16 +236,25 @@ export async function checkForPatternAfterCategoryChange(
         action: {
           label: "Create Rule",
           onClick: async () => {
-            const { error } = await supabase.from("categorization_rules").insert({
+            const { error } = await supabase.from("categorization_rules").upsert({
               vendor_pattern: kw,
               category: newCategory,
               type,
               priority: 10,
               user_id: userId,
-            });
+            }, { onConflict: "vendor_pattern,type,user_id", ignoreDuplicates: false });
             if (error) {
-              toast.error("Failed to create rule");
-              return;
+              // If upsert also fails, try update
+              const { error: updateError } = await supabase
+                .from("categorization_rules")
+                .update({ category: newCategory })
+                .eq("vendor_pattern", kw)
+                .eq("type", type)
+                .eq("user_id", userId);
+              if (updateError) {
+                toast.error("Failed to create rule");
+                return;
+              }
             }
             invalidateRulesCache();
 
@@ -246,17 +285,26 @@ export async function saveInferredRule(
   pattern: InferredPattern,
   userId: string
 ): Promise<{ created: boolean; applied: number }> {
-  const { error } = await supabase.from("categorization_rules").insert({
+  const { error } = await supabase.from("categorization_rules").upsert({
     vendor_pattern: pattern.keyword,
     category: pattern.category,
     type: pattern.type,
     priority: 10,
     user_id: userId,
-  });
+  }, { onConflict: "vendor_pattern,type,user_id", ignoreDuplicates: false });
 
   if (error) {
-    toast.error("Failed to create rule");
-    return { created: false, applied: 0 };
+    // Fallback: try update if upsert fails
+    const { error: updateError } = await supabase
+      .from("categorization_rules")
+      .update({ category: pattern.category })
+      .eq("vendor_pattern", pattern.keyword)
+      .eq("type", pattern.type)
+      .eq("user_id", userId);
+    if (updateError) {
+      toast.error("Failed to create rule");
+      return { created: false, applied: 0 };
+    }
   }
 
   invalidateRulesCache();
