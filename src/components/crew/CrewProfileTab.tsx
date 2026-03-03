@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useTeamRole } from "@/hooks/useTeamRole";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,6 +31,7 @@ const empty: PersonalFields = {
 
 export default function CrewProfileTab() {
   const { user } = useAuth();
+  const { teamMemberId, businessUserId } = useTeamRole();
   const [profile, setProfile] = useState<PersonalFields>(empty);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -37,39 +39,147 @@ export default function CrewProfileTab() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const { data } = await supabase
+      // 1. Load existing profile
+      const { data: profileData } = await supabase
         .from("profiles")
         .select("first_name, last_name, personal_address, personal_city, personal_state, personal_zip, ssn_last4")
         .eq("user_id", user.id)
         .single();
-      if (data) {
-        setProfile({
-          first_name: data.first_name || "",
-          last_name: data.last_name || "",
-          personal_address: data.personal_address || "",
-          personal_city: data.personal_city || "",
-          personal_state: data.personal_state || "",
-          personal_zip: data.personal_zip || "",
-          ssn_last4: data.ssn_last4 || "",
-        });
+
+      const p: PersonalFields = {
+        first_name: profileData?.first_name || "",
+        last_name: profileData?.last_name || "",
+        personal_address: profileData?.personal_address || "",
+        personal_city: profileData?.personal_city || "",
+        personal_state: profileData?.personal_state || "",
+        personal_zip: profileData?.personal_zip || "",
+        ssn_last4: profileData?.ssn_last4 || "",
+      };
+
+      // 2. If profile fields are empty, try to pre-populate from admin's records
+      const needsSync = !p.first_name && !p.last_name;
+      if (needsSync && teamMemberId && businessUserId) {
+        // Get team member info (name set by admin)
+        const { data: tm } = await supabase
+          .from("team_members")
+          .select("name, email, worker_type")
+          .eq("id", teamMemberId)
+          .single();
+
+        if (tm) {
+          // Split admin-provided name into first/last
+          const nameParts = (tm.name || "").trim().split(/\s+/);
+          if (!p.first_name) p.first_name = nameParts[0] || "";
+          if (!p.last_name) p.last_name = nameParts.slice(1).join(" ") || "";
+
+          // Get address from contractor/employee record admin created
+          if (tm.worker_type === "1099" || tm.worker_type === "contractor") {
+            const { data: contractor } = await supabase
+              .from("contractors")
+              .select("address, state_employed, tin_last4")
+              .eq("user_id", businessUserId)
+              .eq("name", tm.name)
+              .maybeSingle();
+            if (contractor) {
+              if (!p.personal_address && contractor.address) p.personal_address = contractor.address;
+              if (!p.personal_state && contractor.state_employed) p.personal_state = contractor.state_employed;
+              if (!p.ssn_last4 && contractor.tin_last4) p.ssn_last4 = contractor.tin_last4;
+            }
+          } else {
+            const { data: employee } = await supabase
+              .from("employees")
+              .select("address, state_employed, ssn_last4")
+              .eq("user_id", businessUserId)
+              .eq("name", tm.name)
+              .maybeSingle();
+            if (employee) {
+              if (!p.personal_address && employee.address) p.personal_address = employee.address;
+              if (!p.personal_state && employee.state_employed) p.personal_state = employee.state_employed;
+              if (!p.ssn_last4 && employee.ssn_last4) p.ssn_last4 = employee.ssn_last4;
+            }
+          }
+
+          // Auto-save the pre-populated data to their profile
+          if (p.first_name || p.personal_address) {
+            await supabase.from("profiles").update(p).eq("user_id", user.id);
+          }
+        }
       }
+
+      setProfile(p);
       setLoading(false);
     })();
-  }, [user]);
+  }, [user, teamMemberId, businessUserId]);
 
   const handleSave = async () => {
     if (!user) return;
     setSaving(true);
+
+    // 1. Save to own profile
     const { error } = await supabase
       .from("profiles")
       .update(profile)
       .eq("user_id", user.id);
-    setSaving(false);
+
     if (error) {
       toast.error("Failed to save profile");
-    } else {
-      toast.success("Profile saved");
+      setSaving(false);
+      return;
     }
+
+    // 2. Sync back to admin's records (team_members + contractor/employee)
+    if (teamMemberId && businessUserId) {
+      const fullName = `${profile.first_name} ${profile.last_name}`.trim();
+
+      // Get current team member info to find the right contractor/employee record
+      const { data: tm } = await supabase
+        .from("team_members")
+        .select("name, worker_type")
+        .eq("id", teamMemberId)
+        .single();
+
+      if (tm) {
+        const oldName = tm.name;
+
+        // Update team_members name
+        if (fullName) {
+          await supabase
+            .from("team_members")
+            .update({ name: fullName })
+            .eq("id", teamMemberId);
+        }
+
+        // Update contractor/employee record
+        const addressData = {
+          name: fullName || oldName,
+          address: profile.personal_address || null,
+          state_employed: profile.personal_state || null,
+        };
+
+        if (tm.worker_type === "1099" || tm.worker_type === "contractor") {
+          await supabase
+            .from("contractors")
+            .update({
+              ...addressData,
+              tin_last4: profile.ssn_last4 || null,
+            })
+            .eq("user_id", businessUserId)
+            .eq("name", oldName);
+        } else {
+          await supabase
+            .from("employees")
+            .update({
+              ...addressData,
+              ssn_last4: profile.ssn_last4 || null,
+            })
+            .eq("user_id", businessUserId)
+            .eq("name", oldName);
+        }
+      }
+    }
+
+    setSaving(false);
+    toast.success("Profile saved & synced");
   };
 
   const set = (key: keyof PersonalFields, value: string) =>
@@ -85,6 +195,9 @@ export default function CrewProfileTab() {
         <CardTitle className="flex items-center gap-2 text-base">
           <UserCircle className="h-5 w-5" /> My Info
         </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Changes you make here will also update your employer's records.
+        </p>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-3">

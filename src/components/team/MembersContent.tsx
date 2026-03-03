@@ -208,6 +208,15 @@ export default function MembersContent() {
         }
       }
 
+      // 3. Sync name to crew member's profile (if they have a linked user)
+      if (editMember.member_user_id) {
+        const nameParts = editName.trim().split(/\s+/);
+        await supabase.from("profiles").update({
+          first_name: nameParts[0] || "",
+          last_name: nameParts.slice(1).join(" ") || "",
+        }).eq("user_id", editMember.member_user_id);
+      }
+
       toast.success("Member updated");
       setEditOpen(false);
       fetchMembers();
