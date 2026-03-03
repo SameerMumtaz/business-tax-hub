@@ -11,33 +11,82 @@ export interface InferredPattern {
 }
 
 /**
- * Extract common keywords from a vendor string (first meaningful word, lowercased).
+ * Extract the likely vendor/company name from a raw bank transaction description.
+ * Strips bank prefixes (POS, DEBIT, VISA, etc.), trailing reference numbers,
+ * dates, and noise to isolate the actual business name.
+ */
+function extractVendorName(raw: string): string | null {
+  // Common bank/payment prefixes to strip
+  const prefixNoise = /^(pos|point of sale|debit|credit|purchase|payment|check|chk|ach|wire|txn|tran|transaction|recurring|autopay|bill pay|online|electronic|sq\s*\*|sp\s*\*|tst\s*\*|in\s*\*|pp\s*\*|paypal\s*\*?|zelle\s*(to|from)?|venmo|cash app|apple pay|google pay)\s*/gi;
+  // Card brand prefixes
+  const cardNoise = /^(visa|mastercard|amex|discover|mc)\s+/gi;
+  // Trailing noise: dates, ref numbers, locations, card last4
+  const suffixNoise = /\s+(ref\s*#?\s*\w+|seq\s*#?\s*\w+|trace\s*#?\s*\w+|conf\s*#?\s*\w+|#\w+|\d{2}\/\d{2}(\/\d{2,4})?|\d{4,}|x{2,}\d{2,4}|\*{2,}\d{2,4}|card\s*\d+|ending\s+in\s+\d+).*$/gi;
+  // State/city suffixes like "NY US", "CA", "US"
+  const locationSuffix = /\s+[A-Z]{2}\s+(US|USA)?\s*$/gi;
+
+  let cleaned = raw
+    .replace(/[*#_.\/\\]+/g, " ")   // normalize special chars
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Repeatedly strip prefixes
+  let prev = "";
+  while (prev !== cleaned) {
+    prev = cleaned;
+    cleaned = cleaned.replace(prefixNoise, "").replace(cardNoise, "").trim();
+  }
+
+  // Strip suffixes
+  cleaned = cleaned
+    .replace(suffixNoise, "")
+    .replace(locationSuffix, "")
+    .replace(/\s+\d+\s*$/, "")       // trailing standalone numbers
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Remove any remaining pure-numeric tokens
+  const tokens = cleaned.split(/\s+/).filter(t => !/^\d+$/.test(t));
+  cleaned = tokens.join(" ");
+
+  // Final cleanup: lowercase, remove very short results
+  const result = cleaned.toLowerCase().trim();
+  if (result.length < 3) return null;
+
+  return result;
+}
+
+/**
+ * From a vendor name, produce keyword candidates: the full cleaned name
+ * plus individual meaningful words (for multi-word vendors like "home depot").
  */
 function extractKeywords(vendor: string): string[] {
+  const vendorName = extractVendorName(vendor);
+  if (!vendorName) return [];
+
   const noise = new Set([
     "the", "of", "and", "a", "an", "inc", "llc", "ltd", "corp", "co",
-    "pos", "debit", "purchase", "payment", "check", "card", "visa",
-    "mastercard", "amex", "ach", "wire", "txn", "ref", "num", "trn",
-    "seq", "pmt", "chk", "wdl", "dbt", "crd", "tran", "transaction",
-    "online", "electronic", "recurring", "autopay", "bill", "pay",
-    "transfer", "deposit", "withdrawal", "fee", "charge", "pending",
+    "store", "shop", "market", "marketplace", "services", "service",
   ]);
 
-  const words = vendor
-    .toLowerCase()
-    .replace(/[^a-z\s]/g, " ")          // strip ALL digits and special chars
-    .split(/\s+/)
-    .filter(w => {
-      if (w.length < 3) return false;     // too short
-      if (noise.has(w)) return false;     // noise word
-      if (/^[^a-z]*$/.test(w)) return false; // no letters at all
-      return true;
-    });
+  const keywords: string[] = [];
 
-  const keywords: string[] = [...words];
-  for (let i = 0; i < words.length - 1; i++) {
-    keywords.push(`${words[i]} ${words[i + 1]}`);
+  // The full cleaned vendor name is the best candidate
+  keywords.push(vendorName);
+
+  // Also add individual words if multi-word (e.g. "home depot" → also "home", "depot")
+  const words = vendorName.split(/\s+/).filter(w => w.length >= 3 && !noise.has(w));
+  if (words.length > 1) {
+    for (const w of words) {
+      keywords.push(w);
+    }
+    // Add bigrams for 3+ word names
+    for (let i = 0; i < words.length - 1; i++) {
+      const bigram = `${words[i]} ${words[i + 1]}`;
+      if (bigram !== vendorName) keywords.push(bigram);
+    }
   }
+
   return keywords;
 }
 
