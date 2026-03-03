@@ -488,6 +488,7 @@ export type Database = {
           invoice_number: string
           is_recurring: boolean
           issue_date: string
+          job_id: string | null
           matched_sale_id: string | null
           notes: string | null
           pay_status: string
@@ -515,6 +516,7 @@ export type Database = {
           invoice_number: string
           is_recurring?: boolean
           issue_date: string
+          job_id?: string | null
           matched_sale_id?: string | null
           notes?: string | null
           pay_status?: string
@@ -542,6 +544,7 @@ export type Database = {
           invoice_number?: string
           is_recurring?: boolean
           issue_date?: string
+          job_id?: string | null
           matched_sale_id?: string | null
           notes?: string | null
           pay_status?: string
@@ -565,6 +568,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
             referencedColumns: ["id"]
           },
           {
