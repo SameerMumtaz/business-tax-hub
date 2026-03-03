@@ -6,12 +6,18 @@ import { supabase } from "@/integrations/supabase/client";
 interface ProfileGateContextType {
   profileComplete: boolean | null;
   accountType: string | null;
+  teamRole: "admin" | "manager" | "crew" | null;
+  businessUserId: string | null;
+  teamMemberId: string | null;
   recheckProfile: () => void;
 }
 
 const ProfileGateContext = createContext<ProfileGateContextType>({
   profileComplete: null,
   accountType: null,
+  teamRole: null,
+  businessUserId: null,
+  teamMemberId: null,
   recheckProfile: () => {},
 });
 
@@ -21,23 +27,55 @@ export function ProfileGateProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [profileComplete, setProfileComplete] = useState<boolean | null>(null);
   const [accountType, setAccountType] = useState<string | null>(null);
+  const [teamRole, setTeamRole] = useState<"admin" | "manager" | "crew" | null>(null);
+  const [businessUserId, setBusinessUserId] = useState<string | null>(null);
+  const [teamMemberId, setTeamMemberId] = useState<string | null>(null);
 
   const recheckProfile = useCallback(() => {
     if (!user) return;
+
+    // Check team membership first
     supabase
-      .from("profiles")
-      .select("business_name, account_type")
-      .eq("user_id", user.id)
-      .single()
-      .then(({ data }) => {
-        const raw = data as any;
-        setAccountType(raw?.account_type ?? null);
-        if (raw?.account_type === "individual") {
-          // Individual users don't need business_name
+      .from("team_members")
+      .select("id, role, business_user_id, status")
+      .eq("member_user_id", user.id)
+      .eq("status", "active")
+      .limit(1)
+      .maybeSingle()
+      .then(({ data: teamData }) => {
+        if (teamData) {
+          setTeamRole(teamData.role as "admin" | "manager" | "crew");
+          setBusinessUserId(teamData.business_user_id);
+          setTeamMemberId(teamData.id);
+          setAccountType("business");
           setProfileComplete(true);
-        } else {
-          setProfileComplete(!!raw?.business_name?.trim());
+          return;
         }
+
+        // Not a team member — check profile
+        setTeamRole(null);
+        setBusinessUserId(user.id);
+        setTeamMemberId(null);
+
+        supabase
+          .from("profiles")
+          .select("business_name, account_type")
+          .eq("user_id", user.id)
+          .single()
+          .then(({ data }) => {
+            const raw = data as any;
+            const acctType = raw?.account_type ?? null;
+            setAccountType(acctType);
+
+            if (acctType === "business") {
+              setTeamRole("admin"); // business owner is admin
+              setProfileComplete(!!raw?.business_name?.trim());
+            } else if (acctType === "individual") {
+              setProfileComplete(true);
+            } else {
+              setProfileComplete(false);
+            }
+          });
       });
   }, [user]);
 
@@ -47,19 +85,29 @@ export function ProfileGateProvider({ children }: { children: ReactNode }) {
     } else {
       setProfileComplete(null);
       setAccountType(null);
+      setTeamRole(null);
+      setBusinessUserId(null);
+      setTeamMemberId(null);
     }
   }, [user, recheckProfile]);
 
   return (
-    <ProfileGateContext.Provider value={{ profileComplete, accountType, recheckProfile }}>
+    <ProfileGateContext.Provider
+      value={{ profileComplete, accountType, teamRole, businessUserId, teamMemberId, recheckProfile }}
+    >
       {children}
     </ProfileGateContext.Provider>
   );
 }
 
+// Manager-allowed routes
+const managerRoutes = ["/invoices", "/jobs", "/timesheets", "/team", "/crew-map", "/clients"];
+// Crew-allowed routes
+const crewRoutes = ["/crew"];
+
 export default function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
-  const { profileComplete, accountType } = useProfileGate();
+  const { profileComplete, accountType, teamRole } = useProfileGate();
   const location = useLocation();
 
   if (loading || (user && profileComplete === null)) {
@@ -74,21 +122,45 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
     return <Navigate to="/auth" replace />;
   }
 
-  // No account type chosen yet → send to selection
+  // No account type chosen yet → send to selection (unless team member)
   if (!accountType && location.pathname !== "/account-type") {
     return <Navigate to="/account-type" replace />;
   }
 
-  // Business users need profile completion
-  if (accountType === "business" && !profileComplete && location.pathname !== "/profile") {
+  // Business users need profile completion (admin only)
+  if (
+    accountType === "business" &&
+    teamRole === "admin" &&
+    !profileComplete &&
+    location.pathname !== "/profile"
+  ) {
     return <Navigate to="/profile" replace />;
+  }
+
+  // Crew members can only access crew routes
+  if (teamRole === "crew") {
+    if (!crewRoutes.some((r) => location.pathname.startsWith(r))) {
+      return <Navigate to="/crew" replace />;
+    }
+  }
+
+  // Manager members can only access manager routes
+  if (teamRole === "manager") {
+    const allowed = managerRoutes.some((r) => location.pathname.startsWith(r));
+    if (!allowed && location.pathname !== "/") {
+      return <Navigate to="/invoices" replace />;
+    }
   }
 
   // Prevent business users from accessing personal routes and vice versa
   if (accountType === "business" && location.pathname.startsWith("/personal")) {
     return <Navigate to="/" replace />;
   }
-  if (accountType === "individual" && !location.pathname.startsWith("/personal") && location.pathname !== "/account-type") {
+  if (
+    accountType === "individual" &&
+    !location.pathname.startsWith("/personal") &&
+    location.pathname !== "/account-type"
+  ) {
     return <Navigate to="/personal" replace />;
   }
 

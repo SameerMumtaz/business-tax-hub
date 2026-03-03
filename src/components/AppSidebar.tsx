@@ -81,7 +81,11 @@ const links: NavItem[] = [
       { to: "/tax-center?tab=schedule-c", label: "Tax Form Preview", icon: Home },
     ],
   },
+  { to: "/jobs", label: "Job Scheduler", icon: BarChart3 },
+  { to: "/timesheets", label: "Timesheets", icon: Clock },
   { to: "/1099", label: "Team & Contractors", icon: Users },
+  { to: "/team", label: "Team Management", icon: Users },
+  { to: "/crew-map", label: "Crew Map", icon: BarChart3 },
   { to: "/profile", label: "Business Info", icon: Building2 },
 ];
 

@@ -116,6 +116,79 @@ export type Database = {
         }
         Relationships: []
       }
+      crew_checkins: {
+        Row: {
+          check_in_lat: number | null
+          check_in_lng: number | null
+          check_in_time: string
+          check_out_lat: number | null
+          check_out_lng: number | null
+          check_out_time: string | null
+          created_at: string
+          id: string
+          job_id: string | null
+          job_site_id: string | null
+          notes: string | null
+          status: string
+          team_member_id: string
+          total_hours: number | null
+        }
+        Insert: {
+          check_in_lat?: number | null
+          check_in_lng?: number | null
+          check_in_time?: string
+          check_out_lat?: number | null
+          check_out_lng?: number | null
+          check_out_time?: string | null
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          job_site_id?: string | null
+          notes?: string | null
+          status?: string
+          team_member_id: string
+          total_hours?: number | null
+        }
+        Update: {
+          check_in_lat?: number | null
+          check_in_lng?: number | null
+          check_in_time?: string
+          check_out_lat?: number | null
+          check_out_lng?: number | null
+          check_out_time?: string | null
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          job_site_id?: string | null
+          notes?: string | null
+          status?: string
+          team_member_id?: string
+          total_hours?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crew_checkins_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crew_checkins_job_site_id_fkey"
+            columns: ["job_site_id"]
+            isOneToOne: false
+            referencedRelation: "job_sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crew_checkins_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employees: {
         Row: {
           address: string | null
@@ -379,6 +452,188 @@ export type Database = {
           },
         ]
       }
+      job_assignments: {
+        Row: {
+          created_at: string
+          id: string
+          job_id: string
+          worker_id: string
+          worker_name: string
+          worker_type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          job_id: string
+          worker_id: string
+          worker_name: string
+          worker_type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          job_id?: string
+          worker_id?: string
+          worker_name?: string
+          worker_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_assignments_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_expenses: {
+        Row: {
+          created_at: string
+          expense_id: string
+          id: string
+          job_id: string
+        }
+        Insert: {
+          created_at?: string
+          expense_id: string
+          id?: string
+          job_id: string
+        }
+        Update: {
+          created_at?: string
+          expense_id?: string
+          id?: string
+          job_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_expenses_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_expenses_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_sites: {
+        Row: {
+          address: string | null
+          city: string | null
+          created_at: string
+          geofence_radius: number | null
+          id: string
+          latitude: number | null
+          longitude: number | null
+          name: string
+          notes: string | null
+          state: string | null
+          user_id: string
+          zip: string | null
+        }
+        Insert: {
+          address?: string | null
+          city?: string | null
+          created_at?: string
+          geofence_radius?: number | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          name: string
+          notes?: string | null
+          state?: string | null
+          user_id: string
+          zip?: string | null
+        }
+        Update: {
+          address?: string | null
+          city?: string | null
+          created_at?: string
+          geofence_radius?: number | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          name?: string
+          notes?: string | null
+          state?: string | null
+          user_id?: string
+          zip?: string | null
+        }
+        Relationships: []
+      }
+      jobs: {
+        Row: {
+          created_at: string
+          description: string | null
+          end_date: string | null
+          id: string
+          invoice_id: string | null
+          job_type: string
+          recurring_end_date: string | null
+          recurring_interval: string | null
+          site_id: string
+          start_date: string
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          invoice_id?: string | null
+          job_type?: string
+          recurring_end_date?: string | null
+          recurring_interval?: string | null
+          site_id: string
+          start_date: string
+          status?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          invoice_id?: string | null
+          job_type?: string
+          recurring_end_date?: string | null
+          recurring_interval?: string | null
+          site_id?: string
+          start_date?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jobs_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "job_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       personal_deductions: {
         Row: {
           amount: number
@@ -631,6 +886,159 @@ export type Database = {
         }
         Relationships: []
       }
+      team_members: {
+        Row: {
+          accepted_at: string | null
+          business_user_id: string
+          created_at: string
+          email: string
+          id: string
+          invited_at: string
+          member_user_id: string | null
+          name: string
+          role: Database["public"]["Enums"]["team_role"]
+          status: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          business_user_id: string
+          created_at?: string
+          email: string
+          id?: string
+          invited_at?: string
+          member_user_id?: string | null
+          name: string
+          role?: Database["public"]["Enums"]["team_role"]
+          status?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          business_user_id?: string
+          created_at?: string
+          email?: string
+          id?: string
+          invited_at?: string
+          member_user_id?: string | null
+          name?: string
+          role?: Database["public"]["Enums"]["team_role"]
+          status?: string
+        }
+        Relationships: []
+      }
+      timesheet_entries: {
+        Row: {
+          created_at: string
+          fri_hours: number
+          id: string
+          job_id: string | null
+          mon_hours: number
+          overtime_hours: number
+          overtime_pay: number
+          pay_rate: number
+          regular_pay: number
+          sat_hours: number
+          sun_hours: number
+          thu_hours: number
+          timesheet_id: string
+          total_hours: number
+          total_pay: number
+          tue_hours: number
+          wed_hours: number
+          worker_id: string
+          worker_name: string
+          worker_type: string
+        }
+        Insert: {
+          created_at?: string
+          fri_hours?: number
+          id?: string
+          job_id?: string | null
+          mon_hours?: number
+          overtime_hours?: number
+          overtime_pay?: number
+          pay_rate?: number
+          regular_pay?: number
+          sat_hours?: number
+          sun_hours?: number
+          thu_hours?: number
+          timesheet_id: string
+          total_hours?: number
+          total_pay?: number
+          tue_hours?: number
+          wed_hours?: number
+          worker_id: string
+          worker_name: string
+          worker_type: string
+        }
+        Update: {
+          created_at?: string
+          fri_hours?: number
+          id?: string
+          job_id?: string | null
+          mon_hours?: number
+          overtime_hours?: number
+          overtime_pay?: number
+          pay_rate?: number
+          regular_pay?: number
+          sat_hours?: number
+          sun_hours?: number
+          thu_hours?: number
+          timesheet_id?: string
+          total_hours?: number
+          total_pay?: number
+          tue_hours?: number
+          wed_hours?: number
+          worker_id?: string
+          worker_name?: string
+          worker_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "timesheet_entries_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "timesheet_entries_timesheet_id_fkey"
+            columns: ["timesheet_id"]
+            isOneToOne: false
+            referencedRelation: "timesheets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      timesheets: {
+        Row: {
+          created_at: string
+          id: string
+          status: string
+          updated_at: string
+          user_id: string
+          week_end: string
+          week_start: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+          week_end: string
+          week_start: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+          week_end?: string
+          week_start?: string
+        }
+        Relationships: []
+      }
       w2_income: {
         Row: {
           created_at: string
@@ -684,10 +1092,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_team_role: {
+        Args: { _business_id: string; _user_id: string }
+        Returns: string
+      }
     }
     Enums: {
-      [_ in never]: never
+      team_role: "admin" | "manager" | "crew"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -814,6 +1225,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      team_role: ["admin", "manager", "crew"],
+    },
   },
 } as const
