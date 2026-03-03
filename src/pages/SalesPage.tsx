@@ -1,13 +1,19 @@
 import { useState, useMemo } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { useSales, useAddSale, useRemoveSale, useExpenses } from "@/hooks/useData";
+import { useSales, useAddSale, useRemoveSale, useBulkRemoveSales, useExpenses } from "@/hooks/useData";
 import { formatCurrency } from "@/lib/format";
+import { invalidateRulesCache } from "@/lib/categorize";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import StatCard from "@/components/StatCard";
-import { Plus, Trash2, ArrowDownLeft, ArrowUpRight, Activity, Wallet } from "lucide-react";
+import { Plus, Trash2, ArrowDownLeft, ArrowUpRight, Activity, Wallet, ArrowUpDown, ArrowUp, ArrowDown, Tag } from "lucide-react";
 import { toast } from "sonner";
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
@@ -15,14 +21,23 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { EXPENSE_CATEGORIES } from "@/types/tax";
+
+type SortField = "date" | "client" | "invoiceNumber" | "amount" | "description";
+type SortDir = "asc" | "desc";
 
 export default function SalesPage() {
   const { data: sales = [] } = useSales();
   const { data: expenses = [] } = useExpenses();
+  const { user } = useAuth();
   const addSale = useAddSale();
   const removeSale = useRemoveSale();
+  const bulkRemove = useBulkRemoveSales();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ date: "", client: "", description: "", amount: "", invoiceNumber: "" });
+  const [sortField, setSortField] = useState<SortField>("date");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const totalSales = sales.reduce((sum, s) => sum + s.amount, 0);
 
@@ -41,14 +56,91 @@ export default function SalesPage() {
     });
   };
 
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) setSortDir((d) => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir("asc"); }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
+    return sortDir === "asc" ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
+
+  const sorted = useMemo(() => {
+    return [...sales].sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case "date": cmp = a.date.localeCompare(b.date); break;
+        case "client": cmp = a.client.localeCompare(b.client); break;
+        case "invoiceNumber": cmp = (a.invoiceNumber || "").localeCompare(b.invoiceNumber || ""); break;
+        case "description": cmp = a.description.localeCompare(b.description); break;
+        case "amount": cmp = a.amount - b.amount; break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [sales, sortField, sortDir]);
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selected.size === sorted.length) setSelected(new Set());
+    else setSelected(new Set(sorted.map((s) => s.id)));
+  };
+
+  const handleBulkDelete = () => {
+    if (selected.size === 0) return;
+    bulkRemove.mutate([...selected], {
+      onSuccess: () => { toast.success(`Deleted ${selected.size} sale(s)`); setSelected(new Set()); },
+      onError: () => toast.error("Failed to delete"),
+    });
+  };
+
+  // Create rule from selected sales (keyword → category)
+  const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
+  const [ruleKeyword, setRuleKeyword] = useState("");
+  const [ruleCategory, setRuleCategory] = useState("");
+
+  const openBulkRule = () => {
+    const selectedSales = sales.filter((s) => selected.has(s.id));
+    if (selectedSales.length > 0) {
+      const first = selectedSales[0].client.split(/\s+/)[0]?.toLowerCase() || "";
+      setRuleKeyword(first);
+    }
+    setRuleCategory("");
+    setRuleDialogOpen(true);
+  };
+
+  const saveBulkRule = async () => {
+    if (!ruleKeyword || !ruleCategory) { toast.error("Enter keyword and category"); return; }
+    const { error } = await supabase.from("categorization_rules").insert({
+      vendor_pattern: ruleKeyword,
+      category: ruleCategory,
+      type: "income",
+      priority: 10,
+      user_id: user?.id,
+    });
+    if (error) { toast.error("Failed to save rule"); return; }
+    invalidateRulesCache();
+    toast.success(`Rule saved: "${ruleKeyword}" → ${ruleCategory}`);
+    setRuleDialogOpen(false);
+    setRuleKeyword("");
+    setRuleCategory("");
+  };
+
   /* ── Cash Flow data ── */
   const { chartData, totalInflows, totalOutflows } = useMemo(() => {
     const monthMap: Record<string, { inflows: number; outflows: number }> = {};
     for (const s of sales) { const m = s.date.slice(0, 7); if (!monthMap[m]) monthMap[m] = { inflows: 0, outflows: 0 }; monthMap[m].inflows += s.amount; }
     for (const e of expenses) { const m = e.date.slice(0, 7); if (!monthMap[m]) monthMap[m] = { inflows: 0, outflows: 0 }; monthMap[m].outflows += e.amount; }
-    const sorted = Object.entries(monthMap).sort(([a], [b]) => a.localeCompare(b)).map(([month, v]) => ({ month, ...v }));
+    const sortedM = Object.entries(monthMap).sort(([a], [b]) => a.localeCompare(b)).map(([month, v]) => ({ month, ...v }));
     let balance = 0;
-    const data = sorted.map((row) => { balance += row.inflows - row.outflows; return { ...row, balance }; });
+    const data = sortedM.map((row) => { balance += row.inflows - row.outflows; return { ...row, balance }; });
     return { chartData: data, totalInflows: data.reduce((s, r) => s + r.inflows, 0), totalOutflows: data.reduce((s, r) => s + r.outflows, 0) };
   }, [expenses, sales]);
 
@@ -89,17 +181,84 @@ export default function SalesPage() {
             <TabsTrigger value="cashflow">Cash Flow</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="sales" className="mt-4">
+          <TabsContent value="sales" className="mt-4 space-y-3">
+            {/* Bulk actions bar */}
+            {selected.size > 0 && (
+              <div className="flex items-center gap-3 bg-muted rounded-lg px-4 py-2">
+                <span className="text-sm font-medium">{selected.size} selected</span>
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={openBulkRule}>
+                  <Tag className="h-3 w-3 mr-1" /> Create Rule
+                </Button>
+                <Button variant="outline" size="sm" className="h-7 text-xs text-destructive" onClick={handleBulkDelete}>
+                  <Trash2 className="h-3 w-3 mr-1" /> Delete
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelected(new Set())}>
+                  Clear
+                </Button>
+              </div>
+            )}
+
+            {/* Rule creation dialog */}
+            <Dialog open={ruleDialogOpen} onOpenChange={setRuleDialogOpen}>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Create Categorization Rule</DialogTitle></DialogHeader>
+                <p className="text-sm text-muted-foreground">This rule will auto-categorize future imports matching the keyword.</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Keyword pattern</label>
+                    <Input value={ruleKeyword} onChange={(e) => setRuleKeyword(e.target.value)} placeholder="e.g. acme" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Category</label>
+                    <Select value={ruleCategory} onValueChange={setRuleCategory}>
+                      <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                      <SelectContent>
+                        {EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button onClick={saveBulkRule} className="w-full" disabled={!ruleKeyword || !ruleCategory}>Save Rule</Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
             <div className="stat-card overflow-x-auto">
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Date</th><th>Invoice</th><th>Client</th><th>Description</th><th className="text-right">Amount</th><th></th>
+                    <th className="w-10">
+                      <Checkbox
+                        checked={sorted.length > 0 && selected.size === sorted.length}
+                        onCheckedChange={toggleAll}
+                      />
+                    </th>
+                    <th className="cursor-pointer select-none" onClick={() => toggleSort("date")}>
+                      <span className="inline-flex items-center">Date<SortIcon field="date" /></span>
+                    </th>
+                    <th className="cursor-pointer select-none" onClick={() => toggleSort("invoiceNumber")}>
+                      <span className="inline-flex items-center">Invoice<SortIcon field="invoiceNumber" /></span>
+                    </th>
+                    <th className="cursor-pointer select-none" onClick={() => toggleSort("client")}>
+                      <span className="inline-flex items-center">Client<SortIcon field="client" /></span>
+                    </th>
+                    <th className="cursor-pointer select-none" onClick={() => toggleSort("description")}>
+                      <span className="inline-flex items-center">Description<SortIcon field="description" /></span>
+                    </th>
+                    <th className="text-right cursor-pointer select-none" onClick={() => toggleSort("amount")}>
+                      <span className="inline-flex items-center justify-end">Amount<SortIcon field="amount" /></span>
+                    </th>
+                    <th className="w-10"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sales.map((s) => (
-                    <tr key={s.id}>
+                  {sorted.map((s) => (
+                    <tr key={s.id} className={selected.has(s.id) ? "bg-primary/5" : ""}>
+                      <td>
+                        <Checkbox
+                          checked={selected.has(s.id)}
+                          onCheckedChange={() => toggleSelect(s.id)}
+                        />
+                      </td>
                       <td className="font-mono text-xs text-muted-foreground">{s.date}</td>
                       <td className="font-mono text-xs">{s.invoiceNumber}</td>
                       <td className="font-medium">{s.client}</td>

@@ -1,16 +1,20 @@
 import { useState, useMemo } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { useExpenses, useAddExpense, useRemoveExpense } from "@/hooks/useData";
+import { useExpenses, useAddExpense, useRemoveExpense, useUpdateExpense, useBulkRemoveExpenses, useBulkUpdateExpenseCategory } from "@/hooks/useData";
 import { formatCurrency } from "@/lib/format";
 import { EXPENSE_CATEGORIES, ExpenseCategory } from "@/types/tax";
+import { invalidateRulesCache } from "@/lib/categorize";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import { Plus, Trash2, Filter, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Filter, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Tag, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
@@ -22,14 +26,25 @@ const LINE_COLORS = [
   "hsl(30 80% 55%)", "hsl(280 60% 55%)",
 ];
 
+type SortField = "date" | "vendor" | "description" | "category" | "amount";
+type SortDir = "asc" | "desc";
+
 export default function ExpensesPage() {
   const { data: expenses = [] } = useExpenses();
+  const { user } = useAuth();
   const addExpense = useAddExpense();
   const removeExpense = useRemoveExpense();
+  const updateExpense = useUpdateExpense();
+  const bulkRemove = useBulkRemoveExpenses();
+  const bulkUpdateCategory = useBulkUpdateExpenseCategory();
   const [open, setOpen] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [form, setForm] = useState({ date: "", vendor: "", description: "", amount: "", category: "" as string });
   const [trendFilterCat, setTrendFilterCat] = useState<string>("all");
+  const [sortField, setSortField] = useState<SortField>("date");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
 
   const filtered = filterCategory === "all" ? expenses : expenses.filter((e) => e.category === filterCategory);
   const totalFiltered = filtered.reduce((sum, e) => sum + e.amount, 0);
@@ -43,6 +58,105 @@ export default function ExpensesPage() {
       onSuccess: () => { setForm({ date: "", vendor: "", description: "", amount: "", category: "" }); setOpen(false); toast.success("Expense added"); },
       onError: () => toast.error("Failed to add expense"),
     });
+  };
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) setSortDir((d) => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir("asc"); }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
+    return sortDir === "asc" ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
+
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case "date": cmp = a.date.localeCompare(b.date); break;
+        case "vendor": cmp = a.vendor.localeCompare(b.vendor); break;
+        case "description": cmp = a.description.localeCompare(b.description); break;
+        case "category": cmp = a.category.localeCompare(b.category); break;
+        case "amount": cmp = a.amount - b.amount; break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [filtered, sortField, sortDir]);
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selected.size === sorted.length) setSelected(new Set());
+    else setSelected(new Set(sorted.map((e) => e.id)));
+  };
+
+  const handleBulkDelete = () => {
+    if (selected.size === 0) return;
+    bulkRemove.mutate([...selected], {
+      onSuccess: () => { toast.success(`Deleted ${selected.size} expense(s)`); setSelected(new Set()); },
+      onError: () => toast.error("Failed to delete"),
+    });
+  };
+
+  const handleBulkCategoryChange = (category: string) => {
+    if (selected.size === 0) return;
+    bulkUpdateCategory.mutate({ ids: [...selected], category }, {
+      onSuccess: () => { toast.success(`Updated ${selected.size} expense(s) to ${category}`); setSelected(new Set()); },
+      onError: () => toast.error("Failed to update"),
+    });
+  };
+
+  const handleSingleCategoryChange = (id: string, category: string) => {
+    updateExpense.mutate({ id, category }, {
+      onSuccess: () => { toast.success("Category updated"); setEditingCategoryId(null); },
+      onError: () => toast.error("Failed to update"),
+    });
+  };
+
+  // Rule creation
+  const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
+  const [ruleKeyword, setRuleKeyword] = useState("");
+  const [ruleCategory, setRuleCategory] = useState("");
+
+  const openBulkRule = () => {
+    const selectedExpenses = expenses.filter((e) => selected.has(e.id));
+    if (selectedExpenses.length > 0) {
+      const first = selectedExpenses[0].vendor.split(/\s+/)[0]?.toLowerCase() || "";
+      setRuleKeyword(first);
+      // If all selected share same category, pre-fill
+      const cats = new Set(selectedExpenses.map((e) => e.category));
+      setRuleCategory(cats.size === 1 ? [...cats][0] : "");
+    }
+    setRuleDialogOpen(true);
+  };
+
+  const saveBulkRule = async () => {
+    if (!ruleKeyword || !ruleCategory) { toast.error("Enter keyword and category"); return; }
+    const { error } = await supabase.from("categorization_rules").insert({
+      vendor_pattern: ruleKeyword,
+      category: ruleCategory,
+      type: "expense",
+      priority: 10,
+      user_id: user?.id,
+    });
+    if (error) { toast.error("Failed to save rule"); return; }
+    invalidateRulesCache();
+    toast.success(`Rule saved: "${ruleKeyword}" → ${ruleCategory}`);
+    // Also update matching selected expenses
+    const matchingIds = expenses.filter((e) => selected.has(e.id) && e.vendor.toLowerCase().includes(ruleKeyword.toLowerCase())).map((e) => e.id);
+    if (matchingIds.length > 0) {
+      bulkUpdateCategory.mutate({ ids: matchingIds, category: ruleCategory });
+    }
+    setRuleDialogOpen(false);
+    setRuleKeyword("");
+    setRuleCategory("");
   };
 
   /* ── Expense Trends data ── */
@@ -123,19 +237,119 @@ export default function ExpensesPage() {
             <TabsTrigger value="trends">Trends & Alerts</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="expenses" className="mt-4">
+          <TabsContent value="expenses" className="mt-4 space-y-3">
+            {/* Bulk actions bar */}
+            {selected.size > 0 && (
+              <div className="flex items-center gap-3 bg-muted rounded-lg px-4 py-2 flex-wrap">
+                <span className="text-sm font-medium">{selected.size} selected</span>
+                <Select onValueChange={handleBulkCategoryChange}>
+                  <SelectTrigger className="h-7 text-xs w-[160px]">
+                    <Pencil className="h-3 w-3 mr-1" />
+                    <SelectValue placeholder="Set category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={openBulkRule}>
+                  <Tag className="h-3 w-3 mr-1" /> Create Rule
+                </Button>
+                <Button variant="outline" size="sm" className="h-7 text-xs text-destructive" onClick={handleBulkDelete}>
+                  <Trash2 className="h-3 w-3 mr-1" /> Delete
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelected(new Set())}>
+                  Clear
+                </Button>
+              </div>
+            )}
+
+            {/* Rule creation dialog */}
+            <Dialog open={ruleDialogOpen} onOpenChange={setRuleDialogOpen}>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Create Categorization Rule</DialogTitle></DialogHeader>
+                <p className="text-sm text-muted-foreground">This rule will auto-categorize future imports matching the keyword and update selected expenses.</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Keyword pattern</label>
+                    <Input value={ruleKeyword} onChange={(e) => setRuleKeyword(e.target.value)} placeholder="e.g. adobe" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Category</label>
+                    <Select value={ruleCategory} onValueChange={setRuleCategory}>
+                      <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                      <SelectContent>
+                        {EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button onClick={saveBulkRule} className="w-full" disabled={!ruleKeyword || !ruleCategory}>Save Rule & Apply</Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
             <div className="stat-card overflow-x-auto">
               <table className="data-table">
                 <thead>
-                  <tr><th>Date</th><th>Vendor</th><th>Description</th><th>Category</th><th className="text-right">Amount</th><th></th></tr>
+                  <tr>
+                    <th className="w-10">
+                      <Checkbox
+                        checked={sorted.length > 0 && selected.size === sorted.length}
+                        onCheckedChange={toggleAll}
+                      />
+                    </th>
+                    <th className="cursor-pointer select-none" onClick={() => toggleSort("date")}>
+                      <span className="inline-flex items-center">Date<SortIcon field="date" /></span>
+                    </th>
+                    <th className="cursor-pointer select-none" onClick={() => toggleSort("vendor")}>
+                      <span className="inline-flex items-center">Vendor<SortIcon field="vendor" /></span>
+                    </th>
+                    <th className="cursor-pointer select-none" onClick={() => toggleSort("description")}>
+                      <span className="inline-flex items-center">Description<SortIcon field="description" /></span>
+                    </th>
+                    <th className="cursor-pointer select-none" onClick={() => toggleSort("category")}>
+                      <span className="inline-flex items-center">Category<SortIcon field="category" /></span>
+                    </th>
+                    <th className="text-right cursor-pointer select-none" onClick={() => toggleSort("amount")}>
+                      <span className="inline-flex items-center justify-end">Amount<SortIcon field="amount" /></span>
+                    </th>
+                    <th className="w-10"></th>
+                  </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((e) => (
-                    <tr key={e.id}>
+                  {sorted.map((e) => (
+                    <tr key={e.id} className={selected.has(e.id) ? "bg-primary/5" : ""}>
+                      <td>
+                        <Checkbox
+                          checked={selected.has(e.id)}
+                          onCheckedChange={() => toggleSelect(e.id)}
+                        />
+                      </td>
                       <td className="font-mono text-xs text-muted-foreground">{e.date}</td>
                       <td className="font-medium">{e.vendor}</td>
                       <td className="text-muted-foreground">{e.description}</td>
-                      <td><Badge variant="secondary" className="text-xs font-normal">{e.category}</Badge></td>
+                      <td>
+                        {editingCategoryId === e.id ? (
+                          <Select
+                            value={e.category}
+                            onValueChange={(v) => handleSingleCategoryChange(e.id, v)}
+                          >
+                            <SelectTrigger className="h-7 text-xs w-[150px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <button
+                            onClick={() => setEditingCategoryId(e.id)}
+                            className="group flex items-center gap-1"
+                          >
+                            <Badge variant="secondary" className="text-xs font-normal">{e.category}</Badge>
+                            <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </button>
+                        )}
+                      </td>
                       <td className="text-right font-mono text-chart-negative">{formatCurrency(e.amount)}</td>
                       <td>
                         <Button variant="ghost" size="icon" onClick={() => { removeExpense.mutate(e.id); toast.success("Removed"); }}>
