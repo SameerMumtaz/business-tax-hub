@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useJobs } from "@/hooks/useJobs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, MapPin, Briefcase } from "lucide-react";
+import { Plus, MapPin, Briefcase, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function JobSchedulerContent() {
@@ -28,6 +28,31 @@ export default function JobSchedulerContent() {
   const [jobStart, setJobStart] = useState("");
   const [jobEnd, setJobEnd] = useState("");
   const [jobInterval, setJobInterval] = useState("");
+  const [geocoding, setGeocoding] = useState(false);
+
+  const geocodeAddress = useCallback(async () => {
+    const query = [siteAddress, siteCity, siteState].filter(Boolean).join(", ");
+    if (!query.trim()) return;
+    setGeocoding(true);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`,
+        { headers: { "User-Agent": "LovableApp/1.0" } }
+      );
+      const data = await res.json();
+      if (data?.[0]) {
+        setSiteLat(data[0].lat);
+        setSiteLng(data[0].lon);
+        toast.success("GPS coordinates found");
+      } else {
+        toast.error("Could not find coordinates for this address");
+      }
+    } catch {
+      toast.error("Geocoding failed");
+    } finally {
+      setGeocoding(false);
+    }
+  }, [siteAddress, siteCity, siteState]);
 
   const handleCreateSite = async () => {
     if (!siteName.trim()) { toast.error("Name is required"); return; }
@@ -75,6 +100,17 @@ export default function JobSchedulerContent() {
               <div className="grid grid-cols-2 gap-2">
                 <Input placeholder="City" value={siteCity} onChange={(e) => setSiteCity(e.target.value)} />
                 <Input placeholder="State" value={siteState} onChange={(e) => setSiteState(e.target.value)} />
+              </div>
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={geocodeAddress} disabled={geocoding || (!siteAddress && !siteCity)}>
+                  {geocoding ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <MapPin className="h-3.5 w-3.5 mr-1" />}
+                  {geocoding ? "Looking up…" : "Auto-fill GPS"}
+                </Button>
+                {siteLat && siteLng && (
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {Number(siteLat).toFixed(4)}, {Number(siteLng).toFixed(4)}
+                  </span>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <Input placeholder="Latitude" type="number" step="any" value={siteLat} onChange={(e) => setSiteLat(e.target.value)} />
