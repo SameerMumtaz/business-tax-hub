@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Clock, LogIn, AlertTriangle, DollarSign, Navigation, CalendarOff } from "lucide-react";
-
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { MapPin, Clock, LogIn, AlertTriangle, DollarSign, Navigation, CalendarOff, Camera } from "lucide-react";
+import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 export interface AssignedJob {
   id: string;
   title: string;
@@ -30,6 +32,7 @@ interface Props {
 }
 
 export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckIn }: Props) {
+  const [photosJobId, setPhotosJobId] = useState<string | null>(null);
   if (jobs.length === 0) {
     return (
       <Card>
@@ -121,6 +124,14 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
                     Check-in available on {new Date(job.start_date).toLocaleDateString()}
                   </div>
                 )}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setPhotosJobId(job.id)}
+                  title="Photos"
+                >
+                  <Camera className="h-4 w-4" />
+                </Button>
                 {directionsUrl && (
                   <Button
                     variant="outline"
@@ -135,6 +146,16 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
           </Card>
         );
       })}
+
+      {/* Photos Dialog */}
+      <Dialog open={!!photosJobId} onOpenChange={(open) => { if (!open) setPhotosJobId(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Job Photos</DialogTitle>
+          </DialogHeader>
+          {photosJobId && <JobPhotosPanel jobId={photosJobId} compact />}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
