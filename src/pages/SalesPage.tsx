@@ -1,8 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useSales, useAddSale, useRemoveSale, useUpdateSale, useBulkRemoveSales, useExpenses } from "@/hooks/useData";
-import { useInvoices } from "@/hooks/useInvoices";
+import { useInvoices, useAddInvoice } from "@/hooks/useInvoices";
+import { useClients } from "@/hooks/useClients";
 import { formatCurrency } from "@/lib/format";
 import { invalidateRulesCache } from "@/lib/categorize";
 import { useAuth } from "@/hooks/useAuth";
@@ -14,9 +15,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { EXPENSE_CATEGORIES } from "@/types/tax";
 import StatCard from "@/components/StatCard";
-import { Plus, Trash2, ArrowDownLeft, ArrowUpRight, Activity, Wallet, ArrowUpDown, ArrowUp, ArrowDown, Tag, Search, ShieldAlert, Pencil } from "lucide-react";
+import { Plus, Trash2, ArrowDownLeft, ArrowUpRight, Activity, Wallet, ArrowUpDown, ArrowUp, ArrowDown, Tag, Search, ShieldAlert, Pencil, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { auditSales, AuditResult } from "@/lib/audit";
 import AuditIssuesPanel from "@/components/AuditIssuesPanel";
@@ -27,7 +29,6 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 
-
 type SortField = "date" | "client" | "invoiceNumber" | "amount" | "description" | "category";
 type SortDir = "asc" | "desc";
 
@@ -36,11 +37,13 @@ export default function SalesPage() {
   const { data: sales = [] } = useSales();
   const { data: expenses = [] } = useExpenses();
   const { data: invoices = [] } = useInvoices();
+  const { data: clients = [] } = useClients();
   const { user } = useAuth();
   const addSale = useAddSale();
   const removeSale = useRemoveSale();
   const updateSale = useUpdateSale();
   const bulkRemove = useBulkRemoveSales();
+  const addInvoice = useAddInvoice();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ date: "", client: "", description: "", amount: "", invoiceNumber: "" });
   const [sortField, setSortField] = useState<SortField>("date");
@@ -49,6 +52,96 @@ export default function SalesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [auditResult, setAuditResult] = useState<AuditResult | null>(null);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [batchCreating, setBatchCreating] = useState(false);
+
+  // Persistent audit: auto-compute on data change
+  const matchedSaleIds = useMemo(
+    () => new Set(invoices.filter(inv => inv.matched_sale_id).map(inv => inv.matched_sale_id!)),
+    [invoices]
+  );
+  const persistentAudit = useMemo(
+    () => sales.length > 0 ? auditSales(sales, expenses, matchedSaleIds) : null,
+    [sales, expenses, matchedSaleIds]
+  );
+  const activeIssueCount = persistentAudit?.issues.length ?? 0;
+
+  // Helper: find matching client for a sale
+  const findClientForSale = (clientName: string) => {
+    const lower = clientName.toLowerCase();
+    return clients.find((c) => {
+      const cName = c.name.toLowerCase();
+      return cName === lower || cName.includes(lower) || lower.includes(cName);
+    });
+  };
+
+  // Batch create invoices for multiple sales
+  const handleBatchCreateInvoices = async (saleIds: string[]) => {
+    const salesToInvoice = sales.filter((s) => saleIds.includes(s.id));
+    if (salesToInvoice.length === 0) return;
+    setBatchCreating(true);
+    let created = 0;
+    let failed = 0;
+    for (const sale of salesToInvoice) {
+      const matchedClient = findClientForSale(sale.client);
+      try {
+        await addInvoice.mutateAsync({
+          invoice_number: `INV-${Date.now().toString().slice(-6)}-${created}`,
+          client_name: matchedClient?.name || sale.client,
+          client_email: matchedClient?.email || undefined,
+          client_id: matchedClient?.id || undefined,
+          issue_date: sale.date,
+          matched_sale_id: sale.id,
+          line_items: [{
+            description: sale.description || `Sale to ${sale.client}`,
+            quantity: 1,
+            unit_price: sale.amount,
+          }],
+        });
+        created++;
+      } catch {
+        failed++;
+      }
+    }
+    setBatchCreating(false);
+    if (failed > 0) {
+      toast.warning(`Created ${created} invoices, ${failed} failed`);
+    } else {
+      toast.success(`Created ${created} invoices — all matched & marked as Paid`);
+    }
+    // Re-run audit
+    const newMatched = new Set(matchedSaleIds);
+    salesToInvoice.forEach((s) => newMatched.add(s.id));
+    setAuditResult(auditSales(sales, expenses, newMatched));
+  };
+
+  // Inline single invoice creation (no navigation)
+  const handleInlineCreateInvoice = async (saleId: string) => {
+    const sale = sales.find((s) => s.id === saleId);
+    if (!sale) return;
+    const matchedClient = findClientForSale(sale.client);
+    try {
+      await addInvoice.mutateAsync({
+        invoice_number: `INV-${Date.now().toString().slice(-6)}`,
+        client_name: matchedClient?.name || sale.client,
+        client_email: matchedClient?.email || undefined,
+        client_id: matchedClient?.id || undefined,
+        issue_date: sale.date,
+        matched_sale_id: sale.id,
+        line_items: [{
+          description: sale.description || `Sale to ${sale.client}`,
+          quantity: 1,
+          unit_price: sale.amount,
+        }],
+      });
+      toast.success(`Invoice created for ${sale.client}${matchedClient ? ` (matched to saved client)` : ""}`);
+      // Re-run audit
+      const newMatched = new Set(matchedSaleIds);
+      newMatched.add(saleId);
+      setAuditResult(auditSales(sales, expenses, newMatched));
+    } catch {
+      toast.error("Failed to create invoice");
+    }
+  };
 
   const searchedSales = useMemo(() => {
     if (!searchQuery.trim()) return sales;
@@ -201,9 +294,34 @@ export default function SalesPage() {
           </Dialog>
         </div>
 
+        {/* Persistent audit banner */}
+        {persistentAudit && activeIssueCount > 0 && !auditResult && (
+          <Alert variant="destructive" className="cursor-pointer" onClick={() => setAuditResult(persistentAudit)}>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle className="flex items-center gap-2">
+              {activeIssueCount} audit issue{activeIssueCount !== 1 ? "s" : ""} detected
+              {persistentAudit.totalDollarImpact > 0 && (
+                <Badge variant="outline" className="text-[10px] font-mono ml-1">
+                  {formatCurrency(persistentAudit.totalDollarImpact)} impacted
+                </Badge>
+              )}
+            </AlertTitle>
+            <AlertDescription className="text-xs">
+              Click to review and resolve — issues are ranked by dollar impact.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <Tabs defaultValue="sales">
           <TabsList>
-            <TabsTrigger value="sales">Sales</TabsTrigger>
+            <TabsTrigger value="sales">
+              Sales
+              {activeIssueCount > 0 && (
+                <Badge variant="destructive" className="ml-2 text-[10px] h-5 w-5 rounded-full p-0 flex items-center justify-center">
+                  {activeIssueCount}
+                </Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="cashflow">Cash Flow</TabsTrigger>
           </TabsList>
 
@@ -220,10 +338,7 @@ export default function SalesPage() {
               </div>
               <Button
                 variant="outline"
-                onClick={() => {
-                  const matchedSaleIds = new Set(invoices.filter(inv => inv.matched_sale_id).map(inv => inv.matched_sale_id!));
-                  setAuditResult(auditSales(sales, expenses, matchedSaleIds));
-                }}
+                onClick={() => setAuditResult(persistentAudit || auditSales(sales, expenses, matchedSaleIds))}
               >
                 <ShieldAlert className="h-4 w-4 mr-2" />
                 Quick Audit
@@ -242,25 +357,12 @@ export default function SalesPage() {
                   bulkRemove.mutate(ids, {
                     onSuccess: () => {
                       toast.success(`Deleted ${ids.length} sale(s)`);
-                      const matchedSaleIds = new Set(invoices.filter(inv => inv.matched_sale_id).map(inv => inv.matched_sale_id!));
-                      setAuditResult(auditSales(sales.filter((s) => !ids.includes(s.id)), expenses, matchedSaleIds));
                     },
                   });
                 }}
                 onSelectItems={(ids) => setSelected(new Set(ids))}
-                onCreateInvoice={(saleId) => {
-                  const sale = sales.find((s) => s.id === saleId);
-                  if (!sale) return;
-                  const params = new URLSearchParams({
-                    from_sale: "1",
-                    client_name: sale.client,
-                    amount: sale.amount.toString(),
-                    date: sale.date,
-                    description: sale.description || "",
-                    sale_id: sale.id,
-                  });
-                  navigate(`/invoices?${params.toString()}`);
-                }}
+                onCreateInvoice={handleInlineCreateInvoice}
+                onBatchCreateInvoices={(ids) => handleBatchCreateInvoices(ids)}
               />
             )}
             {/* Bulk actions bar */}
