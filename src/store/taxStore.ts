@@ -7,6 +7,8 @@ interface TaxStore {
   contractors: Contractor[];
   addExpense: (expense: Expense) => void;
   removeExpense: (id: string) => void;
+  updateExpenseCategory: (vendor: string, newCategory: Expense["category"]) => void;
+  recategorizeAll: (rules: { vendor_pattern: string; category: string; type: string }[]) => void;
   addSale: (sale: Sale) => void;
   removeSale: (id: string) => void;
   addContractor: (contractor: Contractor) => void;
@@ -46,6 +48,26 @@ export const useTaxStore = create<TaxStore>((set) => ({
   contractors: demoContractors,
   addExpense: (expense) => set((s) => ({ expenses: [expense, ...s.expenses] })),
   removeExpense: (id) => set((s) => ({ expenses: s.expenses.filter((e) => e.id !== id) })),
+  updateExpenseCategory: (vendor, newCategory) =>
+    set((s) => ({
+      expenses: s.expenses.map((e) =>
+        e.vendor.toLowerCase().includes(vendor.toLowerCase())
+          ? { ...e, category: newCategory }
+          : e
+      ),
+    })),
+  recategorizeAll: (rules) =>
+    set((s) => ({
+      expenses: s.expenses.map((e) => {
+        const desc = e.vendor.toLowerCase();
+        for (const rule of rules) {
+          if (rule.type === "expense" && desc.includes(rule.vendor_pattern.toLowerCase())) {
+            return { ...e, category: rule.category as Expense["category"] };
+          }
+        }
+        return e;
+      }),
+    })),
   addSale: (sale) => set((s) => ({ sales: [sale, ...s.sales] })),
   removeSale: (id) => set((s) => ({ sales: s.sales.filter((e) => e.id !== id) })),
   addContractor: (contractor) => set((s) => ({ contractors: [contractor, ...s.contractors] })),
