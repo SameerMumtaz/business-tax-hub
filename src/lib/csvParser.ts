@@ -273,6 +273,9 @@ function extractTransaction(cols: string[], colMap: ColMap): ParsedTransaction |
 
   if (amount === 0) return null;
 
+  // Filter out non-transaction rows (balance statements, headers, totals, etc.)
+  if (isNonTransactionRow(description)) return null;
+
   return {
     date,
     description: cleanDescription(description),
@@ -406,6 +409,28 @@ const MONTH_MAP: Record<string, string> = {
 
 function monthNameToNum(name: string): string | null {
   return MONTH_MAP[name.toLowerCase().slice(0, 3)] || null;
+}
+
+// --- Non-Transaction Row Detection ---
+
+const NON_TRANSACTION_PATTERNS = [
+  /\b(beginning|opening|starting|closing|ending)\s+(balance|bal)\b/i,
+  /\btotal\s*(debits?|credits?|charges?|deposits?|withdrawals?|payments?)?\s*$/i,
+  /\b(statement|account)\s+(summary|period|ending|opening|closing)\b/i,
+  /\b(page|continued|subtotal)\b/i,
+  /^\s*(balance\s+forward|brought?\s+forward|carried?\s+forward)\s*$/i,
+  /\b(as\s+of|through)\s+\d/i,
+  /^\s*-{3,}\s*$/,
+  /^\s*(grand\s+)?total\s*$/i,
+  /\bavailable\s+(balance|credit)\b/i,
+  /\b(minimum|previous|new)\s+balance\b/i,
+  /\bbalance\s+as\s+of\b/i,
+];
+
+function isNonTransactionRow(description: string): boolean {
+  const d = description.trim();
+  if (!d || d.length < 2) return true;
+  return NON_TRANSACTION_PATTERNS.some((p) => p.test(d));
 }
 
 // --- Description Cleaning ---
