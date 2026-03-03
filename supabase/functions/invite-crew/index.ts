@@ -87,16 +87,38 @@ Deno.serve(async (req) => {
       (u: any) => u.email === email
     );
 
+    let memberUserId = existingUser?.id || null;
+    let memberStatus = existingUser ? "active" : "invited";
+
+    // If user doesn't exist, send an invite email via Supabase Auth
+    if (!existingUser) {
+      const siteUrl = Deno.env.get("SUPABASE_URL")?.replace('.supabase.co', '').replace('https://api-', 'https://') || supabaseUrl;
+      const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+        data: {
+          invited_by: business_user_id,
+          team_role: role,
+          display_name: name,
+        },
+      });
+
+      if (inviteError) {
+        console.error("Invite email error:", inviteError);
+        // Still create the team member record even if email fails
+      } else if (inviteData?.user) {
+        memberUserId = inviteData.user.id;
+      }
+    }
+
     // Create team_members row with worker_type and pay_rate
     const { data: teamMember, error: insertError } = await adminClient
       .from("team_members")
       .insert({
         business_user_id,
-        member_user_id: existingUser?.id || null,
+        member_user_id: memberUserId,
         role,
         name,
         email,
-        status: existingUser ? "active" : "invited",
+        status: memberStatus,
         accepted_at: existingUser ? new Date().toISOString() : null,
         worker_type: worker_type || "1099",
         pay_rate: pay_rate || 0,
@@ -113,7 +135,6 @@ Deno.serve(async (req) => {
 
     // Auto-create a contractor or employee record for the business owner
     if (worker_type === "W2") {
-      // Create employee record
       await adminClient.from("employees").insert({
         user_id: business_user_id,
         name,
@@ -126,7 +147,6 @@ Deno.serve(async (req) => {
         medicare: 0,
       });
     } else {
-      // Create contractor record (1099)
       await adminClient.from("contractors").insert({
         user_id: business_user_id,
         name,
@@ -142,7 +162,7 @@ Deno.serve(async (req) => {
         success: true,
         message: existingUser
           ? "User added to team"
-          : "Invitation created. User will be activated when they sign up.",
+          : "Invitation email sent. User will be activated when they accept.",
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
