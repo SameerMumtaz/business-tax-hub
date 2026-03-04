@@ -116,7 +116,7 @@
 
 @layer components {
   .stat-card {
-    @apply bg-card rounded-lg border p-5 transition-shadow hover:shadow-md;
+    @apply bg-card rounded-lg border p-3 md:p-5 transition-shadow hover:shadow-md;
   }
 
   .data-table {
@@ -124,11 +124,11 @@
   }
 
   .data-table th {
-    @apply text-left font-medium text-muted-foreground py-3 px-4 border-b;
+    @apply text-left font-medium text-muted-foreground py-2.5 px-3 md:py-3 md:px-4 border-b text-xs md:text-sm;
   }
 
   .data-table td {
-    @apply py-3 px-4 border-b;
+    @apply py-2.5 px-3 md:py-3 md:px-4 border-b text-sm;
   }
 
   .data-table tr:hover td {
