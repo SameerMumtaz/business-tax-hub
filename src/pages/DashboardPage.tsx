@@ -68,10 +68,10 @@ export default function DashboardPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-8">
+      <div className="space-y-6 md:space-y-8">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Dashboard</h1>
             <p className="text-muted-foreground text-sm mt-1">Here's how your business is doing</p>
           </div>
           <div className="flex items-center gap-2">
@@ -86,7 +86,7 @@ export default function DashboardPage() {
 
         <SmartAlerts />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
           <StatCard title="Total Revenue" value={totalRevenue} icon={TrendingUp} variant="positive" trend={`${sales.length} transactions`} />
           <StatCard title="Total Expenses" value={totalExpenses} icon={TrendingDown} variant="negative" trend={`${expenses.length} transactions`} />
           <StatCard title="Net Profit" value={netIncome} icon={DollarSign} variant={netIncome >= 0 ? "positive" : "negative"} />
@@ -116,10 +116,10 @@ export default function DashboardPage() {
               <h2 className="section-title">Expense Breakdown</h2>
               <Expand className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
             </div>
-            <div className="flex items-center gap-4">
-              <ResponsiveContainer width="50%" height={240}>
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              <ResponsiveContainer width="100%" height={200} className="sm:w-1/2">
                 <PieChart>
-                  <Pie data={pieData} dataKey="value" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3}>
+                  <Pie data={pieData} dataKey="value" cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={3}>
                     {pieData.map((_, i) => (
                       <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                     ))}
@@ -127,11 +127,11 @@ export default function DashboardPage() {
                   <Tooltip formatter={(value: number) => formatCurrency(value)} contentStyle={TOOLTIP_STYLE} />
                 </PieChart>
               </ResponsiveContainer>
-              <div className="flex-1 space-y-2">
+              <div className="flex-1 w-full space-y-2">
                 {pieData.map((item, i) => (
                   <div key={item.name} className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
                       <span className="text-muted-foreground truncate max-w-[120px]">{item.name}</span>
                     </div>
                     <span className="font-mono text-xs">{formatCurrency(item.value)}</span>
@@ -142,7 +142,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="stat-card">
+        <div className="stat-card overflow-x-auto">
           <h2 className="section-title mb-4">Recent Transactions</h2>
           <table className="data-table">
             <thead>

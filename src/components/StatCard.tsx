@@ -24,7 +24,7 @@ export default function StatCard({ title, value, icon: Icon, trend, variant = "d
         <span className="text-sm font-medium text-muted-foreground">{title}</span>
         <Icon className="h-4 w-4 text-muted-foreground" />
       </div>
-      <p className={`text-2xl font-semibold font-mono tracking-tight ${colorClass}`}>
+      <p className={`text-lg sm:text-2xl font-semibold font-mono tracking-tight ${colorClass}`}>
         {formatCurrency(value)}
       </p>
       {trend && (
