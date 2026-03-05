@@ -126,24 +126,35 @@ export function generateAmortSchedule(
   payments.forEach((p) => paidMap.set(p.payment_number, p));
 
   for (let i = 1; i <= termMonths && balance > 0.01; i++) {
-    const interest = balance * monthlyRate;
-    const principal = Math.min(monthlyPayment - interest, balance);
-    balance = Math.max(balance - principal, 0);
+    const interest = Math.round(balance * monthlyRate * 100) / 100;
+    const paid = paidMap.has(i);
+    const paidRecord = paidMap.get(i);
+
+    // If this payment was actually made, use the real amount paid
+    // Any overpayment vs expected goes entirely to additional principal
+    const actualPayment = paid && paidRecord ? paidRecord.amount_paid : monthlyPayment;
+    const scheduledPrincipal = Math.min(monthlyPayment - interest, balance);
+    const actualPrincipal = paid && paidRecord
+      ? Math.min(paidRecord.principal_portion, balance)
+      : Math.min(scheduledPrincipal, balance);
+    const isExtra = paid && paidRecord ? paidRecord.amount_paid > monthlyPayment + 0.01 : false;
+
+    balance = Math.max(balance - actualPrincipal, 0);
 
     const dueDate = new Date(start);
     dueDate.setMonth(dueDate.getMonth() + i);
     const dateStr = dueDate.toISOString().slice(0, 10);
 
-    const paid = paidMap.has(i);
     rows.push({
       number: i,
       date: dateStr,
-      payment: monthlyPayment,
-      principal: Math.round(principal * 100) / 100,
+      payment: Math.round(actualPayment * 100) / 100,
+      principal: Math.round(actualPrincipal * 100) / 100,
       interest: Math.round(interest * 100) / 100,
       balance: Math.round(balance * 100) / 100,
       paid,
-      paidDate: paid ? paidMap.get(i)!.date_paid : undefined,
+      paidDate: paid ? paidRecord!.date_paid : undefined,
+      isExtra,
     });
   }
   return rows;
