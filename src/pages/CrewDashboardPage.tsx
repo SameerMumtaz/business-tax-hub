@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTeamRole } from "@/hooks/useTeamRole";
@@ -14,6 +14,23 @@ import CrewJobsList, { type AssignedJob } from "@/components/crew/CrewJobsList";
 import CrewCalendarView from "@/components/crew/CrewCalendarView";
 import CrewMapView from "@/components/crew/CrewMapView";
 import CrewProfileTab from "@/components/crew/CrewProfileTab";
+
+function LiveElapsed({ since }: { since: string }) {
+  const [elapsed, setElapsed] = useState("");
+  useEffect(() => {
+    const update = () => {
+      const diff = Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 1000));
+      const h = Math.floor(diff / 3600);
+      const m = Math.floor((diff % 3600) / 60);
+      const s = diff % 60;
+      setElapsed(`${h}h ${m.toString().padStart(2, "0")}m ${s.toString().padStart(2, "0")}s`);
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [since]);
+  return <div className="text-lg font-mono font-bold text-primary tabular-nums">{elapsed}</div>;
+}
 
 export default function CrewDashboardPage() {
   const { user, signOut } = useAuth();
@@ -179,6 +196,7 @@ export default function CrewDashboardPage() {
                 <Clock className="h-4 w-4" />
                 Since {new Date(activeCheckin.check_in_time).toLocaleTimeString()}
               </div>
+              <LiveElapsed since={activeCheckin.check_in_time} />
               {payRate && (
                 <div className="text-xs text-muted-foreground">
                   Rate: ${payRate}/hr
