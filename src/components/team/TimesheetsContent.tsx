@@ -141,21 +141,19 @@ export default function TimesheetsContent() {
     const jobStart = parseLocalDate(job.start_date);
     const jobEnd = job.end_date ? parseLocalDate(job.end_date) : new Date(jobStart);
 
-    // Map JS getDay() (0=Sun) to our day keys
-    const dayMap: Record<number, string> = {
-      0: "sun_hours", 1: "mon_hours", 2: "tue_hours", 3: "wed_hours",
-      4: "thu_hours", 5: "fri_hours", 6: "sat_hours",
-    };
+    // Map positional offset from week_start to our day keys
+    const dayKeys = ["mon_hours", "tue_hours", "wed_hours", "thu_hours", "fri_hours", "sat_hours", "sun_hours"];
 
-    // Walk each day of the timesheet week
+    // Walk each day of the timesheet week by offset
     const cursor = new Date(weekStart);
-    while (cursor <= weekEnd) {
+    let dayIndex = 0;
+    while (cursor <= weekEnd && dayIndex < 7) {
       // Check if this day falls within the job's date range
       if (cursor >= jobStart && cursor <= jobEnd) {
-        const key = dayMap[cursor.getDay()];
-        if (key) hours[key] = 8; // Default 8 hours per job day
+        hours[dayKeys[dayIndex]] = 8; // Default 8 hours per job day
       }
       cursor.setDate(cursor.getDate() + 1);
+      dayIndex++;
     }
 
     return hours;
