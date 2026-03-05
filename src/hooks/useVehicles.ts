@@ -253,6 +253,27 @@ export function useRemoveVehicle() {
   });
 }
 
+export function useAllVehiclePayments() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["vehicle_payments_all", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("vehicle_payments")
+        .select("vehicle_id, principal_portion")
+        .eq("user_id", user!.id);
+      if (error) throw error;
+      // Sum principal paid per vehicle
+      const map: Record<string, number> = {};
+      for (const r of data || []) {
+        map[r.vehicle_id] = (map[r.vehicle_id] || 0) + Number(r.principal_portion);
+      }
+      return map;
+    },
+  });
+}
+
 // ── Payments ──
 
 export function useVehiclePayments(vehicleId: string | null) {
