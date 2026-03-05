@@ -189,7 +189,7 @@ export default function SalesPage() {
                           </Select>
                         ) : (
                           <button onClick={() => setEditingCategoryId(s.id)} className="group flex items-center gap-1">
-                            <Badge variant="secondary" className="text-xs font-normal">{s.category}</Badge>
+                            <Badge variant="secondary" className="text-[11px] font-normal min-w-[100px] max-w-[130px] px-3 py-1 justify-center text-center leading-tight">{s.category}</Badge>
                             <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                           </button>
                         )}

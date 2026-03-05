@@ -640,7 +640,7 @@ export default function VehiclesPage() {
                           <tr key={le.id}>
                             <td className="font-mono text-xs">{le.expenses?.date}</td>
                             <td>{le.expenses?.vendor}</td>
-                            <td><Badge variant="secondary" className="text-xs">{le.expenses?.category}</Badge></td>
+                            <td><Badge variant="secondary" className="text-[11px] font-normal min-w-[100px] max-w-[130px] px-3 py-1 justify-center text-center leading-tight">{le.expenses?.category}</Badge></td>
                             <td className="text-right font-mono">{formatCurrency(Number(le.expenses?.amount ?? 0))}</td>
                             <td>
                               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => {
@@ -941,7 +941,7 @@ export default function VehiclesPage() {
                       {paymentDetailData.expense.description && (
                         <p className="text-xs text-muted-foreground">{paymentDetailData.expense.description}</p>
                       )}
-                      <Badge variant="secondary" className="text-xs mt-1">{paymentDetailData.expense.category}</Badge>
+                      <Badge variant="secondary" className="text-[11px] font-normal min-w-[100px] max-w-[130px] px-3 py-1 justify-center text-center leading-tight mt-1">{paymentDetailData.expense.category}</Badge>
                     </div>
                   </div>
                 ) : (
