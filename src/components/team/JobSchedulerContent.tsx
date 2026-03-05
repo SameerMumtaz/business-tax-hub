@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useJobs, type Job, type JobSite } from "@/hooks/useJobs";
+import { useClients } from "@/hooks/useClients";
 import JobCalendarView from "@/components/team/JobCalendarView";
 import { useJobPhotos } from "@/hooks/useJobPhotos";
 import { Button } from "@/components/ui/button";
@@ -14,12 +15,13 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, MapPin, Briefcase, Loader2, Pencil, Trash2, Camera, Calendar } from "lucide-react";
+import { Plus, MapPin, Briefcase, Loader2, Pencil, Trash2, Camera, Calendar, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 
 export default function JobSchedulerContent() {
   const { sites, jobs, loading, createSite, updateSite, deleteSite, createJob, updateJob, deleteJob } = useJobs();
+  const { data: clients = [] } = useClients();
   const [tab, setTab] = useState("calendar");
 
   // Create site state
@@ -30,6 +32,7 @@ export default function JobSchedulerContent() {
   const [siteState, setSiteState] = useState("");
   const [siteLat, setSiteLat] = useState("");
   const [siteLng, setSiteLng] = useState("");
+  const [siteClientId, setSiteClientId] = useState("");
   const [geocoding, setGeocoding] = useState(false);
 
   // Edit site state
@@ -41,11 +44,13 @@ export default function JobSchedulerContent() {
   const [editSiteState, setEditSiteState] = useState("");
   const [editSiteLat, setEditSiteLat] = useState("");
   const [editSiteLng, setEditSiteLng] = useState("");
+  const [editSiteClientId, setEditSiteClientId] = useState("");
 
   // Create job state
   const [jobOpen, setJobOpen] = useState(false);
   const [jobTitle, setJobTitle] = useState("");
   const [jobSiteId, setJobSiteId] = useState("");
+  const [jobClientId, setJobClientId] = useState("");
   const [jobType, setJobType] = useState("one_time");
   const [jobStart, setJobStart] = useState("");
   const [jobEnd, setJobEnd] = useState("");
@@ -59,6 +64,7 @@ export default function JobSchedulerContent() {
   const [editJob, setEditJob] = useState<Job | null>(null);
   const [editJobTitle, setEditJobTitle] = useState("");
   const [editJobSiteId, setEditJobSiteId] = useState("");
+  const [editJobClientId, setEditJobClientId] = useState("");
   const [editJobType, setEditJobType] = useState("one_time");
   const [editJobStart, setEditJobStart] = useState("");
   const [editJobEnd, setEditJobEnd] = useState("");
@@ -102,10 +108,11 @@ export default function JobSchedulerContent() {
       latitude: siteLat ? Number(siteLat) : null,
       longitude: siteLng ? Number(siteLng) : null,
       geofence_radius: 150,
+      client_id: siteClientId && siteClientId !== "none" ? siteClientId : null,
     });
     setSiteOpen(false);
     setSiteName(""); setSiteAddress(""); setSiteCity(""); setSiteState("");
-    setSiteLat(""); setSiteLng("");
+    setSiteLat(""); setSiteLng(""); setSiteClientId("");
   };
 
   const openEditSite = (s: JobSite) => {
@@ -116,6 +123,7 @@ export default function JobSchedulerContent() {
     setEditSiteState(s.state || "");
     setEditSiteLat(s.latitude != null ? String(s.latitude) : "");
     setEditSiteLng(s.longitude != null ? String(s.longitude) : "");
+    setEditSiteClientId(s.client_id || "");
     setEditSiteOpen(true);
   };
 
@@ -126,6 +134,7 @@ export default function JobSchedulerContent() {
       state: editSiteState || null,
       latitude: editSiteLat ? Number(editSiteLat) : null,
       longitude: editSiteLng ? Number(editSiteLng) : null,
+      client_id: editSiteClientId && editSiteClientId !== "none" ? editSiteClientId : null,
     });
     setEditSiteOpen(false);
   };
@@ -140,17 +149,19 @@ export default function JobSchedulerContent() {
       recurring_interval: jobType === "recurring" ? jobInterval || null : null,
       recurring_end_date: null, invoice_id: null, description: jobDesc || null,
       start_time: jobStartTime || null, estimated_hours: jobEstHours ? Number(jobEstHours) : null,
+      client_id: jobClientId && jobClientId !== "none" ? jobClientId : null,
     });
     setJobOpen(false);
     setJobTitle(""); setJobSiteId(""); setJobType("one_time");
     setJobStart(""); setJobEnd(""); setJobInterval(""); setJobDesc("");
-    setJobStartTime(""); setJobEstHours("");
+    setJobStartTime(""); setJobEstHours(""); setJobClientId("");
   };
 
   const openEditJob = (j: Job) => {
     setEditJob(j);
     setEditJobTitle(j.title);
     setEditJobSiteId(j.site_id);
+    setEditJobClientId(j.client_id || "");
     setEditJobType(j.job_type);
     setEditJobStart(j.start_date);
     setEditJobEnd(j.end_date || "");
@@ -171,6 +182,7 @@ export default function JobSchedulerContent() {
       recurring_interval: editJobType === "recurring" ? editJobInterval || null : null,
       description: editJobDesc || null,
       start_time: editJobStartTime || null, estimated_hours: editJobEstHours ? Number(editJobEstHours) : null,
+      client_id: editJobClientId && editJobClientId !== "none" ? editJobClientId : null,
     });
     setEditJobOpen(false);
   };
@@ -219,6 +231,13 @@ export default function JobSchedulerContent() {
                 <Input placeholder="Latitude" type="number" step="any" value={siteLat} onChange={(e) => setSiteLat(e.target.value)} />
                 <Input placeholder="Longitude" type="number" step="any" value={siteLng} onChange={(e) => setSiteLng(e.target.value)} />
               </div>
+              <Select value={siteClientId} onValueChange={setSiteClientId}>
+                <SelectTrigger><UserCheck className="h-3.5 w-3.5 mr-2" /><SelectValue placeholder="Link to client (optional)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No client</SelectItem>
+                  {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
               <Button className="w-full" onClick={handleCreateSite}>Create Site</Button>
             </div>
           </DialogContent>
@@ -232,7 +251,11 @@ export default function JobSchedulerContent() {
             <div className="space-y-3 pt-2">
               <Input placeholder="Job title" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
               <Input placeholder="Description (optional)" value={jobDesc} onChange={(e) => setJobDesc(e.target.value)} />
-              <Select value={jobSiteId} onValueChange={setJobSiteId}>
+              <Select value={jobSiteId} onValueChange={(v) => {
+                setJobSiteId(v);
+                const site = sites.find(s => s.id === v);
+                if (site?.client_id && !jobClientId) setJobClientId(site.client_id);
+              }}>
                 <SelectTrigger><SelectValue placeholder="Select site" /></SelectTrigger>
                 <SelectContent>
                   {sites.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
@@ -244,6 +267,13 @@ export default function JobSchedulerContent() {
                   <SelectItem value="one_time">One-time</SelectItem>
                   <SelectItem value="recurring">Recurring</SelectItem>
                   <SelectItem value="multi_day">Multi-day</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={jobClientId} onValueChange={setJobClientId}>
+                <SelectTrigger><UserCheck className="h-3.5 w-3.5 mr-2" /><SelectValue placeholder="Link to client (optional)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No client</SelectItem>
+                  {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
               <div className="grid grid-cols-2 gap-2">
@@ -293,6 +323,13 @@ export default function JobSchedulerContent() {
               <Input placeholder="Latitude" type="number" step="any" value={editSiteLat} onChange={(e) => setEditSiteLat(e.target.value)} />
               <Input placeholder="Longitude" type="number" step="any" value={editSiteLng} onChange={(e) => setEditSiteLng(e.target.value)} />
             </div>
+            <Select value={editSiteClientId} onValueChange={setEditSiteClientId}>
+              <SelectTrigger><UserCheck className="h-3.5 w-3.5 mr-2" /><SelectValue placeholder="Link to client (optional)" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No client</SelectItem>
+                {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
             <Button className="w-full" onClick={handleUpdateSite}>Save Changes</Button>
           </div>
         </DialogContent>
@@ -317,6 +354,13 @@ export default function JobSchedulerContent() {
                 <SelectItem value="one_time">One-time</SelectItem>
                 <SelectItem value="recurring">Recurring</SelectItem>
                 <SelectItem value="multi_day">Multi-day</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={editJobClientId} onValueChange={setEditJobClientId}>
+              <SelectTrigger><UserCheck className="h-3.5 w-3.5 mr-2" /><SelectValue placeholder="Link to client (optional)" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No client</SelectItem>
+                {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
             <div className="grid grid-cols-2 gap-2">
@@ -458,8 +502,9 @@ export default function JobSchedulerContent() {
               ) : (
                 <Table>
                   <TableHeader>
-                    <TableRow>
+                     <TableRow>
                       <TableHead>Name</TableHead>
+                      <TableHead>Client</TableHead>
                       <TableHead>Address</TableHead>
                       <TableHead>City</TableHead>
                       <TableHead>GPS</TableHead>
@@ -467,9 +512,16 @@ export default function JobSchedulerContent() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sites.map((s) => (
+                    {sites.map((s) => {
+                      const linkedClient = clients.find(c => c.id === s.client_id);
+                      return (
                       <TableRow key={s.id}>
                         <TableCell className="font-medium">{s.name}</TableCell>
+                        <TableCell>
+                          {linkedClient ? (
+                            <Badge variant="secondary" className="text-xs"><UserCheck className="h-3 w-3 mr-1" />{linkedClient.name}</Badge>
+                          ) : <span className="text-muted-foreground text-xs">—</span>}
+                        </TableCell>
                         <TableCell>{s.address || "—"}</TableCell>
                         <TableCell>{s.city || "—"}{s.state ? `, ${s.state}` : ""}</TableCell>
                         <TableCell className="font-mono text-xs">
@@ -498,7 +550,8 @@ export default function JobSchedulerContent() {
                           </AlertDialog>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}

@@ -1,0 +1,2 @@
+ALTER TABLE public.job_sites ADD COLUMN client_id uuid REFERENCES public.clients(id) ON DELETE SET NULL;
+ALTER TABLE public.jobs ADD COLUMN client_id uuid REFERENCES public.clients(id) ON DELETE SET NULL;
