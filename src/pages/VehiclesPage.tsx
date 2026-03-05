@@ -121,6 +121,10 @@ export default function VehiclesPage() {
   }, [selected]);
 
   const totalDepreciation = depreciationSchedule.reduce((s, r) => s + r.businessDepreciation, 0);
+  const currentYear = new Date().getFullYear();
+  const thisYearDepreciation = depreciationSchedule
+    .filter((r) => r.calendarYear === currentYear)
+    .reduce((s, r) => s + r.businessDepreciation, 0);
 
   const nextUnpaid = amortSchedule.find((r) => !r.paid);
   const totalPaid = payments.reduce((s, p) => s + p.amount_paid, 0);
@@ -380,8 +384,12 @@ export default function VehiclesPage() {
                   <p className="text-lg font-bold font-mono">{payments.length} / {selected.loan_term_months}</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-xs text-muted-foreground">Total Depreciation</p>
-                  <p className="text-lg font-bold font-mono text-primary">{formatCurrency(totalDepreciation)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {selected.section_179_amount > 0 ? "§179 Deduction" : `${currentYear} Depreciation`}
+                  </p>
+                  <p className="text-lg font-bold font-mono text-primary">
+                    {formatCurrency(selected.section_179_amount > 0 ? totalDepreciation : thisYearDepreciation)}
+                  </p>
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-muted-foreground">Vehicle Expenses</p>
