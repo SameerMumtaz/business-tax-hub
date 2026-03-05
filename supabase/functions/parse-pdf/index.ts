@@ -1,3 +1,4 @@
+// Statement parser v2
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
@@ -15,17 +16,38 @@ interface ParsedTx {
   type: TxType;
 }
 
+const MONTH_MAP: Record<string, string> = {
+  jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+  jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+};
+
 const normalizeDate = (raw: string): string => {
-  const parts = raw.split("/");
-  if (parts.length !== 3) return raw;
-  const [mm, dd, rest] = parts;
-  let year = rest;
-  if (year.length === 2) {
-    year = Number(year) < 70 ? `20${year}` : `19${year}`;
-  } else if (year.length === 4) {
-    // already full year
+  // Try "Mon DD, YYYY" or "Mon DD"
+  const wordMatch = raw.match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),?\s*(\d{4})?$/i);
+  if (wordMatch) {
+    const mm = MONTH_MAP[wordMatch[1].toLowerCase()];
+    const dd = wordMatch[2].padStart(2, "0");
+    const year = wordMatch[3] || new Date().getFullYear().toString();
+    return `${year}-${mm}-${dd}`;
   }
-  return `${year}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+
+  // Try MM/DD/YY or MM/DD/YYYY or MM/DD
+  const parts = raw.split("/");
+  if (parts.length >= 2) {
+    const mm = parts[0].padStart(2, "0");
+    const dd = parts[1].padStart(2, "0");
+    let year: string;
+    if (parts.length === 3 && parts[2]) {
+      year = parts[2].length === 2
+        ? (Number(parts[2]) < 70 ? `20${parts[2]}` : `19${parts[2]}`)
+        : parts[2];
+    } else {
+      year = new Date().getFullYear().toString();
+    }
+    return `${year}-${mm}-${dd}`;
+  }
+
+  return raw;
 };
 
 const parseAmount = (raw: string): { value: number; negative: boolean } => {
@@ -110,15 +132,17 @@ const parseTransactionsFromText = (text: string): ParsedTx[] => {
   let pending: { date: string; descriptionParts: string[]; amountRaw?: string; startIndex: number } | null = null;
   let consumedChars = 0;
 
-  // Date patterns: MM/DD/YY or MM/DD/YYYY
-  const DATE_RE = /\b(\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4}))\b/;
-  const DATE_START_RE = /^(\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4}))\b\s*(.*)$/;
+  // Date patterns: MM/DD/YY, MM/DD/YYYY, MM/DD, or Mon DD (e.g. "Jan 15")
+  const DATE_SLASH_RE = /\b(\d{1,2}\/\d{1,2}(?:\/(?:\d{2}|\d{4}))?)\b/;
+  const DATE_WORD_RE = /\b((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}(?:,?\s+\d{4})?)\b/i;
+  const ANY_DATE_RE = new RegExp(`(?:${DATE_SLASH_RE.source}|${DATE_WORD_RE.source})`);
+  const DATE_START_RE = new RegExp(`^(${DATE_SLASH_RE.source.slice(2, -2)}|${DATE_WORD_RE.source.slice(2, -2)})\\s*(.*)$`, "i");
   const AMOUNT_RE = /(-?\$?\d{1,3}(?:,\d{3})*\.\d{2})/;
 
   // Pre-process: the PDF text may come as one long line per page.
   // Insert line breaks before each date pattern to create parseable lines.
   const preprocessed = text.replace(
-    new RegExp(`\\s(?=${DATE_RE.source})`, "g"),
+    new RegExp(`\\s(?=${ANY_DATE_RE.source})`, "gi"),
     "\n"
   );
 
