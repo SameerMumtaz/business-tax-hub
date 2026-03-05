@@ -1,5 +1,4 @@
 import { NavLink, useLocation } from "react-router-dom";
-import bookieLogo from "@/assets/bookie-logo.png";
 import {
   LayoutDashboard,
   Wallet,
@@ -36,7 +35,7 @@ export default function PersonalSidebar() {
     <aside className="w-64 min-h-screen bg-sidebar border-r border-sidebar-border flex flex-col">
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex items-center gap-2">
-          <img src={bookieLogo} alt="Bookie" className="h-7 w-7" />
+          <Receipt className="h-6 w-6 text-sidebar-primary" />
           <span className="text-lg font-semibold text-sidebar-accent-foreground tracking-tight">
             Bookie
           </span>

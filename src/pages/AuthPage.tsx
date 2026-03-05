@@ -4,9 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Eye, EyeOff } from "lucide-react";
+import { Receipt, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
-import bookieLogo from "@/assets/bookie-logo.png";
 
 export default function AuthPage() {
   const { user, loading: authLoading } = useAuth();
@@ -77,7 +76,7 @@ export default function AuthPage() {
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <img src={bookieLogo} alt="Bookie" className="h-10 w-10" />
+            <Receipt className="h-8 w-8 text-primary" />
             <span className="text-2xl font-bold tracking-tight">Bookie</span>
           </div>
           <p className="text-muted-foreground text-sm">All-in-One Business & Money Management</p>
