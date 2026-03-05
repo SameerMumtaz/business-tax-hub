@@ -122,8 +122,12 @@ export default function VehiclesPage() {
 
   const nextUnpaid = amortSchedule.find((r) => !r.paid);
   const totalPaid = payments.reduce((s, p) => s + p.amount_paid, 0);
-  const currentBalance = amortSchedule.find((r) => !r.paid)?.balance
-    ?? (amortSchedule.length > 0 ? amortSchedule[amortSchedule.length - 1].balance : 0);
+  // Remaining balance = balance after the last payment actually made
+  // If no payments made, show the original loan amount
+  const lastPaidRow = [...amortSchedule].reverse().find((r) => r.paid);
+  const currentBalance = lastPaidRow
+    ? lastPaidRow.balance
+    : (selected?.loan_amount ?? 0);
 
   const handleMarkPaid = async (row: typeof amortSchedule[0]) => {
     if (!selected) return;
