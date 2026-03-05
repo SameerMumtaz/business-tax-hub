@@ -29,6 +29,7 @@ export default function PublicBookingPage() {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [existingBookings, setExistingBookings] = useState<{ requested_date: string; requested_time: string; duration_minutes: number }[]>([]);
+  const [existingJobs, setExistingJobs] = useState<{ start_date: string; description: string | null }[]>([]);
 
   useEffect(() => {
     const fetchPage = async () => {
@@ -50,10 +51,12 @@ export default function PublicBookingPage() {
     fetchPage();
   }, [slug]);
 
-  // Fetch existing bookings when date changes
+  // Fetch existing bookings AND jobs when date changes
   useEffect(() => {
     if (!page || !selectedDate) return;
     const dateStr = selectedDate.toISOString().slice(0, 10);
+    
+    // Fetch booking requests for conflict check
     supabase
       .from("booking_requests")
       .select("requested_date, requested_time, duration_minutes")
@@ -63,7 +66,45 @@ export default function PublicBookingPage() {
       .then(({ data }) => {
         setExistingBookings((data || []) as any);
       });
+
+    // Fetch jobs for the business user on this date to check for time conflicts
+    // Jobs created from bookings have time info in their description
+    supabase
+      .from("jobs")
+      .select("start_date, description")
+      .eq("user_id", page.user_id)
+      .eq("start_date", dateStr)
+      .in("status", ["scheduled", "in_progress"])
+      .then(({ data }) => {
+        setExistingJobs((data || []) as any);
+      });
   }, [page, selectedDate]);
+
+  // Parse job times from descriptions (format: "📅 Booked Appointment: HH:MM AM/PM – HH:MM AM/PM")
+  const jobTimeBlocks = useMemo(() => {
+    const blocks: { start: number; end: number }[] = [];
+    for (const job of existingJobs) {
+      if (!job.description) continue;
+      // Match "HH:MM AM/PM – HH:MM AM/PM" pattern
+      const match = job.description.match(/(\d{1,2}):(\d{2})\s*(AM|PM)\s*[–-]\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+      if (match) {
+        let startH = parseInt(match[1]);
+        const startM = parseInt(match[2]);
+        const startAmPm = match[3].toUpperCase();
+        let endH = parseInt(match[4]);
+        const endM = parseInt(match[5]);
+        const endAmPm = match[6].toUpperCase();
+        
+        if (startAmPm === "PM" && startH !== 12) startH += 12;
+        if (startAmPm === "AM" && startH === 12) startH = 0;
+        if (endAmPm === "PM" && endH !== 12) endH += 12;
+        if (endAmPm === "AM" && endH === 12) endH = 0;
+        
+        blocks.push({ start: startH * 60 + startM, end: endH * 60 + endM });
+      }
+    }
+    return blocks;
+  }, [existingJobs]);
 
   const timeSlots = useMemo(() => {
     if (!page || !selectedService || !selectedDate) return [];
@@ -80,22 +121,28 @@ export default function PublicBookingPage() {
       const min = m % 60;
       const timeStr = `${h.toString().padStart(2, "0")}:${min.toString().padStart(2, "0")}`;
       
-      // Check if slot conflicts with existing bookings
       const slotStart = m;
       const slotEnd = m + duration;
-      const conflicts = existingBookings.some(booking => {
+
+      // Check conflicts with existing booking requests
+      const bookingConflict = existingBookings.some(booking => {
         const [bh, bm] = booking.requested_time.split(":").map(Number);
         const bookingStart = bh * 60 + bm;
         const bookingEnd = bookingStart + booking.duration_minutes;
         return slotStart < bookingEnd && slotEnd > bookingStart;
       });
 
-      if (!conflicts) {
+      // Check conflicts with existing jobs (parsed from descriptions)
+      const jobConflict = jobTimeBlocks.some(block => {
+        return slotStart < block.end && slotEnd > block.start;
+      });
+
+      if (!bookingConflict && !jobConflict) {
         slots.push(timeStr);
       }
     }
     return slots;
-  }, [page, selectedService, selectedDate, existingBookings]);
+  }, [page, selectedService, selectedDate, existingBookings, jobTimeBlocks]);
 
   const isDateAvailable = (date: Date) => {
     if (!page) return false;
