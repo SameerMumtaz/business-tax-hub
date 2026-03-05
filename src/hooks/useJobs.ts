@@ -127,11 +127,114 @@ export function useJobs() {
     fetchAll();
   };
 
+  /** Given a date string, return the day_hours key */
+  const dayKeyFromDate = (dateStr: string): string => {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const dayOfWeek = new Date(y, m - 1, d).getDay();
+    const map: Record<number, string> = { 0: "sun_hours", 1: "mon_hours", 2: "tue_hours", 3: "wed_hours", 4: "thu_hours", 5: "fri_hours", 6: "sat_hours" };
+    return map[dayOfWeek];
+  };
+
+  /** Sync a job assignment to any draft timesheets covering the job's dates */
+  const syncAssignmentToTimesheets = async (jobId: string, workerId: string, workerName: string, workerType: string, assignedHours: number) => {
+    if (!user || assignedHours <= 0) return;
+
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job) return;
+
+    // Get worker pay rate from team_members
+    const { data: tm } = await supabase
+      .from("team_members")
+      .select("pay_rate, worker_type")
+      .eq("id", workerId)
+      .maybeSingle();
+    const payRate = tm?.pay_rate || 0;
+    const isContractor = (tm?.worker_type || workerType) === "1099";
+
+    // Find all draft timesheets for this user
+    const { data: drafts } = await supabase
+      .from("timesheets")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("status", "draft");
+    if (!drafts || drafts.length === 0) return;
+
+    // Determine job day range
+    const jobStart = job.start_date;
+    const jobEnd = job.end_date || job.start_date;
+
+    // Count how many days the job spans
+    const startD = new Date(Number(jobStart.split("-")[0]), Number(jobStart.split("-")[1]) - 1, Number(jobStart.split("-")[2]));
+    const endD = new Date(Number(jobEnd.split("-")[0]), Number(jobEnd.split("-")[1]) - 1, Number(jobEnd.split("-")[2]));
+    let jobDayCount = 0;
+    const cursor = new Date(startD);
+    while (cursor <= endD) { jobDayCount++; cursor.setDate(cursor.getDate() + 1); }
+    const hoursPerDay = jobDayCount > 0 ? assignedHours / jobDayCount : assignedHours;
+
+    for (const ts of drafts) {
+      const wsD = new Date(Number(ts.week_start.split("-")[0]), Number(ts.week_start.split("-")[1]) - 1, Number(ts.week_start.split("-")[2]));
+      const weD = new Date(Number(ts.week_end.split("-")[0]), Number(ts.week_end.split("-")[1]) - 1, Number(ts.week_end.split("-")[2]));
+
+      // Check if any job day falls within this timesheet week
+      const dayHours: Record<string, number> = {
+        mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0,
+        fri_hours: 0, sat_hours: 0, sun_hours: 0,
+      };
+      let hasOverlap = false;
+      const c2 = new Date(startD);
+      while (c2 <= endD) {
+        if (c2 >= wsD && c2 <= weD) {
+          const key = dayKeyFromDate(`${c2.getFullYear()}-${String(c2.getMonth() + 1).padStart(2, "0")}-${String(c2.getDate()).padStart(2, "0")}`);
+          dayHours[key] = hoursPerDay;
+          hasOverlap = true;
+        }
+        c2.setDate(c2.getDate() + 1);
+      }
+      if (!hasOverlap) continue;
+
+      // Check if entry already exists for this worker+job on this timesheet
+      const { data: existing } = await supabase
+        .from("timesheet_entries")
+        .select("id")
+        .eq("timesheet_id", ts.id)
+        .eq("worker_id", workerId)
+        .eq("job_id", jobId)
+        .maybeSingle();
+      if (existing) continue;
+
+      // Compute pay
+      const totalHrs = Object.values(dayHours).reduce((s, h) => s + h, 0);
+      const overtime = Math.max(0, totalHrs - 40);
+      const regular = totalHrs - overtime;
+      const regularPay = regular * payRate;
+      const overtimePay = overtime * payRate * 1.5;
+
+      await supabase.from("timesheet_entries").insert({
+        timesheet_id: ts.id,
+        worker_id: workerId,
+        worker_name: workerName,
+        worker_type: isContractor ? "contractor" : "employee",
+        pay_rate: payRate,
+        ...dayHours,
+        total_hours: totalHrs,
+        overtime_hours: overtime,
+        regular_pay: regularPay,
+        overtime_pay: overtimePay,
+        total_pay: regularPay + overtimePay,
+        job_id: jobId,
+      });
+    }
+  };
+
   const assignWorker = async (jobId: string, workerId: string, workerName: string, workerType: string, assignedHours: number = 0) => {
     const { error } = await supabase.from("job_assignments").insert({
       job_id: jobId, worker_id: workerId, worker_name: workerName, worker_type: workerType, assigned_hours: assignedHours,
     });
     if (error) { toast.error(error.message); return; }
+
+    // Sync to draft timesheets
+    await syncAssignmentToTimesheets(jobId, workerId, workerName, workerType, assignedHours);
+
     toast.success("Worker assigned");
     fetchAll();
   };
