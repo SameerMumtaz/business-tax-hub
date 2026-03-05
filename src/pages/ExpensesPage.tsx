@@ -238,7 +238,7 @@ export default function ExpensesPage() {
                         {editingCategoryId === e.id ? (
                           <Select value={e.category} onValueChange={(v) => handleCategoryChangeWithVehicle(e.id, v)}><SelectTrigger className="h-7 text-xs w-[150px]"><SelectValue /></SelectTrigger><SelectContent>{EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select>
                         ) : (
-                          <button onClick={() => setEditingCategoryId(e.id)} className="group flex items-center gap-1"><Badge variant="secondary" className="text-xs font-normal w-[130px] justify-center truncate" title={e.category}>{e.category}</Badge><Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" /></button>
+                          <button onClick={() => setEditingCategoryId(e.id)} className="group flex items-center gap-1"><Badge variant="secondary" className="text-[11px] font-normal min-w-[110px] px-3 py-1 justify-center whitespace-nowrap">{e.category}</Badge><Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" /></button>
                         )}
                       </td>
                       <td className="text-right font-mono text-chart-negative">{formatCurrency(e.amount)}</td>
