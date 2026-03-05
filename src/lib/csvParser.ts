@@ -494,7 +494,7 @@ const CATEGORY_KEYWORDS: Record<ExpenseCategory, string[]> = {
   "Equipment": ["apple store", "dell", "lenovo", "best buy", "newegg"],
   "Rent": ["rent", "lease", "wework", "regus"],
   "Payroll": ["payroll", "gusto", "adp", "paychex"],
-  "Vehicle & Gas": ["shell", "exxon", "chevron", "bp", "mobil", "gas", "fuel", "gasoline", "petroleum", "sunoco", "marathon", "speedway", "wawa", "quiktrip"],
+  "Fuel": ["shell", "exxon", "chevron", "bp", "mobil", "gas", "fuel", "gasoline", "petroleum", "sunoco", "marathon", "speedway", "wawa", "quiktrip"],
   "Vehicle Maintenance": ["jiffy lube", "midas", "firestone", "goodyear", "autozone", "o'reilly", "napa", "pep boys", "valvoline", "tire", "oil change"],
   "Vehicle Payment": ["car payment", "auto loan", "vehicle payment", "car loan", "auto finance"],
   "Contract Labor": ["subcontract", "freelance", "1099", "contract labor"],
