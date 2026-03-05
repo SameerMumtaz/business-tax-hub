@@ -13,6 +13,9 @@ import OnboardingWizard from "@/components/OnboardingWizard";
 import HelpTooltip from "@/components/HelpTooltip";
 import ExpenseBreakdownDialog from "@/components/ExpenseBreakdownDialog";
 import BookingRequestsPanel from "@/components/BookingRequestsPanel";
+import ThisWeekJobs from "@/components/dashboard/ThisWeekJobs";
+import InvoiceAgingChart from "@/components/dashboard/InvoiceAgingChart";
+import RevenueComparison from "@/components/dashboard/RevenueComparison";
 import { TrendingUp, TrendingDown, DollarSign, Users, Expand, ClipboardList, CreditCard } from "lucide-react";
 import { Link } from "react-router-dom";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
@@ -142,40 +145,10 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="stat-card overflow-x-auto">
-          <h2 className="section-title mb-4">Recent Transactions</h2>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Description</th>
-                <th>Type</th>
-                <th className="text-right">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[
-                ...sales.map((s) => ({ date: s.date, desc: `${s.client} — ${s.description}`, type: "Income" as const, amount: s.amount })),
-                ...expenses.map((e) => ({ date: e.date, desc: `${e.vendor} — ${e.description}`, type: "Expense" as const, amount: -e.amount })),
-              ]
-                .sort((a, b) => b.date.localeCompare(a.date))
-                .slice(0, 8)
-                .map((t, i) => (
-                  <tr key={i}>
-                    <td className="font-mono text-xs text-muted-foreground">{t.date}</td>
-                    <td>{t.desc}</td>
-                    <td>
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${t.type === "Income" ? "bg-accent text-accent-foreground" : "bg-destructive/10 text-destructive"}`}>
-                        {t.type}
-                      </span>
-                    </td>
-                    <td className={`text-right font-mono ${t.amount >= 0 ? "text-chart-positive" : "text-chart-negative"}`}>
-                      {t.amount >= 0 ? "+" : ""}{formatCurrency(Math.abs(t.amount))}
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <ThisWeekJobs />
+          <InvoiceAgingChart />
+          <RevenueComparison />
         </div>
 
         <BookingRequestsPanel />
