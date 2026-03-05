@@ -29,7 +29,7 @@ export default function PublicBookingPage() {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [existingBookings, setExistingBookings] = useState<{ requested_date: string; requested_time: string; duration_minutes: number }[]>([]);
-  const [existingJobs, setExistingJobs] = useState<{ start_date: string; description: string | null }[]>([]);
+  const [existingJobs, setExistingJobs] = useState<{ start_date: string; start_time: string | null; estimated_hours: number | null }[]>([]);
 
   useEffect(() => {
     const fetchPage = async () => {
@@ -71,7 +71,7 @@ export default function PublicBookingPage() {
     // Jobs created from bookings have time info in their description
     supabase
       .from("jobs")
-      .select("start_date, description")
+      .select("start_date, start_time, estimated_hours")
       .eq("user_id", page.user_id)
       .eq("start_date", dateStr)
       .in("status", ["scheduled", "in_progress"])
@@ -80,28 +80,15 @@ export default function PublicBookingPage() {
       });
   }, [page, selectedDate]);
 
-  // Parse job times from descriptions (format: "📅 Booked Appointment: HH:MM AM/PM – HH:MM AM/PM")
+  // Build time blocks from job start_time + estimated_hours
   const jobTimeBlocks = useMemo(() => {
     const blocks: { start: number; end: number }[] = [];
     for (const job of existingJobs) {
-      if (!job.description) continue;
-      // Match "HH:MM AM/PM – HH:MM AM/PM" pattern
-      const match = job.description.match(/(\d{1,2}):(\d{2})\s*(AM|PM)\s*[–-]\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-      if (match) {
-        let startH = parseInt(match[1]);
-        const startM = parseInt(match[2]);
-        const startAmPm = match[3].toUpperCase();
-        let endH = parseInt(match[4]);
-        const endM = parseInt(match[5]);
-        const endAmPm = match[6].toUpperCase();
-        
-        if (startAmPm === "PM" && startH !== 12) startH += 12;
-        if (startAmPm === "AM" && startH === 12) startH = 0;
-        if (endAmPm === "PM" && endH !== 12) endH += 12;
-        if (endAmPm === "AM" && endH === 12) endH = 0;
-        
-        blocks.push({ start: startH * 60 + startM, end: endH * 60 + endM });
-      }
+      if (!job.start_time || !job.estimated_hours) continue;
+      const [h, m] = job.start_time.split(":").map(Number);
+      const startMin = h * 60 + m;
+      const endMin = startMin + job.estimated_hours * 60;
+      blocks.push({ start: startMin, end: endMin });
     }
     return blocks;
   }, [existingJobs]);
