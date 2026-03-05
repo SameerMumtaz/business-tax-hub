@@ -322,8 +322,8 @@ export default function VehiclesPage() {
                   <span className="font-mono">{formatCurrency(v.monthly_payment)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Business Use</span>
-                  <span className="font-mono">{v.business_use_pct}%</span>
+                  <span className="text-muted-foreground">Balance</span>
+                  <span className="font-mono">{v.id === selectedId ? formatCurrency(currentBalance) : formatCurrency(v.loan_amount)}</span>
                 </div>
               </button>
             ))}
