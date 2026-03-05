@@ -35,9 +35,15 @@ interface Job {
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+/** Parse a YYYY-MM-DD string as a local date (avoids UTC offset issues) */
+function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
 /** Given a week_start date string (YYYY-MM-DD), return labels like "Mon 3/3" for each day */
 function getDayLabelsWithDates(weekStart: string): string[] {
-  const start = new Date(weekStart + "T12:00:00"); // noon to avoid DST issues
+  const start = parseLocalDate(weekStart);
   return DAY_LABELS.map((label, i) => {
     const d = new Date(start);
     d.setDate(d.getDate() + i);
@@ -130,10 +136,10 @@ export default function TimesheetsContent() {
     const ts = timesheets.find((t) => t.id === timesheetId);
     if (!ts) return hours;
 
-    const weekStart = new Date(ts.week_start + "T00:00:00");
-    const weekEnd = new Date(ts.week_end + "T23:59:59");
-    const jobStart = new Date(job.start_date + "T00:00:00");
-    const jobEnd = job.end_date ? new Date(job.end_date + "T23:59:59") : jobStart;
+    const weekStart = parseLocalDate(ts.week_start);
+    const weekEnd = parseLocalDate(ts.week_end);
+    const jobStart = parseLocalDate(job.start_date);
+    const jobEnd = job.end_date ? parseLocalDate(job.end_date) : new Date(jobStart);
 
     // Map JS getDay() (0=Sun) to our day keys
     const dayMap: Record<number, string> = {
