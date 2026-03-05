@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useCrewCheckins } from "@/hooks/useCrewCheckins";
@@ -8,9 +8,49 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MapPin, Download, Users, Clock } from "lucide-react";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+
+// Fix default marker icon issue with bundlers
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
+
+const crewIcon = new L.Icon({
+  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
+const siteIcon = new L.Icon({
+  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
 
 interface TeamMemberInfo { id: string; name: string; email: string; role: string; }
-interface SiteInfo { id: string; name: string; }
+interface SiteInfo { id: string; name: string; latitude: number | null; longitude: number | null; address: string | null; }
+
+function FitBounds({ points }: { points: [number, number][] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (points.length > 0) {
+      const bounds = L.latLngBounds(points.map(([lat, lng]) => L.latLng(lat, lng)));
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+    }
+  }, [points, map]);
+  return null;
+}
 
 export default function CrewMapContent() {
   const { user } = useAuth();
@@ -24,7 +64,7 @@ export default function CrewMapContent() {
     const fetchData = async () => {
       const [memRes, sitesRes] = await Promise.all([
         supabase.from("team_members").select("id, name, email, role").eq("business_user_id", user.id),
-        supabase.from("job_sites").select("id, name").eq("user_id", user.id),
+        supabase.from("job_sites").select("id, name, latitude, longitude, address").eq("user_id", user.id),
       ]);
       if (memRes.data) setMembers(memRes.data as TeamMemberInfo[]);
       if (sitesRes.data) setSites(sitesRes.data as SiteInfo[]);
@@ -36,6 +76,19 @@ export default function CrewMapContent() {
   const siteMap = new Map(sites.map((s) => [s.id, s]));
   const activeCheckins = checkins.filter((c) => c.status === "checked_in");
   const filtered = filterSite === "all" ? activeCheckins : activeCheckins.filter((c) => c.job_site_id === filterSite);
+
+  const allMapPoints = useMemo(() => {
+    const pts: [number, number][] = [];
+    filtered.forEach((c) => {
+      if (c.check_in_lat && c.check_in_lng) pts.push([Number(c.check_in_lat), Number(c.check_in_lng)]);
+    });
+    sites.forEach((s) => {
+      if (s.latitude && s.longitude) pts.push([Number(s.latitude), Number(s.longitude)]);
+    });
+    return pts;
+  }, [filtered, sites]);
+
+  const defaultCenter: [number, number] = allMapPoints.length > 0 ? allMapPoints[0] : [39.8283, -98.5795];
 
   const exportCSV = () => {
     const headers = ["Name", "Site", "Check In Time", "Check Out Time", "Total Hours", "Check In Lat", "Check In Lng", "Check Out Lat", "Check Out Lng", "Status"];
@@ -101,36 +154,68 @@ export default function CrewMapContent() {
           </div>
         </CardHeader>
         <CardContent>
-          {filtered.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p>No crew members currently on-site</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {filtered.map((c) => {
-                const member = memberMap.get(c.team_member_id);
-                const site = c.job_site_id ? siteMap.get(c.job_site_id) : null;
-                return (
-                  <div key={c.id} className="bg-accent/50 border rounded-lg p-3 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-                      <span className="font-medium text-sm truncate">{member?.name || "Unknown"}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">{site?.name || "Unknown site"}</p>
-                    <p className="text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3 inline mr-1" />{new Date(c.check_in_time).toLocaleTimeString()}
-                    </p>
-                    {c.check_in_lat && (
-                      <p className="text-[10px] font-mono text-muted-foreground">
-                        {Number(c.check_in_lat).toFixed(5)}, {Number(c.check_in_lng).toFixed(5)}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <div className="rounded-lg overflow-hidden border" style={{ height: 480 }}>
+            <MapContainer
+              center={defaultCenter}
+              zoom={allMapPoints.length > 0 ? 13 : 4}
+              style={{ height: "100%", width: "100%" }}
+              scrollWheelZoom={true}
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              {allMapPoints.length > 1 && <FitBounds points={allMapPoints} />}
+
+              {/* Job Site pins (blue) */}
+              {sites
+                .filter((s) => s.latitude && s.longitude)
+                .filter((s) => filterSite === "all" || s.id === filterSite)
+                .map((s) => (
+                  <Marker key={`site-${s.id}`} position={[Number(s.latitude), Number(s.longitude)]} icon={siteIcon}>
+                    <Popup>
+                      <div className="text-sm">
+                        <p className="font-semibold">{s.name}</p>
+                        {s.address && <p className="text-xs text-muted-foreground">{s.address}</p>}
+                        <p className="text-xs mt-1 font-medium">📍 Job Site</p>
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
+
+              {/* Crew member pins (green) */}
+              {filtered
+                .filter((c) => c.check_in_lat && c.check_in_lng)
+                .map((c) => {
+                  const member = memberMap.get(c.team_member_id);
+                  const site = c.job_site_id ? siteMap.get(c.job_site_id) : null;
+                  return (
+                    <Marker key={`crew-${c.id}`} position={[Number(c.check_in_lat), Number(c.check_in_lng)]} icon={crewIcon}>
+                      <Popup>
+                        <div className="text-sm space-y-1">
+                          <p className="font-semibold">{member?.name || "Unknown"}</p>
+                          {site && <p className="text-xs">{site.name}</p>}
+                          <p className="text-xs text-muted-foreground">
+                            Checked in {new Date(c.check_in_time).toLocaleTimeString()}
+                          </p>
+                          <p className="text-xs font-medium">🟢 On-Site</p>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  );
+                })}
+            </MapContainer>
+          </div>
+
+          {/* Legend */}
+          <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-3 w-3 rounded-full bg-primary" /> Crew Member
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-3 w-3 rounded-full bg-accent" /> Job Site
+            </span>
+          </div>
         </CardContent>
       </Card>
 
