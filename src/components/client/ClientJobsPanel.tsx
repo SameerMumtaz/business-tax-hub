@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useJobs, type Job, type JobSite } from "@/hooks/useJobs";
 import { type Client } from "@/hooks/useClients";
 import { Button } from "@/components/ui/button";
@@ -8,11 +8,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandItem, CommandEmpty, CommandGroup } from "@/components/ui/command";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, MapPin, Briefcase, Loader2, Trash2, Calendar, Clock } from "lucide-react";
+import { Plus, MapPin, Briefcase, Loader2, Trash2, Calendar, Clock, Link2, Unlink } from "lucide-react";
 import { toast } from "sonner";
 
 const STATUS_COLORS: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
@@ -173,15 +175,67 @@ export default function ClientJobsPanel({ client }: Props) {
     }
   };
 
+  // Unlinked jobs (no client_id) for the "Link Existing" search
+  const unlinkableJobs = useMemo(() => jobs.filter((j) => !j.client_id), [jobs]);
+  const [linkSearch, setLinkSearch] = useState("");
+  const [linkOpen, setLinkOpen] = useState(false);
+
+  const filteredUnlinked = useMemo(() => {
+    if (!linkSearch.trim()) return unlinkableJobs;
+    const q = linkSearch.toLowerCase();
+    return unlinkableJobs.filter((j) =>
+      j.title.toLowerCase().includes(q) || (siteMap.get(j.site_id)?.name || "").toLowerCase().includes(q)
+    );
+  }, [unlinkableJobs, linkSearch, siteMap]);
+
+  const handleLinkJob = async (jobId: string) => {
+    await updateJob(jobId, { client_id: client.id });
+    setLinkOpen(false);
+    setLinkSearch("");
+    toast.success("Job linked to client");
+  };
+
+  const handleUnlinkJob = async (jobId: string) => {
+    await updateJob(jobId, { client_id: null } as any);
+    toast.success("Job unlinked from client");
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="font-medium flex items-center gap-2">
           <Briefcase className="h-4 w-4" /> Jobs
         </h3>
-        <Button size="sm" variant="outline" onClick={() => setJobOpen(true)}>
-          <Plus className="h-3.5 w-3.5 mr-1" /> New Job
-        </Button>
+        <div className="flex gap-1">
+          <Popover open={linkOpen} onOpenChange={(o) => { setLinkOpen(o); if (!o) setLinkSearch(""); }}>
+            <PopoverTrigger asChild>
+              <Button size="sm" variant="ghost" title="Link existing job">
+                <Link2 className="h-3.5 w-3.5 mr-1" /> Link
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="p-0 w-72" align="end">
+              <Command shouldFilter={false}>
+                <CommandInput placeholder="Search unlinked jobs…" value={linkSearch} onValueChange={setLinkSearch} />
+                <CommandList>
+                  <CommandEmpty>No unlinked jobs found</CommandEmpty>
+                  <CommandGroup>
+                    {filteredUnlinked.map((j) => (
+                      <CommandItem key={j.id} onSelect={() => handleLinkJob(j.id)} className="flex flex-col items-start gap-0.5">
+                        <span className="font-medium text-sm">{j.title}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {j.start_date}{j.start_time ? ` at ${j.start_time}` : ""} · {siteMap.get(j.site_id)?.name || "No site"}
+                        </span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+          <Button size="sm" variant="outline" onClick={() => setJobOpen(true)}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> New Job
+          </Button>
+        </div>
       </div>
 
       {clientJobs.length > 0 ? (
@@ -208,6 +262,9 @@ export default function ClientJobsPanel({ client }: Props) {
                         <SelectItem value="cancelled">Cancelled</SelectItem>
                       </SelectContent>
                     </Select>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" title="Unlink from client" onClick={() => handleUnlinkJob(job.id)}>
+                      <Unlink className="h-3 w-3 text-muted-foreground" />
+                    </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-6 w-6">
