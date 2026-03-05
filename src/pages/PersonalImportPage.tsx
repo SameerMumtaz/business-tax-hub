@@ -180,6 +180,18 @@ export default function PersonalImportPage() {
         <div
           className="stat-card border-2 border-dashed border-border hover:border-primary/50 transition-colors cursor-pointer p-8 text-center"
           onClick={() => fileRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const file = e.dataTransfer.files?.[0];
+            if (file && (file.type === "application/pdf" || file.name.endsWith(".pdf"))) {
+              handlePdfUpload(file);
+            } else {
+              toast.error("Only PDF statements are supported");
+            }
+          }}
         >
           <input ref={fileRef} type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />
           {uploading ? (
