@@ -116,9 +116,9 @@ export default function CrewDashboardPage() {
       
       setAssignedJobs(
         jobs.map((j: any) => {
-          // Estimate hours from start/end date if both present
-          let expectedHours: number | null = null;
-          if (j.end_date) {
+          // Use estimated_hours from the job if set, otherwise estimate from dates
+          let expectedHours: number | null = j.estimated_hours ?? null;
+          if (expectedHours == null && j.end_date) {
             const diff = new Date(j.end_date).getTime() - new Date(j.start_date).getTime();
             expectedHours = Math.round((diff / (1000 * 60 * 60)) * 10) / 10;
             if (expectedHours > 24) expectedHours = 8; // default for multi-day

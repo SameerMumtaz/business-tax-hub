@@ -758,6 +758,7 @@ export type Database = {
           created_at: string
           description: string | null
           end_date: string | null
+          estimated_hours: number | null
           id: string
           invoice_id: string | null
           job_type: string
@@ -765,6 +766,7 @@ export type Database = {
           recurring_interval: string | null
           site_id: string
           start_date: string
+          start_time: string | null
           status: string
           title: string
           updated_at: string
@@ -774,6 +776,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           end_date?: string | null
+          estimated_hours?: number | null
           id?: string
           invoice_id?: string | null
           job_type?: string
@@ -781,6 +784,7 @@ export type Database = {
           recurring_interval?: string | null
           site_id: string
           start_date: string
+          start_time?: string | null
           status?: string
           title: string
           updated_at?: string
@@ -790,6 +794,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           end_date?: string | null
+          estimated_hours?: number | null
           id?: string
           invoice_id?: string | null
           job_type?: string
@@ -797,6 +802,7 @@ export type Database = {
           recurring_interval?: string | null
           site_id?: string
           start_date?: string
+          start_time?: string | null
           status?: string
           title?: string
           updated_at?: string

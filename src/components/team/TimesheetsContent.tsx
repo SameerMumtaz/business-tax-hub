@@ -30,6 +30,8 @@ interface Job {
   start_date: string;
   end_date: string | null;
   job_type: string;
+  start_time: string | null;
+  estimated_hours: number | null;
 }
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
@@ -88,7 +90,7 @@ export default function TimesheetsContent() {
         supabase.from("team_members").select("id, name, worker_type, pay_rate").eq("business_user_id", user.id).in("status", ["active", "invited"]),
         supabase.from("employees").select("id, name, salary").eq("user_id", user.id),
         supabase.from("contractors").select("id, name, pay_rate").eq("user_id", user.id),
-        supabase.from("jobs").select("id, title, start_date, end_date, job_type").eq("user_id", user.id).in("status", ["scheduled", "in_progress"]),
+        supabase.from("jobs").select("id, title, start_date, end_date, job_type, start_time, estimated_hours").eq("user_id", user.id).in("status", ["scheduled", "in_progress"]),
       ]);
 
       const w: Worker[] = [];
@@ -135,7 +137,7 @@ export default function TimesheetsContent() {
   };
 
   // Given a job and a timesheet week range, compute which days the job falls on
-  // and return estimated hours per day (default 8hrs per workday)
+  // and return estimated hours per day (uses job.estimated_hours if set, else 8hrs)
   const computeJobHours = (jobId: string, timesheetId: string): Record<string, number> => {
     const hours: Record<string, number> = {
       mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0,
@@ -157,13 +159,14 @@ export default function TimesheetsContent() {
       4: "thu_hours", 5: "fri_hours", 6: "sat_hours",
     };
 
+    const hoursPerDay = job.estimated_hours != null && job.estimated_hours > 0 ? job.estimated_hours : 8;
+
     // Walk each day of the timesheet week
     const cursor = new Date(weekStart);
     while (cursor <= weekEnd) {
-      // Check if this day falls within the job's date range
       if (cursor >= jobStart && cursor <= jobEnd) {
         const key = dayMap[cursor.getDay()];
-        hours[key] = 8; // Default 8 hours per job day
+        hours[key] = hoursPerDay;
       }
       cursor.setDate(cursor.getDate() + 1);
     }
