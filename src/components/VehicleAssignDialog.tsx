@@ -38,31 +38,57 @@ export default function VehicleAssignDialog({ open, onOpenChange, expenseId, exp
 
       // Optionally record as a loan payment
       if (recordAsPayment && selectedVehicle && selectedVehicle.loan_amount > 0) {
-        // Find next unpaid payment number - we need to fetch payments
-        const { data: existingPayments } = await import("@/integrations/supabase/client").then(m =>
-          m.supabase.from("vehicle_payments").select("payment_number").eq("vehicle_id", selectedVehicleId).order("payment_number", { ascending: false }).limit(1)
-        );
-        const nextPaymentNum = (existingPayments?.[0]?.payment_number ?? 0) + 1;
+        // Fetch all existing payments to compute running balance accurately
+        const { supabase } = await import("@/integrations/supabase/client");
+        const { data: allPayments } = await supabase
+          .from("vehicle_payments")
+          .select("*")
+          .eq("vehicle_id", selectedVehicleId)
+          .order("payment_number", { ascending: true });
 
-        // Calculate interest/principal split from amortization
+        const existingPayments = (allPayments || []).map(p => ({
+          ...p,
+          amount_paid: Number(p.amount_paid),
+          principal_portion: Number(p.principal_portion),
+          interest_portion: Number(p.interest_portion),
+        }));
+
+        const nextPaymentNum = existingPayments.length > 0
+          ? existingPayments[existingPayments.length - 1].payment_number + 1
+          : 1;
+
+        // Walk through all prior payments to get the actual current balance
         const monthlyRate = selectedVehicle.interest_rate / 100 / 12;
         let balance = selectedVehicle.loan_amount;
-        for (let i = 1; i < nextPaymentNum; i++) {
-          const interest = balance * monthlyRate;
-          const principal = Math.min(selectedVehicle.monthly_payment - interest, balance);
-          balance = Math.max(balance - principal, 0);
+        for (const p of existingPayments) {
+          balance = Math.max(balance - p.principal_portion, 0);
         }
+
+        // Calculate interest on current balance
         const interest = Math.round(balance * monthlyRate * 100) / 100;
-        const principal = Math.round((expenseAmount - interest) * 100) / 100;
+        const expectedPayment = selectedVehicle.monthly_payment;
+
+        // If expense amount > expected payment, the extra goes to principal
+        const totalPrincipal = Math.min(
+          Math.round((expenseAmount - interest) * 100) / 100,
+          balance
+        );
+
+        const isOverpayment = expenseAmount > expectedPayment + 0.01;
+        const extraPrincipal = isOverpayment
+          ? Math.round((expenseAmount - expectedPayment) * 100) / 100
+          : 0;
 
         await addPayment.mutateAsync({
           vehicle_id: selectedVehicleId,
           payment_number: nextPaymentNum,
           amount_paid: expenseAmount,
-          principal_portion: Math.max(principal, 0),
+          principal_portion: Math.max(totalPrincipal, 0),
           interest_portion: Math.max(interest, 0),
           date_paid: expenseDate,
-          notes: "Linked from expense",
+          notes: isOverpayment
+            ? `Linked from expense — includes ${formatCurrency(extraPrincipal)} extra toward principal`
+            : "Linked from expense",
         });
       }
 
@@ -110,16 +136,29 @@ export default function VehicleAssignDialog({ open, onOpenChange, expenseId, exp
           </div>
 
           {selectedVehicle && selectedVehicle.loan_amount > 0 && (
-            <div className="flex items-center gap-2">
-              <Checkbox
-                checked={recordAsPayment}
-                onCheckedChange={(v) => setRecordAsPayment(!!v)}
-                id="record-payment"
-              />
-              <Label htmlFor="record-payment" className="font-normal text-sm">
-                Also record as a loan payment on the amortization schedule
-              </Label>
-            </div>
+            <>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={recordAsPayment}
+                  onCheckedChange={(v) => setRecordAsPayment(!!v)}
+                  id="record-payment"
+                />
+                <Label htmlFor="record-payment" className="font-normal text-sm">
+                  Also record as a loan payment on the amortization schedule
+                </Label>
+              </div>
+              {recordAsPayment && expenseAmount > selectedVehicle.monthly_payment + 0.01 && (
+                <div className="rounded-md bg-muted p-3 text-sm space-y-1">
+                  <p className="font-medium text-foreground">Overpayment detected</p>
+                  <p className="text-muted-foreground">
+                    Expected: {formatCurrency(selectedVehicle.monthly_payment)} — Actual: {formatCurrency(expenseAmount)}
+                  </p>
+                  <p className="text-muted-foreground">
+                    The extra <span className="font-mono font-medium text-foreground">{formatCurrency(expenseAmount - selectedVehicle.monthly_payment)}</span> will be applied as additional principal, reducing your loan balance faster.
+                  </p>
+                </div>
+              )}
+            </>
           )}
 
           <div className="flex justify-end gap-2">
