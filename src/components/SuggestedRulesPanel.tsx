@@ -106,7 +106,7 @@ export default function SuggestedRulesPanel({ type, transactions, onRuleSaved }:
       )}
 
       <div className="pt-2">
-        <Link to="/categorization-rules" className="text-sm text-primary hover:underline inline-flex items-center gap-1">
+        <Link to="/categorization" className="text-sm text-primary hover:underline inline-flex items-center gap-1">
           <ExternalLink className="h-3.5 w-3.5" /> Manage all categorization rules
         </Link>
       </div>
