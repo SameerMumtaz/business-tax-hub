@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import SuggestedRulesPanel from "@/components/SuggestedRulesPanel";
 import RuleSuggestionDialog from "@/components/RuleSuggestionDialog";
 import VehicleAssignDialog from "@/components/VehicleAssignDialog";
+import { supabase } from "@/integrations/supabase/client";
 import { extractVendorName } from "@/lib/ruleInference";
 import DashboardLayout from "@/components/DashboardLayout";
 import useExpensesLogic, { PAGE_SIZE } from "@/hooks/useExpensesLogic";
@@ -50,13 +51,51 @@ export default function ExpensesPage() {
   const [unfilteredAuditResult, setUnfilteredAuditResult] = useState<typeof auditResult>(null);
   const [vehicleAssign, setVehicleAssign] = useState<{ open: boolean; expenseId: string; amount: number; date: string }>({ open: false, expenseId: "", amount: 0, date: "" });
 
-  // Wrap category change to trigger vehicle assignment dialog
-  const handleCategoryChangeWithVehicle = (id: string, category: string) => {
+  // Wrap category change to trigger vehicle assignment dialog or clean up vehicle links
+  const handleCategoryChangeWithVehicle = async (id: string, category: string) => {
+    const expense = expenses.find(e => e.id === id);
+    const wasPreviouslyVehiclePayment = expense?.category === "Vehicle Payment";
+
     handleSingleCategoryChange(id, category);
+
     if (category === "Vehicle Payment") {
-      const expense = expenses.find(e => e.id === id);
       if (expense) {
         setVehicleAssign({ open: true, expenseId: id, amount: expense.amount, date: expense.date });
+      }
+    } else if (wasPreviouslyVehiclePayment) {
+      // Removing from Vehicle Payment — clean up linked vehicle data
+      try {
+        // Find and remove vehicle_expenses link
+        const { data: links } = await supabase
+          .from("vehicle_expenses")
+          .select("id, vehicle_id")
+          .eq("expense_id", id);
+
+        if (links && links.length > 0) {
+          const vehicleId = links[0].vehicle_id;
+          // Remove the link
+          await supabase.from("vehicle_expenses").delete().eq("expense_id", id);
+
+          // Remove any vehicle_payment that was linked from this expense
+          // (matched by vehicle_id, amount, date, and notes containing "Linked from expense")
+          if (expense) {
+            await supabase
+              .from("vehicle_payments")
+              .delete()
+              .eq("vehicle_id", vehicleId)
+              .eq("amount_paid", expense.amount)
+              .eq("date_paid", expense.date)
+              .like("notes", "%Linked from expense%");
+          }
+
+          // Invalidate vehicle-related queries
+          queryClient.invalidateQueries({ queryKey: ["vehicle_payments", vehicleId] });
+          queryClient.invalidateQueries({ queryKey: ["vehicle_payments_all"] });
+          queryClient.invalidateQueries({ queryKey: ["vehicle_expenses", vehicleId] });
+        }
+      } catch {
+        // Non-critical — log but don't block
+        console.warn("Failed to clean up vehicle payment link");
       }
     }
   };
