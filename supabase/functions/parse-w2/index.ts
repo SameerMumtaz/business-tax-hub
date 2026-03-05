@@ -174,7 +174,6 @@ const extractSpatial = (items: TextItem[], pageWidth: number, pageHeight: number
     }
     return 0;
   };
-  };
 
   // Helper: find a text string near a label position
   const findTextNear = (labelX: number, labelY: number): string => {
