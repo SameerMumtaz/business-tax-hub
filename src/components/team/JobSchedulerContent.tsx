@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useJobs, type Job, type JobSite } from "@/hooks/useJobs";
+import JobCalendarView from "@/components/team/JobCalendarView";
 import { useJobPhotos } from "@/hooks/useJobPhotos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,13 +14,13 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, MapPin, Briefcase, Loader2, Pencil, Trash2, Camera } from "lucide-react";
+import { Plus, MapPin, Briefcase, Loader2, Pencil, Trash2, Camera, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 
 export default function JobSchedulerContent() {
   const { sites, jobs, loading, createSite, updateSite, deleteSite, createJob, updateJob, deleteJob } = useJobs();
-  const [tab, setTab] = useState("jobs");
+  const [tab, setTab] = useState("calendar");
 
   // Create site state
   const [siteOpen, setSiteOpen] = useState(false);
@@ -50,6 +51,8 @@ export default function JobSchedulerContent() {
   const [jobEnd, setJobEnd] = useState("");
   const [jobInterval, setJobInterval] = useState("");
   const [jobDesc, setJobDesc] = useState("");
+  const [jobStartTime, setJobStartTime] = useState("");
+  const [jobEstHours, setJobEstHours] = useState("");
 
   // Edit job state
   const [editJobOpen, setEditJobOpen] = useState(false);
@@ -61,6 +64,8 @@ export default function JobSchedulerContent() {
   const [editJobEnd, setEditJobEnd] = useState("");
   const [editJobInterval, setEditJobInterval] = useState("");
   const [editJobDesc, setEditJobDesc] = useState("");
+  const [editJobStartTime, setEditJobStartTime] = useState("");
+  const [editJobEstHours, setEditJobEstHours] = useState("");
 
   // Photos dialog state
   const [photosJobId, setPhotosJobId] = useState<string | null>(null);
@@ -134,10 +139,12 @@ export default function JobSchedulerContent() {
       end_date: jobEnd || null, status: "scheduled", job_type: jobType,
       recurring_interval: jobType === "recurring" ? jobInterval || null : null,
       recurring_end_date: null, invoice_id: null, description: jobDesc || null,
+      start_time: jobStartTime || null, estimated_hours: jobEstHours ? Number(jobEstHours) : null,
     });
     setJobOpen(false);
     setJobTitle(""); setJobSiteId(""); setJobType("one_time");
     setJobStart(""); setJobEnd(""); setJobInterval(""); setJobDesc("");
+    setJobStartTime(""); setJobEstHours("");
   };
 
   const openEditJob = (j: Job) => {
@@ -149,6 +156,8 @@ export default function JobSchedulerContent() {
     setEditJobEnd(j.end_date || "");
     setEditJobInterval(j.recurring_interval || "");
     setEditJobDesc(j.description || "");
+    setEditJobStartTime(j.start_time || "");
+    setEditJobEstHours(j.estimated_hours != null ? String(j.estimated_hours) : "");
     setEditJobOpen(true);
   };
 
@@ -161,6 +170,7 @@ export default function JobSchedulerContent() {
       end_date: editJobEnd || null, job_type: editJobType,
       recurring_interval: editJobType === "recurring" ? editJobInterval || null : null,
       description: editJobDesc || null,
+      start_time: editJobStartTime || null, estimated_hours: editJobEstHours ? Number(editJobEstHours) : null,
     });
     setEditJobOpen(false);
   };
@@ -240,6 +250,16 @@ export default function JobSchedulerContent() {
                 <Input type="date" value={jobStart} onChange={(e) => setJobStart(e.target.value)} />
                 <Input type="date" value={jobEnd} onChange={(e) => setJobEnd(e.target.value)} placeholder="End date" />
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-muted-foreground">Start Time</label>
+                  <Input type="time" value={jobStartTime} onChange={(e) => setJobStartTime(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Est. Hours</label>
+                  <Input type="number" min="0.5" step="0.5" placeholder="e.g. 4" value={jobEstHours} onChange={(e) => setJobEstHours(e.target.value)} />
+                </div>
+              </div>
               {jobType === "recurring" && (
                 <Select value={jobInterval} onValueChange={setJobInterval}>
                   <SelectTrigger><SelectValue placeholder="Repeat interval" /></SelectTrigger>
@@ -309,6 +329,16 @@ export default function JobSchedulerContent() {
                 <Input type="date" value={editJobEnd} onChange={(e) => setEditJobEnd(e.target.value)} />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground">Start Time</label>
+                <Input type="time" value={editJobStartTime} onChange={(e) => setEditJobStartTime(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Est. Hours</label>
+                <Input type="number" min="0.5" step="0.5" placeholder="e.g. 4" value={editJobEstHours} onChange={(e) => setEditJobEstHours(e.target.value)} />
+              </div>
+            </div>
             {editJobType === "recurring" && (
               <Select value={editJobInterval} onValueChange={setEditJobInterval}>
                 <SelectTrigger><SelectValue placeholder="Repeat interval" /></SelectTrigger>
@@ -326,9 +356,13 @@ export default function JobSchedulerContent() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
+          <TabsTrigger value="calendar"><Calendar className="h-3.5 w-3.5 mr-1" />Calendar</TabsTrigger>
           <TabsTrigger value="jobs">Jobs</TabsTrigger>
           <TabsTrigger value="sites">Sites</TabsTrigger>
         </TabsList>
+        <TabsContent value="calendar" className="mt-4">
+          <JobCalendarView jobs={jobs} sites={sites} onJobClick={(j) => openEditJob(j)} />
+        </TabsContent>
         <TabsContent value="jobs" className="mt-4">
           <Card>
             <CardContent className="pt-6">

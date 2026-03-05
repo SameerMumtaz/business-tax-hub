@@ -241,6 +241,8 @@ export function useConvertQuoteToJob() {
           start_date: new Date().toISOString().slice(0, 10),
           status: "scheduled",
           job_type: "one_time",
+          start_time: null,
+          estimated_hours: null,
         })
         .select()
         .single();

@@ -58,6 +58,8 @@ export default function BookingRequestsPanel() {
       site_id: siteId,
       start_date: req.requested_date,
       end_date: null,
+      start_time: req.requested_time,
+      estimated_hours: req.duration_minutes / 60,
       status: "scheduled",
       job_type: "one_time",
       recurring_interval: null,

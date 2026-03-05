@@ -25,6 +25,8 @@ export interface Job {
   site_id: string;
   start_date: string;
   end_date: string | null;
+  start_time: string | null;
+  estimated_hours: number | null;
   status: string;
   job_type: string;
   recurring_interval: string | null;
