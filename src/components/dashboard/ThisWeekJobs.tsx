@@ -53,7 +53,7 @@ export default function ThisWeekJobs() {
           <Calendar className="h-4 w-4 text-muted-foreground" />
           This Week's Jobs
         </h2>
-        <Link to="/job-scheduler" className="text-xs text-primary hover:underline">
+        <Link to="/jobs" className="text-xs text-primary hover:underline">
           View all
         </Link>
       </div>

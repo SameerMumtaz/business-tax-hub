@@ -45,7 +45,7 @@ export default function InvoiceAgingChart() {
           <CreditCard className="h-4 w-4 text-muted-foreground" />
           Invoice Aging
         </h2>
-        <Link to="/aging-report" className="text-xs text-primary hover:underline">
+        <Link to="/aging" className="text-xs text-primary hover:underline">
           Details
         </Link>
       </div>
