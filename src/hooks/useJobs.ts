@@ -34,6 +34,12 @@ export interface Job {
   recurring_interval: string | null;
   recurring_end_date: string | null;
   invoice_id: string | null;
+  price: number;
+  material_budget: number;
+  labor_budget_type: string;
+  labor_budget_amount: number;
+  labor_budget_hours: number;
+  labor_budget_rate: number;
   user_id: string;
   created_at: string;
   updated_at: string;

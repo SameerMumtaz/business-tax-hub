@@ -104,12 +104,23 @@ export default function ClientsPage() {
         .filter((e) => e.vendor.toLowerCase() === lower)
         .reduce((sum, e) => sum + e.amount, 0);
 
-      // Job count
-      const jobCount = jobs.filter((j) => j.client_id === c.id).length;
+      // Job budgets
+      const clientJobs = jobs.filter((j) => j.client_id === c.id);
+      const jobCount = clientJobs.length;
+      const totalJobPrice = clientJobs.reduce((sum, j) => sum + (j.price || 0), 0);
+      const totalJobMaterialBudget = clientJobs.reduce((sum, j) => sum + (j.material_budget || 0), 0);
+      const totalJobLaborCost = clientJobs.reduce((sum, j) => {
+        if (j.labor_budget_type === "hours") return sum + (j.labor_budget_hours || 0) * (j.labor_budget_rate || 0);
+        return sum + (j.labor_budget_amount || 0);
+      }, 0);
+      const expectedJobProfit = totalJobPrice - totalJobMaterialBudget - totalJobLaborCost;
 
       const profit = revenue - cost;
       const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
-      return { name: c.name, revenue, cost, profit, margin, jobCount };
+      return {
+        name: c.name, revenue, cost, profit, margin, jobCount,
+        totalJobPrice, expectedJobProfit,
+      };
     }).sort((a, b) => b.profit - a.profit);
   }, [clients, invoices, sales, expenses, jobs]);
 
@@ -293,9 +304,11 @@ export default function ClientsPage() {
                     <TableRow>
                       <TableHead>Client</TableHead>
                       <TableHead className="text-right">Jobs</TableHead>
+                      <TableHead className="text-right">Job Value</TableHead>
+                      <TableHead className="text-right">Exp. Job Profit</TableHead>
                       <TableHead className="text-right">Revenue</TableHead>
                       <TableHead className="text-right">Expenses</TableHead>
-                      <TableHead className="text-right">Profit</TableHead>
+                      <TableHead className="text-right">Actual Profit</TableHead>
                       <TableHead className="text-right">Margin</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -304,6 +317,10 @@ export default function ClientsPage() {
                       <TableRow key={c.name}>
                         <TableCell className="font-medium">{c.name}</TableCell>
                         <TableCell className="text-right font-mono">{c.jobCount}</TableCell>
+                        <TableCell className="text-right font-mono">{c.totalJobPrice > 0 ? formatCurrency(c.totalJobPrice) : "—"}</TableCell>
+                        <TableCell className={`text-right font-mono ${c.expectedJobProfit > 0 ? "text-chart-positive" : c.expectedJobProfit < 0 ? "text-destructive" : ""}`}>
+                          {c.totalJobPrice > 0 ? formatCurrency(c.expectedJobProfit) : "—"}
+                        </TableCell>
                         <TableCell className="text-right font-mono text-chart-positive">{formatCurrency(c.revenue)}</TableCell>
                         <TableCell className="text-right font-mono text-chart-negative">{formatCurrency(c.cost)}</TableCell>
                         <TableCell className={`text-right font-mono font-semibold ${c.profit >= 0 ? "text-chart-positive" : "text-destructive"}`}>{formatCurrency(c.profit)}</TableCell>

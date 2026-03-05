@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import JobBudgetFields from "@/components/job/JobBudgetFields";
 import { useJobs, type Job, type JobSite } from "@/hooks/useJobs";
 import { useClients } from "@/hooks/useClients";
 import JobCalendarView from "@/components/team/JobCalendarView";
@@ -58,6 +59,12 @@ export default function JobSchedulerContent() {
   const [jobDesc, setJobDesc] = useState("");
   const [jobStartTime, setJobStartTime] = useState("");
   const [jobEstHours, setJobEstHours] = useState("");
+  const [jobPrice, setJobPrice] = useState("");
+  const [jobMaterialBudget, setJobMaterialBudget] = useState("");
+  const [jobLaborType, setJobLaborType] = useState("amount");
+  const [jobLaborAmount, setJobLaborAmount] = useState("");
+  const [jobLaborHours, setJobLaborHours] = useState("");
+  const [jobLaborRate, setJobLaborRate] = useState("");
 
   // Edit job state
   const [editJobOpen, setEditJobOpen] = useState(false);
@@ -72,6 +79,12 @@ export default function JobSchedulerContent() {
   const [editJobDesc, setEditJobDesc] = useState("");
   const [editJobStartTime, setEditJobStartTime] = useState("");
   const [editJobEstHours, setEditJobEstHours] = useState("");
+  const [editJobPrice, setEditJobPrice] = useState("");
+  const [editJobMaterialBudget, setEditJobMaterialBudget] = useState("");
+  const [editJobLaborType, setEditJobLaborType] = useState("amount");
+  const [editJobLaborAmount, setEditJobLaborAmount] = useState("");
+  const [editJobLaborHours, setEditJobLaborHours] = useState("");
+  const [editJobLaborRate, setEditJobLaborRate] = useState("");
 
   // Photos dialog state
   const [photosJobId, setPhotosJobId] = useState<string | null>(null);
@@ -150,11 +163,19 @@ export default function JobSchedulerContent() {
       recurring_end_date: null, invoice_id: null, description: jobDesc || null,
       start_time: jobStartTime || null, estimated_hours: jobEstHours ? Number(jobEstHours) : null,
       client_id: jobClientId && jobClientId !== "none" ? jobClientId : null,
+      price: Number(jobPrice) || 0,
+      material_budget: Number(jobMaterialBudget) || 0,
+      labor_budget_type: jobLaborType,
+      labor_budget_amount: Number(jobLaborAmount) || 0,
+      labor_budget_hours: Number(jobLaborHours) || 0,
+      labor_budget_rate: Number(jobLaborRate) || 0,
     });
     setJobOpen(false);
     setJobTitle(""); setJobSiteId(""); setJobType("one_time");
     setJobStart(""); setJobEnd(""); setJobInterval(""); setJobDesc("");
     setJobStartTime(""); setJobEstHours(""); setJobClientId("");
+    setJobPrice(""); setJobMaterialBudget(""); setJobLaborType("amount");
+    setJobLaborAmount(""); setJobLaborHours(""); setJobLaborRate("");
   };
 
   const openEditJob = (j: Job) => {
@@ -169,6 +190,12 @@ export default function JobSchedulerContent() {
     setEditJobDesc(j.description || "");
     setEditJobStartTime(j.start_time || "");
     setEditJobEstHours(j.estimated_hours != null ? String(j.estimated_hours) : "");
+    setEditJobPrice(j.price ? String(j.price) : "");
+    setEditJobMaterialBudget(j.material_budget ? String(j.material_budget) : "");
+    setEditJobLaborType(j.labor_budget_type || "amount");
+    setEditJobLaborAmount(j.labor_budget_amount ? String(j.labor_budget_amount) : "");
+    setEditJobLaborHours(j.labor_budget_hours ? String(j.labor_budget_hours) : "");
+    setEditJobLaborRate(j.labor_budget_rate ? String(j.labor_budget_rate) : "");
     setEditJobOpen(true);
   };
 
@@ -183,6 +210,12 @@ export default function JobSchedulerContent() {
       description: editJobDesc || null,
       start_time: editJobStartTime || null, estimated_hours: editJobEstHours ? Number(editJobEstHours) : null,
       client_id: editJobClientId && editJobClientId !== "none" ? editJobClientId : null,
+      price: Number(editJobPrice) || 0,
+      material_budget: Number(editJobMaterialBudget) || 0,
+      labor_budget_type: editJobLaborType,
+      labor_budget_amount: Number(editJobLaborAmount) || 0,
+      labor_budget_hours: Number(editJobLaborHours) || 0,
+      labor_budget_rate: Number(editJobLaborRate) || 0,
     });
     setEditJobOpen(false);
   };
@@ -300,6 +333,14 @@ export default function JobSchedulerContent() {
                   </SelectContent>
                 </Select>
               )}
+              <JobBudgetFields
+                price={jobPrice} materialBudget={jobMaterialBudget}
+                laborBudgetType={jobLaborType} laborBudgetAmount={jobLaborAmount}
+                laborBudgetHours={jobLaborHours} laborBudgetRate={jobLaborRate}
+                onPriceChange={setJobPrice} onMaterialBudgetChange={setJobMaterialBudget}
+                onLaborBudgetTypeChange={setJobLaborType} onLaborBudgetAmountChange={setJobLaborAmount}
+                onLaborBudgetHoursChange={setJobLaborHours} onLaborBudgetRateChange={setJobLaborRate}
+              />
               <Button className="w-full" onClick={handleCreateJob}>Create Job</Button>
             </div>
           </DialogContent>
@@ -393,6 +434,14 @@ export default function JobSchedulerContent() {
                 </SelectContent>
               </Select>
             )}
+            <JobBudgetFields
+              price={editJobPrice} materialBudget={editJobMaterialBudget}
+              laborBudgetType={editJobLaborType} laborBudgetAmount={editJobLaborAmount}
+              laborBudgetHours={editJobLaborHours} laborBudgetRate={editJobLaborRate}
+              onPriceChange={setEditJobPrice} onMaterialBudgetChange={setEditJobMaterialBudget}
+              onLaborBudgetTypeChange={setEditJobLaborType} onLaborBudgetAmountChange={setEditJobLaborAmount}
+              onLaborBudgetHoursChange={setEditJobLaborHours} onLaborBudgetRateChange={setEditJobLaborRate}
+            />
             <Button className="w-full" onClick={handleUpdateJob}>Save Changes</Button>
           </div>
         </DialogContent>
