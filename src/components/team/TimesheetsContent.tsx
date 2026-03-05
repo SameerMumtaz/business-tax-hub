@@ -44,10 +44,20 @@ function parseLocalDate(dateStr: string): Date {
 /** Given a week_start date string (YYYY-MM-DD), return labels like "Mon 3/3" for each day */
 function getDayLabelsWithDates(weekStart: string): string[] {
   const start = parseLocalDate(weekStart);
-  return DAY_LABELS.map((label, i) => {
+  const datesByWeekday: Partial<Record<number, Date>> = {};
+
+  for (let i = 0; i < 7; i++) {
     const d = new Date(start);
-    d.setDate(d.getDate() + i);
-    return `${label} ${d.getMonth() + 1}/${d.getDate()}`;
+    d.setDate(start.getDate() + i);
+    datesByWeekday[d.getDay()] = d;
+  }
+
+  // Monday-first display order: Mon..Sun => 1,2,3,4,5,6,0
+  const weekdayOrder = [1, 2, 3, 4, 5, 6, 0];
+
+  return DAY_LABELS.map((label, i) => {
+    const d = datesByWeekday[weekdayOrder[i]];
+    return d ? `${label} ${d.getMonth() + 1}/${d.getDate()}` : label;
   });
 }
 
@@ -141,19 +151,21 @@ export default function TimesheetsContent() {
     const jobStart = parseLocalDate(job.start_date);
     const jobEnd = job.end_date ? parseLocalDate(job.end_date) : new Date(jobStart);
 
-    // Map positional offset from week_start to our day keys
-    const dayKeys = ["mon_hours", "tue_hours", "wed_hours", "thu_hours", "fri_hours", "sat_hours", "sun_hours"];
+    // Map JS getDay() (0=Sun) to our day keys
+    const dayMap: Record<number, keyof typeof hours> = {
+      0: "sun_hours", 1: "mon_hours", 2: "tue_hours", 3: "wed_hours",
+      4: "thu_hours", 5: "fri_hours", 6: "sat_hours",
+    };
 
-    // Walk each day of the timesheet week by offset
+    // Walk each day of the timesheet week
     const cursor = new Date(weekStart);
-    let dayIndex = 0;
-    while (cursor <= weekEnd && dayIndex < 7) {
+    while (cursor <= weekEnd) {
       // Check if this day falls within the job's date range
       if (cursor >= jobStart && cursor <= jobEnd) {
-        hours[dayKeys[dayIndex]] = 8; // Default 8 hours per job day
+        const key = dayMap[cursor.getDay()];
+        hours[key] = 8; // Default 8 hours per job day
       }
       cursor.setDate(cursor.getDate() + 1);
-      dayIndex++;
     }
 
     return hours;
