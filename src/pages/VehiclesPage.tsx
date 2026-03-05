@@ -260,12 +260,18 @@ export default function VehiclesPage() {
     setMatchingPaymentRow(null);
   };
 
-  const linkedExpenseTotal = linkedExpenses.reduce((s: number, le: any) => s + Number(le.expenses?.amount ?? 0), 0);
+  // Vehicle expenses = linked expenses that are NOT payments or gas
+  const nonPaymentLinked = linkedExpenses.filter((le: any) => {
+    const cat = le.expenses?.category;
+    return cat !== "Vehicle Payment" && cat !== "Vehicle & Gas";
+  });
+  const linkedExpenseTotal = nonPaymentLinked.reduce((s: number, le: any) => s + Number(le.expenses?.amount ?? 0), 0);
 
-  const vehicleCategories = ["Vehicle & Gas", "Vehicle Maintenance"];
+  // Linkable: maintenance, insurance, repairs — exclude payments and gas
+  const linkableCategories = ["Vehicle Maintenance", "Repairs & Maintenance", "Insurance", "Equipment"];
   const linkableExpenses = useMemo(() => {
     let list = expenses.filter(
-      (e) => vehicleCategories.includes(e.category) && !linkedIds.has(e.id)
+      (e) => linkableCategories.includes(e.category) && !linkedIds.has(e.id)
     );
     if (expenseSearch.trim()) {
       const q = expenseSearch.toLowerCase();
@@ -580,15 +586,15 @@ export default function VehiclesPage() {
               <TabsContent value="expenses" className="p-4 pt-0 space-y-4">
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-muted-foreground">
-                    Link gas, maintenance, and insurance expenses to this vehicle for per-vehicle cost tracking.
+                    Link maintenance, repair, and insurance expenses to this vehicle for per-vehicle cost tracking (excludes payments & gas).
                   </p>
                   <Button size="sm" onClick={() => { setLinkDialogOpen(true); setExpenseSearch(""); }}>
                     <Link2 className="h-3.5 w-3.5 mr-1" /> Link Expense
                   </Button>
                 </div>
 
-                {linkedExpenses.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-6">No expenses linked yet.</p>
+                {nonPaymentLinked.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-6">No maintenance/repair expenses linked yet.</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="data-table">
@@ -602,7 +608,7 @@ export default function VehiclesPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {linkedExpenses.map((le: any) => (
+                        {nonPaymentLinked.map((le: any) => (
                           <tr key={le.id}>
                             <td className="font-mono text-xs">{le.expenses?.date}</td>
                             <td>{le.expenses?.vendor}</td>
@@ -823,7 +829,7 @@ export default function VehiclesPage() {
         <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader><DialogTitle>Link Expense to {selected?.name}</DialogTitle></DialogHeader>
-            <Input placeholder="Search vehicle expenses…" value={expenseSearch} onChange={(e) => setExpenseSearch(e.target.value)} />
+            <Input placeholder="Search maintenance/repair expenses…" value={expenseSearch} onChange={(e) => setExpenseSearch(e.target.value)} />
             <div className="max-h-60 overflow-y-auto space-y-1 mt-2">
               {linkableExpenses.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">No matching vehicle expenses found.</p>
