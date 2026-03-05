@@ -176,9 +176,9 @@ export default function TimesheetsContent() {
     const worker = workers.find((w) => w.id === selectedWorkerId);
     if (!worker) return;
     const alreadyExists = entries.some(
-      (e) => e.timesheet_id === addWorkerTsId && e.worker_id === worker.id
+      (e) => e.timesheet_id === addWorkerTsId && e.worker_id === worker.id && e.job_id === (selectedJobId || null)
     );
-    if (alreadyExists) { toast.error("Worker already on this timesheet"); return; }
+    if (alreadyExists) { toast.error("Worker already has this job on the timesheet"); return; }
 
     // Auto-populate hours if a job is selected
     const jobHours = selectedJobId
