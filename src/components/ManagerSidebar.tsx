@@ -32,7 +32,7 @@ export default function ManagerSidebar() {
   };
 
   return (
-    <aside className="w-64 min-h-screen bg-sidebar border-r border-sidebar-border flex flex-col">
+    <aside className="w-64 h-screen bg-sidebar border-r border-sidebar-border flex flex-col sticky top-0">
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex items-center gap-2">
           <Receipt className="h-6 w-6 text-sidebar-primary" />
@@ -43,7 +43,7 @@ export default function ManagerSidebar() {
         <p className="text-xs text-sidebar-foreground mt-1">All-in-One Business Management</p>
       </div>
 
-      <nav className="flex-1 p-3 space-y-0.5">
+      <nav className="flex-1 p-3 space-y-0.5 flex flex-col justify-center">
         {links.map((item) => (
           <NavLink
             key={item.to}

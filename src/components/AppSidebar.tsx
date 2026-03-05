@@ -147,7 +147,7 @@ export default function AppSidebar() {
   );
 
   return (
-    <aside className="w-64 min-h-screen bg-sidebar border-r border-sidebar-border flex flex-col">
+    <aside className="w-64 h-screen bg-sidebar border-r border-sidebar-border flex flex-col sticky top-0">
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex items-center gap-2">
           <Receipt className="h-6 w-6 text-sidebar-primary" />
@@ -158,7 +158,7 @@ export default function AppSidebar() {
         <p className="text-xs text-sidebar-foreground mt-1">All-in-One Business Management</p>
       </div>
 
-      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto flex flex-col justify-center">
         {links.map((item) => {
           if (item.children) {
             const groupOpen = openGroups[item.to] ?? false;
