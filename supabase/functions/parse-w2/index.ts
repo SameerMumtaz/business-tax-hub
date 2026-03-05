@@ -135,20 +135,19 @@ const extractSpatial = (items: TextItem[], pageWidth: number, pageHeight: number
   };
 
   // Helper: find the best money value near a label position
-  // Look to the right on the same line, or below in the same column
-  // excludePositions: skip values already claimed by other boxes
-  const claimedPositions = new Set<string>();
+  // Track claimed values so the same dollar amount isn't reused across boxes
+  const claimedValues = new Set<string>();
   
   const findValueNear = (labelX: number, labelY: number, direction: "right" | "below" | "both" = "both"): number => {
-    const candidates: { val: number; dist: number; key: string }[] = [];
+    const candidates: { val: number; dist: number; valKey: string }[] = [];
 
     for (const it of normalized) {
       if (!isDollarAmount(it.text)) continue;
       const val = parseAmount(it.text.replace(/[$,]/g, ""));
       if (val <= 0) continue;
 
-      const posKey = `${it.xPct.toFixed(4)},${it.yPct.toFixed(4)}`;
-      if (claimedPositions.has(posKey)) continue;
+      const valKey = val.toFixed(2);
+      if (claimedValues.has(valKey)) continue;
 
       const dx = it.xPct - labelX;
       const dy = it.yPct - labelY;
@@ -156,23 +155,24 @@ const extractSpatial = (items: TextItem[], pageWidth: number, pageHeight: number
       if (direction === "right" || direction === "both") {
         // Same line (within 1.5% vertically), to the right
         if (Math.abs(dy) < 0.015 && dx > -0.02 && dx < 0.5) {
-          candidates.push({ val, dist: Math.abs(dx) + Math.abs(dy) * 10, key: posKey });
+          candidates.push({ val, dist: Math.abs(dx) + Math.abs(dy) * 10, valKey });
         }
       }
       if (direction === "below" || direction === "both") {
-        // Below label (within 6% horizontally), very close vertically (within 3%)
+        // Below label (within 6% horizontally), close vertically (within 3%)
         if (Math.abs(dx) < 0.06 && dy > 0 && dy < 0.03) {
-          candidates.push({ val, dist: dy + Math.abs(dx) * 5, key: posKey });
+          candidates.push({ val, dist: dy + Math.abs(dx) * 5, valKey });
         }
       }
     }
 
     candidates.sort((a, b) => a.dist - b.dist);
     if (candidates.length > 0) {
-      claimedPositions.add(candidates[0].key);
+      claimedValues.add(candidates[0].valKey);
       return candidates[0].val;
     }
     return 0;
+  };
   };
 
   // Helper: find a text string near a label position
