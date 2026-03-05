@@ -40,7 +40,7 @@ export default function PersonalSidebar() {
             Bookie
           </span>
         </div>
-        <p className="text-xs text-sidebar-foreground mt-1">Personal Tax Filing</p>
+        <p className="text-xs text-sidebar-foreground mt-1">All-in-One Money Management</p>
       </div>
 
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
