@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTeamRole } from "@/hooks/useTeamRole";
 import { useCrewCheckins } from "@/hooks/useCrewCheckins";
+import { useGeofenceMonitor } from "@/hooks/useGeofenceMonitor";
 import { getCurrentPosition, isWithinGeofence, haversineDistance } from "@/lib/geofence";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,11 +36,24 @@ function LiveElapsed({ since }: { since: string }) {
 export default function CrewDashboardPage() {
   const { user, signOut } = useAuth();
   const { teamMemberId, businessUserId } = useTeamRole();
-  const { activeCheckin, checkIn, checkOut } = useCrewCheckins();
+  const { activeCheckin, checkIn, checkOut, refetch } = useCrewCheckins();
   const [assignedJobs, setAssignedJobs] = useState<AssignedJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [gpsLoading, setGpsLoading] = useState<string | null>(null);
   const [payRate, setPayRate] = useState<number | null>(null);
+
+  // Find the job site for the active check-in to feed into geofence monitor
+  const activeJobSite = useMemo(() => {
+    if (!activeCheckin) return null;
+    const job = assignedJobs.find((j) => j.id === activeCheckin.job_id);
+    return job?.site ?? null;
+  }, [activeCheckin, assignedJobs]);
+
+  useGeofenceMonitor({
+    activeCheckin,
+    jobSite: activeJobSite,
+    onAutoCheckout: refetch,
+  });
 
   useEffect(() => {
     const fetchData = async () => {

@@ -250,6 +250,7 @@ export type Database = {
           check_out_lng: number | null
           check_out_time: string | null
           created_at: string
+          flag_reason: string | null
           id: string
           job_id: string | null
           job_site_id: string | null
@@ -266,6 +267,7 @@ export type Database = {
           check_out_lng?: number | null
           check_out_time?: string | null
           created_at?: string
+          flag_reason?: string | null
           id?: string
           job_id?: string | null
           job_site_id?: string | null
@@ -282,6 +284,7 @@ export type Database = {
           check_out_lng?: number | null
           check_out_time?: string | null
           created_at?: string
+          flag_reason?: string | null
           id?: string
           job_id?: string | null
           job_site_id?: string | null

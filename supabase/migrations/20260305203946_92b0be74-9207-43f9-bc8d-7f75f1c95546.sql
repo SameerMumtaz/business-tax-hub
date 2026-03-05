@@ -1,0 +1,1 @@
+ALTER TABLE public.crew_checkins ADD COLUMN flag_reason text DEFAULT NULL;
