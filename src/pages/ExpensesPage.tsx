@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import SuggestedRulesPanel from "@/components/SuggestedRulesPanel";
 import RuleSuggestionDialog from "@/components/RuleSuggestionDialog";
+import VehicleAssignDialog from "@/components/VehicleAssignDialog";
 import { extractVendorName } from "@/lib/ruleInference";
 import DashboardLayout from "@/components/DashboardLayout";
 import useExpensesLogic, { PAGE_SIZE } from "@/hooks/useExpensesLogic";
@@ -47,6 +48,18 @@ export default function ExpensesPage() {
     user,
   } = logic;
   const [unfilteredAuditResult, setUnfilteredAuditResult] = useState<typeof auditResult>(null);
+  const [vehicleAssign, setVehicleAssign] = useState<{ open: boolean; expenseId: string; amount: number; date: string }>({ open: false, expenseId: "", amount: 0, date: "" });
+
+  // Wrap category change to trigger vehicle assignment dialog
+  const handleCategoryChangeWithVehicle = (id: string, category: string) => {
+    handleSingleCategoryChange(id, category);
+    if (category === "Vehicle Payment") {
+      const expense = expenses.find(e => e.id === id);
+      if (expense) {
+        setVehicleAssign({ open: true, expenseId: id, amount: expense.amount, date: expense.date });
+      }
+    }
+  };
 
   const SortIcon = ({ field }: { field: typeof sortField }) => {
     if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
@@ -184,7 +197,7 @@ export default function ExpensesPage() {
                       <td className="text-muted-foreground">{e.description}</td>
                       <td>
                         {editingCategoryId === e.id ? (
-                          <Select value={e.category} onValueChange={(v) => handleSingleCategoryChange(e.id, v)}><SelectTrigger className="h-7 text-xs w-[150px]"><SelectValue /></SelectTrigger><SelectContent>{EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select>
+                          <Select value={e.category} onValueChange={(v) => handleCategoryChangeWithVehicle(e.id, v)}><SelectTrigger className="h-7 text-xs w-[150px]"><SelectValue /></SelectTrigger><SelectContent>{EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select>
                         ) : (
                           <button onClick={() => setEditingCategoryId(e.id)} className="group flex items-center gap-1"><Badge variant="secondary" className="text-xs font-normal">{e.category}</Badge><Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" /></button>
                         )}
@@ -254,6 +267,13 @@ export default function ExpensesPage() {
         onApplied={() => {
           queryClient.invalidateQueries({ queryKey: ["expenses", user?.id] });
         }}
+      />
+      <VehicleAssignDialog
+        open={vehicleAssign.open}
+        onOpenChange={(open) => setVehicleAssign(prev => ({ ...prev, open }))}
+        expenseId={vehicleAssign.expenseId}
+        expenseAmount={vehicleAssign.amount}
+        expenseDate={vehicleAssign.date}
       />
     </DashboardLayout>
   );
