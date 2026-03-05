@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { extractVendorName } from "@/lib/ruleInference";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useClients, useAddClient, useUpdateClient, useDeleteClient, Client } from "@/hooks/useClients";
 import { useInvoices } from "@/hooks/useInvoices";
@@ -78,19 +79,51 @@ export default function ClientsPage() {
 
   // ── Profitability data ──
   const profitabilityData = useMemo(() => {
-    // Build a map of client names from the clients list + any unique sales client names
-    const clientNames = new Set<string>();
-    clients.forEach((c) => clientNames.add(c.name));
-    sales.forEach((s) => clientNames.add(s.client));
+    // Known client names (user-created) take priority over scraped names
+    const knownClientNames = new Set(clients.map(c => c.name.toLowerCase()));
 
-    return [...clientNames].map((name) => {
-      const lower = name.toLowerCase();
-      const revenue = sales.filter((s) => s.client.toLowerCase() === lower).reduce((sum, s) => sum + s.amount, 0);
-      const cost = expenses.filter((e) => e.vendor.toLowerCase() === lower).reduce((sum, e) => sum + e.amount, 0);
-      const profit = revenue - cost;
-      const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
-      return { name, revenue, cost, profit, margin };
-    }).filter((c) => c.revenue > 0 || c.cost > 0).sort((a, b) => b.profit - a.profit);
+    // Group sales by display name: use known client name if it matches, otherwise scrape
+    const displayNameMap = new Map<string, string>(); // lowercase key → display name
+    clients.forEach(c => displayNameMap.set(c.name.toLowerCase(), c.name));
+    sales.forEach(s => {
+      const raw = s.client;
+      const lower = raw.toLowerCase();
+      if (!displayNameMap.has(lower)) {
+        // Check if scraped name matches a known client
+        const scraped = extractVendorName(raw) || raw;
+        const scrapedLower = scraped.toLowerCase();
+        if (knownClientNames.has(scrapedLower)) {
+          displayNameMap.set(lower, displayNameMap.get(scrapedLower)!);
+        } else {
+          displayNameMap.set(lower, scraped);
+        }
+      }
+    });
+
+    // Aggregate by display name
+    const aggregated = new Map<string, { revenue: number; cost: number }>();
+    sales.forEach(s => {
+      const displayName = displayNameMap.get(s.client.toLowerCase()) || extractVendorName(s.client) || s.client;
+      const key = displayName.toLowerCase();
+      const entry = aggregated.get(key) || { revenue: 0, cost: 0 };
+      entry.revenue += s.amount;
+      aggregated.set(key, entry);
+    });
+    expenses.forEach(e => {
+      const scraped = extractVendorName(e.vendor) || e.vendor;
+      const key = scraped.toLowerCase();
+      const entry = aggregated.get(key) || { revenue: 0, cost: 0 };
+      entry.cost += e.amount;
+      aggregated.set(key, entry);
+    });
+
+    return [...aggregated.entries()].map(([key, v]) => {
+      // Find best display name
+      const displayName = displayNameMap.get(key) || key;
+      const profit = v.revenue - v.cost;
+      const margin = v.revenue > 0 ? (profit / v.revenue) * 100 : 0;
+      return { name: displayName, revenue: v.revenue, cost: v.cost, profit, margin };
+    }).filter(c => c.revenue > 0 || c.cost > 0).sort((a, b) => b.profit - a.profit);
   }, [clients, sales, expenses]);
 
   const clientFormFields = (
