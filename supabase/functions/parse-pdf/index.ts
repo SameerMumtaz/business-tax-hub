@@ -127,10 +127,6 @@ const cleanDescription = (raw: string): string =>
 
 const parseTransactionsFromText = (text: string): ParsedTx[] => {
   const transactions: ParsedTx[] = [];
-  const lines = text.split(/\r?\n/);
-
-  let pending: { date: string; descriptionParts: string[]; amountRaw?: string; startIndex: number } | null = null;
-  let consumedChars = 0;
 
   // Date patterns: MM/DD/YY, MM/DD/YYYY, MM/DD, or Mon DD (e.g. "Jan 15")
   const DATE_SLASH_RE = /\b(\d{1,2}\/\d{1,2}(?:\/(?:\d{2}|\d{4}))?)\b/;
