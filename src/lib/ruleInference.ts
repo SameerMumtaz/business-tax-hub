@@ -23,9 +23,53 @@ export function extractVendorName(raw: string): string | null {
   const cardNoise = /^(visa|mastercard|amex|discover|mc)\s+/gi;
 
   let cleaned = raw
-    .replace(/[*#_.\/\\:]+/g, " ")   // normalize special chars including colons
     .replace(/\s+/g, " ")
     .trim();
+
+  // Detect deposit-type transactions and extract meaningful info before stripping
+  const upperRaw = cleaned.toUpperCase();
+  
+  // Extract INDN (individual name) from ACH transactions — this is often the actual client
+  const indnMatch = cleaned.match(/INDN[:\s]+([A-Za-z][A-Za-z\s,.'&-]+?)(?=\s+(?:CO\s*ID|ID[:\s]|PPD|CCD|WEB|TEL|\d{6,}|$))/i);
+  if (indnMatch?.[1]?.trim()?.length >= 3) {
+    const name = indnMatch[1].replace(/[^a-zA-Z\s'-]/g, " ").replace(/\s+/g, " ").trim();
+    if (name.length >= 3) {
+      return name.toLowerCase().split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+    }
+  }
+
+  // For mobile/direct deposits with no client info, return a clean label
+  if (/\b(MOBILE\s+DEPOSIT|DIRECT\s+DEP(OSIT)?|COUNTER\s+(CREDIT|DEPOSIT))\b/i.test(upperRaw) || (/\bDEPOSIT\b/i.test(upperRaw) && /\bMOBILE\b/i.test(upperRaw))) {
+    // Try to find a name before the deposit keyword
+    const beforeDeposit = cleaned.replace(/\b(BKOFAMERICA|BANK\s*OF\s*AMERICA|WELLS\s*FARGO|CHASE|CITIBANK|USBANK|US\s*BANK|CAPITAL\s*ONE|PNC\s*BANK|TD\s*BANK)\b/gi, "")
+      .replace(/\b(MOBILE\s+DEPOSIT|DIRECT\s+DEP(OSIT)?|DEPOSIT|COUNTER\s+(CREDIT|DEPOSIT)|CREDIT\s+MEMO|\*MOBILE|MOBILE)\b/gi, "")
+      .replace(/\d+/g, " ").replace(/[^a-zA-Z\s'-]/g, " ").replace(/\s+/g, " ").trim();
+    if (beforeDeposit.length >= 3) {
+      return beforeDeposit.toLowerCase().split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+    }
+    return "Mobile Deposit";
+  }
+
+  // For online transfers with CHK references
+  if (/\b(Online\s+transfer\s+from\s+CHK|ONLINE\s+XFER)\b/i.test(upperRaw)) {
+    return "Bank Transfer";
+  }
+
+  // Now proceed with normal vendor name cleaning
+  cleaned = cleaned
+    .replace(/[*#_.\/\\:]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Strip ACH metadata
+  cleaned = cleaned.replace(/\s*(DES|ID|INDN|CO\s*ID|SEC|TRN)\s*[:\s]\s*\S+/gi, "");
+  cleaned = cleaned.replace(/\s+(PPD|CCD|WEB|TEL)\s*/gi, " ");
+  
+  // Strip DEPOSIT and related banking terms
+  cleaned = cleaned.replace(/\s*(DEPOSIT|\*MOBILE|MOBILE\s+DEPOSIT|DIRECT\s+DEP(OSIT)?|ACH\s+DEPOSIT|COUNTER\s+(CREDIT|DEPOSIT)|CREDIT\s+MEMO)\s*/gi, " ");
+  
+  // Strip bank names commonly appearing in deposit descriptions
+  cleaned = cleaned.replace(/\b(BKOFAMERICA|BANK\s*OF\s*AMERICA|BKOFAMER|WELLS\s*FARGO|CHASE|CITIBANK|USBANK|US\s*BANK|CAPITAL\s*ONE|PNC\s*BANK|TD\s*BANK)\b/gi, "");
 
   // Repeatedly strip prefixes
   let prev = "";
@@ -61,9 +105,6 @@ export function extractVendorName(raw: string): string | null {
   // Strip ref/seq/trace numbers
   cleaned = cleaned.replace(/\s+(ref|seq|trace|conf)\s*#?\s*\w+/gi, "");
   
-  // Strip store/location numbers after vendor name (e.g. "QT 378 OUTSIDE" → keep "QT", "ONCUE 0123" → keep "ONCUE")
-  // But keep multi-word brand names intact
-  
   // Strip trailing # followed by digits
   cleaned = cleaned.replace(/\s+#\d+/g, "");
   
@@ -73,9 +114,6 @@ export function extractVendorName(raw: string): string | null {
   // Remove location words that follow vendor names
   const locationWords = /\s+(inside|outside|drive thru|drive through|drv thru)\b/gi;
   cleaned = cleaned.replace(locationWords, "");
-  
-  // Strip city names that appear after the vendor (heuristic: known pattern of "VENDOR CITY STATE")
-  // Remove trailing words that look like city/address (after vendor extracted)
   
   // Remove remaining special chars and normalize
   cleaned = cleaned.replace(/[^a-zA-Z\s'-]/g, " ").replace(/\s+/g, " ").trim();
