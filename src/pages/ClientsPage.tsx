@@ -3,6 +3,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { useClients, useAddClient, useUpdateClient, useDeleteClient, Client } from "@/hooks/useClients";
 import { useInvoices } from "@/hooks/useInvoices";
 import { useSales, useExpenses } from "@/hooks/useData";
+import { useJobs } from "@/hooks/useJobs";
 import { formatCurrency } from "@/lib/format";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ export default function ClientsPage() {
   const { data: invoices = [] } = useInvoices();
   const { data: sales = [] } = useSales();
   const { data: expenses = [] } = useExpenses();
+  const { jobs } = useJobs();
   const addClient = useAddClient();
   const updateClient = useUpdateClient();
   const deleteClient = useDeleteClient();
@@ -77,22 +79,39 @@ export default function ClientsPage() {
     pendingAmount: clientInvoices.filter(i => i.status !== "paid" && i.status !== "draft").reduce((s, i) => s + i.total, 0),
   } : null;
 
-  // ── Profitability data ──
+  // ── Profitability data — only user-created clients ──
   const profitabilityData = useMemo(() => {
-    // Build a map of client names from the clients list + any unique sales client names
-    const clientNames = new Set<string>();
-    clients.forEach((c) => clientNames.add(c.name));
-    sales.forEach((s) => clientNames.add(s.client));
+    return clients.map((c) => {
+      const lower = c.name.toLowerCase();
 
-    return [...clientNames].map((name) => {
-      const lower = name.toLowerCase();
-      const revenue = sales.filter((s) => s.client.toLowerCase() === lower).reduce((sum, s) => sum + s.amount, 0);
-      const cost = expenses.filter((e) => e.vendor.toLowerCase() === lower).reduce((sum, e) => sum + e.amount, 0);
+      // Revenue: invoices linked by client_id OR name match
+      const clientInvs = invoices.filter(
+        (inv) => inv.client_id === c.id || inv.client_name.toLowerCase() === lower
+      );
+      const invoiceRevenue = clientInvs
+        .filter((inv) => inv.status === "paid")
+        .reduce((sum, inv) => sum + inv.total, 0);
+
+      // Also include sales matched by client name
+      const salesRevenue = sales
+        .filter((s) => s.client.toLowerCase() === lower)
+        .reduce((sum, s) => sum + s.amount, 0);
+
+      const revenue = invoiceRevenue + salesRevenue;
+
+      // Expenses matched by vendor name
+      const cost = expenses
+        .filter((e) => e.vendor.toLowerCase() === lower)
+        .reduce((sum, e) => sum + e.amount, 0);
+
+      // Job count
+      const jobCount = jobs.filter((j) => j.client_id === c.id).length;
+
       const profit = revenue - cost;
       const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
-      return { name, revenue, cost, profit, margin };
-    }).filter((c) => c.revenue > 0 || c.cost > 0).sort((a, b) => b.profit - a.profit);
-  }, [clients, sales, expenses]);
+      return { name: c.name, revenue, cost, profit, margin, jobCount };
+    }).sort((a, b) => b.profit - a.profit);
+  }, [clients, invoices, sales, expenses, jobs]);
 
   const clientFormFields = (
     <div className="space-y-3">
@@ -248,29 +267,32 @@ export default function ClientsPage() {
           </TabsContent>
 
           <TabsContent value="profitability" className="mt-4 space-y-6">
-            {profitabilityData.length > 0 ? (
+            {clients.length > 0 ? (
               <>
-                <div className="rounded-lg border bg-card p-6">
-                  <h2 className="text-lg font-medium mb-4">Profit by Client</h2>
-                  <ResponsiveContainer width="100%" height={Math.max(200, profitabilityData.length * 40)}>
-                    <BarChart data={profitabilityData} layout="vertical" margin={{ left: 100 }}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                      <XAxis type="number" tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} className="fill-muted-foreground" />
-                      <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} className="fill-muted-foreground" width={100} />
-                      <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                      <Bar dataKey="profit" name="Profit" radius={[0, 4, 4, 0]}>
-                        {profitabilityData.map((entry, i) => (
-                          <Cell key={i} fill={entry.profit >= 0 ? "hsl(var(--chart-2))" : "hsl(var(--chart-5))"} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                {profitabilityData.some(c => c.revenue > 0 || c.cost > 0) && (
+                  <div className="rounded-lg border bg-card p-6">
+                    <h2 className="text-lg font-medium mb-4">Profit by Client</h2>
+                    <ResponsiveContainer width="100%" height={Math.max(200, profitabilityData.filter(c => c.revenue > 0 || c.cost > 0).length * 40)}>
+                      <BarChart data={profitabilityData.filter(c => c.revenue > 0 || c.cost > 0)} layout="vertical" margin={{ left: 100 }}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                        <XAxis type="number" tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} className="fill-muted-foreground" />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} className="fill-muted-foreground" width={100} />
+                        <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                        <Bar dataKey="profit" name="Profit" radius={[0, 4, 4, 0]}>
+                          {profitabilityData.filter(c => c.revenue > 0 || c.cost > 0).map((entry, i) => (
+                            <Cell key={i} fill={entry.profit >= 0 ? "hsl(var(--chart-2))" : "hsl(var(--chart-5))"} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
 
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Client</TableHead>
+                      <TableHead className="text-right">Jobs</TableHead>
                       <TableHead className="text-right">Revenue</TableHead>
                       <TableHead className="text-right">Expenses</TableHead>
                       <TableHead className="text-right">Profit</TableHead>
@@ -281,6 +303,7 @@ export default function ClientsPage() {
                     {profitabilityData.map((c) => (
                       <TableRow key={c.name}>
                         <TableCell className="font-medium">{c.name}</TableCell>
+                        <TableCell className="text-right font-mono">{c.jobCount}</TableCell>
                         <TableCell className="text-right font-mono text-chart-positive">{formatCurrency(c.revenue)}</TableCell>
                         <TableCell className="text-right font-mono text-chart-negative">{formatCurrency(c.cost)}</TableCell>
                         <TableCell className={`text-right font-mono font-semibold ${c.profit >= 0 ? "text-chart-positive" : "text-destructive"}`}>{formatCurrency(c.profit)}</TableCell>
@@ -292,7 +315,7 @@ export default function ClientsPage() {
               </>
             ) : (
               <div className="rounded-lg border bg-card p-12 text-center text-muted-foreground">
-                No sales data yet. Import sales to see client profitability.
+                No clients yet. Add clients to see profitability data.
               </div>
             )}
           </TabsContent>
