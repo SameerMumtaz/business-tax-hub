@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import SuggestedRulesPanel from "@/components/SuggestedRulesPanel";
 import RuleSuggestionDialog from "@/components/RuleSuggestionDialog";
 import { extractVendorName } from "@/lib/ruleInference";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 import DashboardLayout from "@/components/DashboardLayout";
 import useSalesLogic, { PAGE_SIZE } from "@/hooks/useSalesLogic";
 import DateRangeFilter from "@/components/DateRangeFilter";
@@ -21,7 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, ArrowDownLeft, ArrowUpRight, Activity, Wallet, ArrowUpDown, ArrowUp, ArrowDown, Tag, Search, ShieldAlert, Pencil, AlertTriangle, ChevronLeft, ChevronRight, Filter } from "lucide-react";
+import { Plus, Trash2, ArrowDownLeft, ArrowUpRight, Activity, Wallet, ArrowUpDown, ArrowUp, ArrowDown, Tag, Search, ShieldAlert, Pencil, AlertTriangle, ChevronLeft, ChevronRight, Filter, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { auditSales } from "@/lib/audit";
@@ -38,13 +40,15 @@ export default function SalesPage() {
     sortField, sortDir, toggleSort, selected, toggleSelect, toggleAll, handleBulkDelete,
     searchQuery, setSearchQuery, filterCategory, setFilterCategory, auditResult, setAuditResult, persistentAudit, activeIssueCount,
     pendingRuleSuggestion, setPendingRuleSuggestion,
-    editingCategoryId, setEditingCategoryId, updateSale, removeSale, handleSingleCategoryChange,
+    editingCategoryId, setEditingCategoryId, editingClientId, setEditingClientId,
+    updateSale, removeSale, handleSingleCategoryChange, handleClientChange, clients,
     ruleDialogOpen, setRuleDialogOpen, ruleKeyword, setRuleKeyword, ruleCategory, setRuleCategory,
     openBulkRule, saveBulkRule, handleBatchCreateInvoices, handleInlineCreateInvoice,
     chartData, totalInflows, totalOutflows, netCashFlow, currentBalance, expenses, matchedSaleIds,
     user,
   } = logic;
   const [unfilteredAuditResult, setUnfilteredAuditResult] = useState<typeof auditResult>(null);
+  const [clientSearchQuery, setClientSearchQuery] = useState("");
 
   const SortIcon = ({ field }: { field: typeof sortField }) => {
     if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
@@ -179,7 +183,44 @@ export default function SalesPage() {
                       <td><Checkbox checked={selected.has(s.id)} onCheckedChange={() => toggleSelect(s.id)} /></td>
                       <td className="font-mono text-xs text-muted-foreground">{s.date}</td>
                       <td className="font-mono text-xs">{s.invoiceNumber}</td>
-                      <td className="font-medium" title={s.client}>{extractVendorName(s.client) || s.client}</td>
+                      <td className="font-medium" title={s.client}>
+                        {editingClientId === s.id ? (
+                          <Popover open onOpenChange={(open) => { if (!open) setEditingClientId(null); }}>
+                            <PopoverTrigger asChild>
+                              <button className="text-left w-full">{extractVendorName(s.client) || s.client}</button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[250px] p-0" align="start">
+                              <Command shouldFilter={false}>
+                                <CommandInput placeholder="Search or type client…" value={clientSearchQuery} onValueChange={setClientSearchQuery} />
+                                <CommandList>
+                                  <CommandEmpty className="py-2 px-3 text-xs text-muted-foreground">No matching clients</CommandEmpty>
+                                  {clientSearchQuery.trim() && (
+                                    <CommandGroup heading="Custom">
+                                      <CommandItem onSelect={() => { handleClientChange(s.id, clientSearchQuery.trim()); setClientSearchQuery(""); }}>
+                                        <Pencil className="h-3 w-3 mr-2" />Use "{clientSearchQuery.trim()}"
+                                      </CommandItem>
+                                    </CommandGroup>
+                                  )}
+                                  {clients && clients.length > 0 && (
+                                    <CommandGroup heading="Known Clients">
+                                      {clients.filter(c => !clientSearchQuery.trim() || c.name.toLowerCase().includes(clientSearchQuery.trim().toLowerCase())).map(c => (
+                                        <CommandItem key={c.id} onSelect={() => { handleClientChange(s.id, c.name); setClientSearchQuery(""); }}>
+                                          <UserCheck className="h-3 w-3 mr-2 text-primary" />{c.name}
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  )}
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
+                        ) : (
+                          <button onClick={() => { setEditingClientId(s.id); setClientSearchQuery(""); }} className="group flex items-center gap-1">
+                            <span>{extractVendorName(s.client) || s.client}</span>
+                            <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </button>
+                        )}
+                      </td>
                       <td className="text-muted-foreground">{s.description}</td>
                       <td>
                         {editingCategoryId === s.id ? (

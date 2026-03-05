@@ -42,6 +42,7 @@ export default function useSalesLogic() {
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [auditResult, setAuditResult] = useState<AuditResult | null>(null);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingClientId, setEditingClientId] = useState<string | null>(null);
   const [batchCreating, setBatchCreating] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
@@ -172,6 +173,16 @@ export default function useSalesLogic() {
     });
   };
 
+  const handleClientChange = (id: string, clientName: string) => {
+    updateSale.mutate({ id, client: clientName }, {
+      onSuccess: () => {
+        toast.success("Client updated");
+        setEditingClientId(null);
+      },
+      onError: () => toast.error("Failed to update client"),
+    });
+  };
+
   const openBulkRule = () => {
     const selectedSales = sales.filter((s) => selected.has(s.id));
     if (selectedSales.length > 0) setRuleKeyword(selectedSales[0].client.split(/\s+/)[0]?.toLowerCase() || "");
@@ -204,8 +215,9 @@ export default function useSalesLogic() {
     sortField, sortDir, toggleSort, selected, toggleSelect, selectItems, toggleAll, handleBulkDelete,
     searchQuery, setSearchQuery, filterCategory, setFilterCategory, auditResult, setAuditResult, persistentAudit, activeIssueCount,
     pendingRuleSuggestion, setPendingRuleSuggestion,
-    editingCategoryId, setEditingCategoryId, batchCreating, updateSale, removeSale, bulkRemove,
-    handleSingleCategoryChange,
+    editingCategoryId, setEditingCategoryId, editingClientId, setEditingClientId,
+    batchCreating, updateSale, removeSale, bulkRemove,
+    handleSingleCategoryChange, handleClientChange, clients,
     ruleDialogOpen, setRuleDialogOpen, ruleKeyword, setRuleKeyword, ruleCategory, setRuleCategory,
     openBulkRule, saveBulkRule, handleBatchCreateInvoices, handleInlineCreateInvoice,
     chartData, totalInflows, totalOutflows, netCashFlow, currentBalance, matchedSaleIds,

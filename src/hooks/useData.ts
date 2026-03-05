@@ -156,10 +156,11 @@ export function useAddSale() {
 export function useUpdateSale() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (update: { id: string; category?: string; tax_collected?: number }) => {
+    mutationFn: async (update: { id: string; category?: string; tax_collected?: number; client?: string }) => {
       const updateData: Record<string, unknown> = {};
       if (update.category !== undefined) updateData.category = update.category;
       if (update.tax_collected !== undefined) updateData.tax_collected = update.tax_collected;
+      if (update.client !== undefined) updateData.client = update.client;
       const { error } = await supabase.from("sales").update(updateData).eq("id", update.id);
       if (error) throw error;
     },
