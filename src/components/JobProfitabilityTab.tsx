@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useJobs } from "@/hooks/useJobs";
+import { getExpectedProfit } from "@/components/job/JobBudgetFields";
 import { useTimesheets } from "@/hooks/useTimesheets";
 import { useInvoices } from "@/hooks/useInvoices";
 import { useExpenses } from "@/hooks/useData";
@@ -24,9 +25,12 @@ interface JobProfitRow {
   expenseCost: number;
   grossProfit: number;
   margin: number;
+  expectedProfit: number;
+  expectedMargin: number;
+  variance: number;
 }
 
-type SortKey = "jobName" | "revenue" | "laborCost" | "expenseCost" | "grossProfit" | "margin";
+type SortKey = "jobName" | "revenue" | "laborCost" | "expenseCost" | "grossProfit" | "margin" | "expectedProfit" | "variance";
 
 export default function JobProfitabilityTab() {
   const { user } = useAuth();
@@ -71,36 +75,30 @@ export default function JobProfitabilityTab() {
   const rows = useMemo((): JobProfitRow[] => {
     return filteredJobs.map((job) => {
       const site = sites.find((s) => s.id === job.site_id);
-      // Revenue from invoices linked to this job
       const jobInvoices = invoicesWithJobs.filter((i) => i.job_id === job.id);
       const revenue = jobInvoices.reduce((s, i) => s + Number(i.total), 0);
-
-      // Labor cost from timesheet entries for this job
       const jobEntries = entries.filter((e) => e.job_id === job.id);
       const laborCost = jobEntries.reduce((s, e) => s + e.total_pay, 0);
-
-      // Expense cost from linked expenses
       const linkedExpenseIds = jobExpenseLinks.filter((l) => l.job_id === job.id).map((l) => l.expense_id);
       const expenseCost = allExpenses
         .filter((e) => linkedExpenseIds.includes(e.id))
         .reduce((s, e) => s + e.amount, 0);
-
       const grossProfit = revenue - laborCost - expenseCost;
       const margin = revenue > 0 ? (grossProfit / revenue) * 100 : 0;
-
-      // Client name from invoice or site name
       const client = jobInvoices[0]?.client_name || site?.name || "—";
 
+      // Expected profit from budgets
+      const { profit: expectedProfit } = getExpectedProfit(
+        job.price, job.material_budget, job.labor_budget_type,
+        job.labor_budget_amount, job.labor_budget_hours, job.labor_budget_rate,
+      );
+      const expectedMargin = job.price > 0 ? (expectedProfit / job.price) * 100 : 0;
+      const variance = grossProfit - expectedProfit;
+
       return {
-        jobId: job.id,
-        jobName: job.title,
-        client,
-        date: job.start_date,
-        revenue,
-        laborCost,
-        expenseCost,
-        grossProfit,
-        margin,
+        jobId: job.id, jobName: job.title, client, date: job.start_date,
+        revenue, laborCost, expenseCost, grossProfit, margin,
+        expectedProfit, expectedMargin, variance,
       };
     });
   }, [filteredJobs, sites, invoicesWithJobs, entries, jobExpenseLinks, allExpenses]);
@@ -162,6 +160,8 @@ export default function JobProfitabilityTab() {
     expenses: r.expenseCost,
     gross_profit: r.grossProfit,
     margin_pct: r.margin.toFixed(1) + "%",
+    expected_profit: r.expectedProfit,
+    variance: r.variance,
   }));
 
   const SortHeader = ({ label, field }: { label: string; field: SortKey }) => (
@@ -267,6 +267,8 @@ export default function JobProfitabilityTab() {
               { key: "expenses", label: "Expenses" },
               { key: "gross_profit", label: "Gross Profit" },
               { key: "margin_pct", label: "Margin %" },
+              { key: "expected_profit", label: "Expected Profit" },
+              { key: "variance", label: "Variance" },
             ]}
           />
         </div>
@@ -286,6 +288,8 @@ export default function JobProfitabilityTab() {
                   <SortHeader label="Expenses" field="expenseCost" />
                   <SortHeader label="Gross Profit" field="grossProfit" />
                   <SortHeader label="Margin %" field="margin" />
+                  <SortHeader label="Expected" field="expectedProfit" />
+                  <SortHeader label="Variance" field="variance" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -308,6 +312,12 @@ export default function JobProfitabilityTab() {
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${marginBg(r.margin)} ${marginColor(r.margin)}`}>
                         {r.margin.toFixed(1)}%
                       </span>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {r.expectedProfit !== 0 ? formatCurrency(r.expectedProfit) : "—"}
+                    </TableCell>
+                    <TableCell className={`text-right font-mono text-sm font-medium ${r.variance >= 0 ? "text-chart-positive" : "text-chart-negative"}`}>
+                      {r.expectedProfit !== 0 ? (r.variance >= 0 ? "+" : "") + formatCurrency(r.variance) : "—"}
                     </TableCell>
                   </TableRow>
                 ))}
