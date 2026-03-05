@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Lightbulb, Check, X, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 interface SuggestedRulesPanelProps {
   type: "expense" | "income";
@@ -17,19 +17,26 @@ interface SuggestedRulesPanelProps {
 export default function SuggestedRulesPanel({ type, transactions, onRuleSaved }: SuggestedRulesPanelProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const location = useLocation();
   const [inferredPatterns, setInferredPatterns] = useState<InferredPattern[]>([]);
   const [detecting, setDetecting] = useState(false);
+
+  const isOnRulesPage = location.pathname === "/categorization";
 
   async function handleDetect() {
     if (!user) return;
     setDetecting(true);
     try {
-      const patterns = await detectPatterns(transactions, type, user.id);
-      setInferredPatterns(patterns);
-      if (patterns.length === 0) {
+      const [expPatterns, incPatterns] = await Promise.all([
+        detectPatterns(transactions.filter(t => true), "expense", user.id),
+        detectPatterns(transactions.filter(t => true), "income", user.id),
+      ]);
+      const all = [...expPatterns, ...incPatterns];
+      setInferredPatterns(all);
+      if (all.length === 0) {
         toast.info("No new patterns detected. Categorize more transactions to build patterns.");
       } else {
-        toast.success(`Found ${patterns.length} pattern${patterns.length > 1 ? "s" : ""}`);
+        toast.success(`Found ${all.length} pattern${all.length > 1 ? "s" : ""}`);
       }
     } catch {
       toast.error("Failed to detect patterns");
@@ -64,7 +71,7 @@ export default function SuggestedRulesPanel({ type, transactions, onRuleSaved }:
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-medium">Suggested Rules</h2>
-          <p className="text-sm text-muted-foreground">Detect patterns from your categorized {type === "expense" ? "expenses" : "sales"} and create rules automatically.</p>
+          <p className="text-sm text-muted-foreground">Detect patterns from your categorized transactions and create rules automatically.</p>
         </div>
         <Button variant="outline" onClick={handleDetect} disabled={detecting}>
           <Lightbulb className="h-4 w-4 mr-2" />
@@ -81,6 +88,7 @@ export default function SuggestedRulesPanel({ type, transactions, onRuleSaved }:
                   <span className="font-mono text-sm font-medium">"{p.keyword}"</span>
                   <span className="text-muted-foreground text-sm">→</span>
                   <Badge variant="secondary" className="text-xs">{p.category}</Badge>
+                  <Badge variant="outline" className="text-xs capitalize">{p.type}</Badge>
                   <span className="text-xs text-muted-foreground">{p.count} categorized transaction{p.count > 1 ? "s" : ""} support this</span>
                   <span className="text-xs text-muted-foreground">• {p.recategorizableCount} currently in Other</span>
                 </div>
@@ -105,11 +113,13 @@ export default function SuggestedRulesPanel({ type, transactions, onRuleSaved }:
         </div>
       )}
 
-      <div className="pt-2">
-        <Link to="/categorization" className="text-sm text-primary hover:underline inline-flex items-center gap-1">
-          <ExternalLink className="h-3.5 w-3.5" /> Manage all categorization rules
-        </Link>
-      </div>
+      {!isOnRulesPage && (
+        <div className="pt-2">
+          <Link to="/categorization" className="text-sm text-primary hover:underline inline-flex items-center gap-1">
+            <ExternalLink className="h-3.5 w-3.5" /> Manage all categorization rules
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

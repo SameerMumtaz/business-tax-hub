@@ -206,20 +206,11 @@ export default function CategorizationRulesPage() {
               Define vendor keywords to auto-categorize imported transactions
             </p>
           </div>
-          <Button variant="outline" onClick={handleDetectPatterns} disabled={detectingPatterns}>
-            <Lightbulb className="h-4 w-4 mr-2" />
-            {detectingPatterns ? "Scanning…" : "Detect Patterns"}
-          </Button>
         </div>
 
-        {/* Suggested rules panels */}
-        <div className="grid md:grid-cols-2 gap-6">
-          <div className="stat-card">
-            <SuggestedRulesPanel type="expense" transactions={expenseTransactions} onRuleSaved={fetchRules} />
-          </div>
-          <div className="stat-card">
-            <SuggestedRulesPanel type="income" transactions={salesTransactions} onRuleSaved={fetchRules} />
-          </div>
+        {/* Suggested rules — single unified panel */}
+        <div className="stat-card">
+          <SuggestedRulesPanel type="expense" transactions={[...expenseTransactions, ...salesTransactions]} onRuleSaved={fetchRules} />
         </div>
 
         {/* How it works */}
