@@ -30,6 +30,24 @@ const parseAmount = (raw: string): number => {
   return Number.isFinite(val) && val > 0 ? val : 0;
 };
 
+const getMoneyValues = (input: string): number[] => {
+  const tokens = input
+    .split(/\s+/)
+    .map((t) => t.replace(/^[^\d]+|[^\d.]+$/g, ""))
+    .filter(Boolean);
+
+  const out: number[] = [];
+  for (const token of tokens) {
+    if (MONEY_TOKEN_RE.test(token)) {
+      const v = parseAmount(token);
+      if (v > 0) out.push(v);
+    }
+  }
+  return out;
+};
+
+const MONEY_TOKEN_RE = /^(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}$/;
+
 /**
  * Strategy: W-2 PDFs typically contain dollar amounts like 113884.56, 16877.65 etc.
  * We extract ALL dollar-like amounts from the text, then use the known W-2 structure
@@ -49,161 +67,226 @@ const parseAmount = (raw: string): number => {
 const extractW2FromText = (text: string): W2Data => {
   const t = text.replace(/\r\n/g, "\n");
 
-  // --- EIN: XX-XXXXXXX ---
-  let employer_ein: string | null = null;
+  // EIN
   const einMatch = t.match(/\b(\d{2}-\d{7})\b/);
-  if (einMatch) employer_ein = einMatch[1];
+  const employer_ein = einMatch ? einMatch[1] : null;
 
-  // --- Employer name ---
+  // Employer name: prefer company-like names near EIN and reject address/person lines
+  const isCompanyLike = (s: string) =>
+    /(LLC|INC|CORP|LTD|COMPANY|CO\b|GROUP|SERVICES|SOLUTIONS|HOLDINGS|ENTERPRISES)/i.test(s);
+  const normalizeSpaces = (s: string) => s.replace(/\s+/g, " ").trim();
+
   let employer_name = "";
-  // Look for text near "Employer's name" label or near the EIN
-  const empPatterns = [
-    /employer['']?s?\s+name[,\s]+address[^]*?\n\s*([A-Z][A-Za-z\s&.,'\-]{2,60}(?:LLC|Inc|Corp|Ltd|Company|Co|Services|Group|Solutions)?)/i,
-    /employer identification number[^]*?\n[^]*?\n\s*([A-Z][A-Za-z\s&.,'\-]{2,60}(?:LLC|Inc|Corp|Ltd|Company|Co|Services|Group|Solutions)?)/i,
-  ];
-  for (const pat of empPatterns) {
-    const m = t.match(pat);
-    if (m && m[1]) {
-      const name = m[1].replace(/\d{2}-\d{7}/, "").trim();
-      if (name.length > 2) { employer_name = name; break; }
+
+  // 0) Direct inline match (single-line text extraction case)
+  const inlineEmployer = t.match(/employer['’]?s?\s+name[^A-Z0-9]*([A-Z][A-Z0-9&.,'\-\s]{3,90}?(?:LLC|INC|CORP|LTD|COMPANY|CO|GROUP|SERVICES|SOLUTIONS|HOLDINGS|ENTERPRISES))/i);
+  if (inlineEmployer?.[1]) {
+    employer_name = normalizeSpaces(inlineEmployer[1]);
+  }
+
+  const upperLines = t
+    .split(/\r?\n/)
+    .map((l) => normalizeSpaces(l))
+    .filter(Boolean);
+
+  // 1) Strong match: all-caps business-like line
+  const strongCompany = upperLines.find(
+    (l) =>
+      l.length >= 4 &&
+      l.length <= 90 &&
+      isCompanyLike(l) &&
+      !/^\d+\s/.test(l) &&
+      !/,\s*[A-Z]{2}\s+\d{5}/.test(l)
+  );
+  if (strongCompany) employer_name = strongCompany;
+
+  // 2) If not found, look around EIN neighborhood
+  if (!employer_name && employer_ein) {
+    const idx = t.indexOf(employer_ein);
+    if (idx >= 0) {
+      const start = Math.max(0, idx - 250);
+      const end = Math.min(t.length, idx + 400);
+      const windowLines = t
+        .slice(start, end)
+        .split(/\r?\n/)
+        .map((l) => normalizeSpaces(l))
+        .filter(Boolean);
+
+      const candidate = windowLines.find(
+        (l) =>
+          l.length >= 4 &&
+          l.length <= 90 &&
+          !/\d{2}-\d{7}/.test(l) &&
+          !/^\d+\s/.test(l) &&
+          !/,\s*[A-Z]{2}\s+\d{5}/.test(l) &&
+          !/^(employee|employer|form|copy|department|omb|wage|tax|statement)/i.test(l)
+      );
+      if (candidate) employer_name = candidate;
     }
   }
-  // Fallback: find company-like names (all caps with LLC/Inc etc.)
-  if (!employer_name) {
-    const companyMatch = t.match(/\b([A-Z][A-Z\s&.,'\-]{3,50}(?:LLC|INC|CORP|LTD|COMPANY|CO|SERVICES|GROUP|SOLUTIONS))\b/);
-    if (companyMatch) employer_name = companyMatch[1].trim();
-  }
 
-  // --- Extract all dollar amounts (XX.XX format with at least 2 digits before decimal) ---
-  const amountRegex = /\b(\d{1,3}(?:,\d{3})*\.\d{2})\b/g;
-  const allAmounts: number[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = amountRegex.exec(t)) !== null) {
-    const val = parseAmount(m[1]);
-    if (val >= 1) allAmounts.push(val); // Ignore tiny values like 0.xx
-  }
+  // Parse decimal money tokens only
+  const moneyTokens = getMoneyValues(t);
 
-  // Deduplicate - W-2 PDFs repeat values across copies (Copy A, B, C, 2)
-  // Count occurrences of each amount
-  const freq: Record<string, number> = {};
-  allAmounts.forEach((a) => {
-    const key = a.toFixed(2);
-    freq[key] = (freq[key] || 0) + 1;
-  });
+  // Build frequency map (values usually repeated 2-4x because multiple W-2 copies)
+  const freq = new Map<number, number>();
+  for (const v of moneyTokens) freq.set(v, (freq.get(v) ?? 0) + 1);
 
-  // Get unique amounts sorted by value descending
-  const uniqueAmounts = [...new Set(allAmounts.map(a => a.toFixed(2)))]
-    .map(Number)
+  // Candidate values appearing multiple times are most trustworthy
+  const repeatedValues = [...freq.entries()]
+    .filter(([, c]) => c >= 2)
+    .map(([v]) => v)
     .sort((a, b) => b - a);
 
-  console.log("Unique amounts found:", uniqueAmounts);
-
-  // --- Try label-proximity extraction ---
-  // For each box, look for the label followed eventually by a dollar amount
-  const findNearLabel = (labels: RegExp[]): number => {
-    for (const label of labels) {
-      const match = label.exec(t);
-      if (!match) continue;
-      // Look ahead from the match position for the next dollar amount
-      const after = t.slice(match.index! + match[0].length, match.index! + match[0].length + 300);
-      const amMatch = after.match(/\b(\d{1,3}(?:,\d{3})*\.\d{2})\b/);
-      if (amMatch) {
-        const val = parseAmount(amMatch[1]);
-        if (val >= 1) return val;
+  // Ordered extraction anchor: after SSN we usually get Box1/2/3/4 then EIN then Box5/6 ...
+  const ssnIdx = t.search(/\b\d{3}-\d{2}-\d{4}\b/);
+  const orderedAfterSsn: number[] = [];
+  if (ssnIdx >= 0) {
+    const tail = t.slice(ssnIdx, Math.min(t.length, ssnIdx + 4000));
+    const tailNums = getMoneyValues(tail);
+    // collapse consecutive duplicates (same value repeated for copy A/B/C/2)
+    for (const n of tailNums) {
+      if (orderedAfterSsn.length === 0 || Math.abs(orderedAfterSsn[orderedAfterSsn.length - 1] - n) > 0.005) {
+        orderedAfterSsn.push(n);
       }
+      if (orderedAfterSsn.length >= 10) break;
     }
-    return 0;
+  }
+
+  // Label-aware helper: scan ALL label occurrences and pick the most plausible nearby amount
+  const pickNearLabel = (labelRegex: RegExp): number => {
+    const scoped = new RegExp(labelRegex.source, "gi");
+    const candidates: number[] = [];
+
+    let match: RegExpExecArray | null;
+    while ((match = scoped.exec(t)) !== null) {
+      const start = match.index;
+      const window = t.slice(start, Math.min(t.length, start + 450));
+      const nums = getMoneyValues(window);
+      if (nums.length) candidates.push(...nums.slice(0, 3));
+    }
+
+    if (!candidates.length) return 0;
+    // Prefer values repeated across copies
+    const repeatedHit = candidates.find((n) => (freq.get(n) ?? 0) >= 2);
+    return repeatedHit ?? candidates[0];
   };
 
-  let wages = findNearLabel([
-    /wages,?\s*tips,?\s*other\s*comp\w*/i,
-    /\b1\s+wages/i,
-  ]);
-  let fedWithheld = findNearLabel([
-    /federal\s+income\s+tax\s+withheld/i,
-  ]);
-  let ssWages = findNearLabel([
-    /social\s+security\s+wages/i,
-    /\b3\s+social\s+security\s+wages/i,
-  ]);
-  let ssWithheld = findNearLabel([
-    /social\s+security\s+tax\s+withheld/i,
-  ]);
-  let medicareWages = findNearLabel([
-    /medicare\s+wages\s+and\s+tips/i,
-  ]);
-  let medicareWithheld = findNearLabel([
-    /medicare\s+tax\s+withheld/i,
-  ]);
-  let stateWithheld = findNearLabel([
-    /state\s+income\s+tax\b/i,
-    /\b17\s+state\s+income\s+tax/i,
-  ]);
+  // First pass: label-based
+  let wages = pickNearLabel(/wages,?\s*tips,?\s*other\s*comp\w*/i);
+  let federal_tax_withheld = pickNearLabel(/federal\s+income\s+tax\s+withheld/i);
+  let social_security_withheld = pickNearLabel(/social\s+security\s+tax\s+withheld/i);
+  let medicare_withheld = pickNearLabel(/medicare\s+tax\s+withheld/i);
+  let state_tax_withheld = pickNearLabel(/\b17\s+state\s+income\s+tax|state\s+income\s+tax\b/i);
 
-  // --- If label-proximity failed, use heuristic mapping ---
-  // W-2 amounts follow a known pattern by magnitude:
-  // Wages ≈ SS wages ≈ Medicare wages (largest, roughly equal)
-  // Federal withheld (medium, ~10-25% of wages)
-  // SS withheld (~6.2% of SS wages)
-  // Medicare withheld (~1.45% of Medicare wages)
-  // State withheld (varies)
-  if (wages === 0 && uniqueAmounts.length >= 3) {
-    // Group amounts by approximate magnitude
-    const largest = uniqueAmounts[0];
+  // Second pass: ordered extraction from SSN anchor
+  // Common order: [box1, box2, box3, box4, box5, box6, box16, box17]
+  if (orderedAfterSsn.length >= 2) {
+    const b1 = orderedAfterSsn[0] ?? 0;
+    const b2 = orderedAfterSsn[1] ?? 0;
+    const b4 = orderedAfterSsn[3] ?? 0;
+    const b6 = orderedAfterSsn[5] ?? 0;
+    const b17 = orderedAfterSsn[7] ?? orderedAfterSsn[6] ?? 0;
 
-    // Wages group: amounts within 15% of the largest
-    const wageGroup = uniqueAmounts.filter(a => a >= largest * 0.85);
-
-    // Find the most common large amount - that's likely wages/SS wages/Medicare wages
-    // The others are withholdings
-    const nonWage = uniqueAmounts.filter(a => a < largest * 0.85);
-
-    wages = largest;
-
-    // Federal withheld: largest of the non-wage amounts, typically 10-25% of wages
-    const fedCandidates = nonWage.filter(a => a > largest * 0.05 && a < largest * 0.35);
-    if (fedCandidates.length > 0) fedWithheld = fedCandidates[0];
-
-    // SS withheld: ~6.2% of wages (look for amount close to wages * 0.062)
-    const expectedSS = largest * 0.062;
-    const ssCandidates = nonWage.filter(a => Math.abs(a - expectedSS) / expectedSS < 0.15);
-    if (ssCandidates.length > 0) ssWithheld = ssCandidates[0];
-
-    // Medicare withheld: ~1.45% of wages
-    const expectedMed = largest * 0.0145;
-    const medCandidates = nonWage.filter(a => Math.abs(a - expectedMed) / expectedMed < 0.25);
-    if (medCandidates.length > 0) medicareWithheld = medCandidates[0];
-
-    // State withheld: remaining medium amount
-    const assigned = new Set([wages, fedWithheld, ssWithheld, medicareWithheld].filter(Boolean).map(v => v.toFixed(2)));
-    // Also exclude amounts that match wage group
-    wageGroup.forEach(a => assigned.add(a.toFixed(2)));
-    const remaining = nonWage.filter(a => !assigned.has(a.toFixed(2)));
-    if (remaining.length > 0) stateWithheld = remaining[0];
+    // If order looks plausible, trust it over noisy label matches
+    const plausibleFed = b1 > 0 && b2 > b1 * 0.02 && b2 < b1 * 0.45;
+    if (plausibleFed) {
+      wages = b1;
+      federal_tax_withheld = b2;
+      if (b4 > 0) social_security_withheld = b4;
+      if (b6 > 0) medicare_withheld = b6;
+      if (b17 > 0) state_tax_withheld = b17;
+    } else {
+      if (!wages) wages = b1;
+      if (!federal_tax_withheld) federal_tax_withheld = b2;
+      if (!social_security_withheld && b4 > 0) social_security_withheld = b4;
+      if (!medicare_withheld && b6 > 0) medicare_withheld = b6;
+      if (!state_tax_withheld && b17 > 0) state_tax_withheld = b17;
+    }
   }
 
-  // --- State ---
+  // Hard fallback if labels/anchor still fail
+  if (!wages && repeatedValues.length > 0) {
+    wages = repeatedValues[0];
+  }
+
+  // Third pass: ratio-based sanity fallback
+  if (wages > 0) {
+    if (!social_security_withheld) {
+      const expected = wages * 0.062;
+      const cand = repeatedValues.find((v) => Math.abs(v - expected) / expected < 0.2);
+      if (cand) social_security_withheld = cand;
+    }
+    if (!medicare_withheld) {
+      const expected = wages * 0.0145;
+      const cand = repeatedValues.find((v) => Math.abs(v - expected) / expected < 0.3);
+      if (cand) medicare_withheld = cand;
+    }
+    if (!federal_tax_withheld) {
+      const cand = repeatedValues.find((v) => v > wages * 0.03 && v < wages * 0.4);
+      if (cand) federal_tax_withheld = cand;
+    }
+    if (!state_tax_withheld) {
+      const used = new Set([wages, federal_tax_withheld, social_security_withheld, medicare_withheld].map((v) => v?.toFixed(2)));
+      const cand = repeatedValues.find((v) => !used.has(v.toFixed(2)) && v < wages * 0.2);
+      if (cand) state_tax_withheld = cand;
+    }
+  }
+
+  // Fourth pass: guardrail correction for common W-2 misreads
+  // If wages/federal/SS look impossible, rebuild from repeated value patterns.
+  const suspicious =
+    wages <= 0 ||
+    federal_tax_withheld >= wages * 0.5 ||
+    social_security_withheld >= wages * 0.2;
+
+  if (suspicious && repeatedValues.length > 0) {
+    const sorted = [...repeatedValues].sort((a, b) => b - a);
+    const ssWages = sorted[0] ?? wages;
+
+    // Box 1 wages is often slightly lower than SS wages (box 3) due pre-tax deductions
+    const nearSs = sorted.find((v) => v < ssWages && v >= ssWages * 0.75) ?? ssWages;
+    wages = nearSs;
+
+    const fed = sorted.find((v) => v > wages * 0.03 && v < wages * 0.4);
+    if (fed) federal_tax_withheld = fed;
+
+    const ssExpected = ssWages * 0.062;
+    const ssCand = sorted.find((v) => Math.abs(v - ssExpected) / ssExpected < 0.2);
+    if (ssCand) social_security_withheld = ssCand;
+
+    const medExpected = ssWages * 0.0145;
+    const medCand = sorted.find((v) => Math.abs(v - medExpected) / medExpected < 0.35);
+    if (medCand) medicare_withheld = medCand;
+
+    const used = new Set([wages, federal_tax_withheld, social_security_withheld, medicare_withheld].map((v) => v.toFixed(2)));
+    const stCand = sorted.find((v) => !used.has(v.toFixed(2)) && v < wages * 0.2);
+    if (stCand) state_tax_withheld = stCand;
+  }
+
+  // State: prefer state in employer address line near EIN, fallback to any address state
   let state: string | null = null;
-  // Look near "State" or "Employer's state ID" labels
-  const stateSection = t.match(/(?:15\s+state|employer['']?s?\s+state\s+id)[^]*?(\b[A-Z]{2}\b)/i);
-  if (stateSection) {
-    const candidate = stateSection[1].toUpperCase();
-    if (US_STATES.includes(candidate)) state = candidate;
+  if (employer_ein) {
+    const idx = t.indexOf(employer_ein);
+    if (idx >= 0) {
+      const window = t.slice(Math.max(0, idx - 200), Math.min(t.length, idx + 600));
+      const st = window.match(/,\s*([A-Z]{2})\s+\d{5}/);
+      if (st && US_STATES.includes(st[1])) state = st[1];
+    }
   }
-  // Fallback: look for state abbreviations in address lines (2-letter followed by ZIP)
   if (!state) {
-    const addrState = t.match(/,\s*([A-Z]{2})\s+\d{5}/);
-    if (addrState && US_STATES.includes(addrState[1])) state = addrState[1];
+    const anyAddrState = t.match(/,\s*([A-Z]{2})\s+\d{5}/);
+    if (anyAddrState && US_STATES.includes(anyAddrState[1])) state = anyAddrState[1];
   }
 
   return {
     employer_name: employer_name || "Unknown Employer",
     employer_ein,
     wages,
-    federal_tax_withheld: fedWithheld,
-    social_security_withheld: ssWithheld,
-    medicare_withheld: medicareWithheld,
-    state_tax_withheld: stateWithheld,
+    federal_tax_withheld,
+    social_security_withheld,
+    medicare_withheld,
+    state_tax_withheld,
     state,
   };
 };
