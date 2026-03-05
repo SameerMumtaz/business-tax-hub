@@ -10,7 +10,7 @@ export type ExpenseCategory =
   | "Equipment"
   | "Rent"
   | "Payroll"
-  | "Vehicle & Gas"
+  | "Fuel"
   | "Vehicle Maintenance"
   | "Vehicle Payment"
   | "Contract Labor"
@@ -37,7 +37,7 @@ export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   "Equipment",
   "Rent",
   "Payroll",
-  "Vehicle & Gas",
+  "Fuel",
   "Vehicle Maintenance",
   "Vehicle Payment",
   "Contract Labor",

@@ -33,7 +33,7 @@ const QUARTERLY_DATES = [
 
 const SCHEDULE_C_LINES: { line: string; label: string; key: string }[] = [
   { line: "8", label: "Advertising", key: "Marketing" },
-  { line: "9", label: "Car and truck expenses", key: "Vehicle & Gas" },
+  { line: "9", label: "Car and truck expenses", key: "Fuel" },
   { line: "9", label: "Vehicle repairs and maintenance", key: "Vehicle Maintenance" },
   { line: "10", label: "Commissions and fees", key: "Commissions & Fees" },
   { line: "11", label: "Contract labor", key: "Contract Labor" },

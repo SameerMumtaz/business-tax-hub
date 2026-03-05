@@ -263,7 +263,7 @@ export default function VehiclesPage() {
   // Vehicle expenses = linked expenses that are NOT payments or gas
   const nonPaymentLinked = linkedExpenses.filter((le: any) => {
     const cat = le.expenses?.category;
-    return cat !== "Vehicle Payment" && cat !== "Vehicle & Gas";
+    return cat !== "Vehicle Payment" && cat !== "Fuel";
   });
   const linkedExpenseTotal = nonPaymentLinked.reduce((s: number, le: any) => s + Number(le.expenses?.amount ?? 0), 0);
 
@@ -524,13 +524,12 @@ export default function VehiclesPage() {
                         }}
                       />
                     </div>
-                    <div>
-                      <Label className="text-xs">§179 Deduction</Label>
-                      <Input
-                        type="number" min={0} className="w-28 h-8 text-xs"
-                        value={selected.section_179_amount || ""}
-                        onChange={(e) => {
-                          updateVehicle.mutate({ id: selected.id, section_179_amount: Number(e.target.value) } as any);
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs whitespace-nowrap">§179 (full Year 1)</Label>
+                      <Switch
+                        checked={selected.section_179_amount > 0}
+                        onCheckedChange={(checked) => {
+                          updateVehicle.mutate({ id: selected.id, section_179_amount: checked ? selected.purchase_price : 0 } as any);
                         }}
                       />
                     </div>
@@ -699,7 +698,16 @@ export default function VehiclesPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div><Label>§179 Deduction</Label><Input type="number" min={0} value={form.section_179_amount || ""} onChange={(e) => setField("section_179_amount", Number(e.target.value))} /></div>
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm whitespace-nowrap">Deduct full cost in Year 1 (§179)?</Label>
+                  <Switch
+                    checked={form.section_179_amount > 0}
+                    onCheckedChange={(checked) => setField("section_179_amount", checked ? form.purchase_price : 0)}
+                  />
+                  {form.section_179_amount > 0 && (
+                    <span className="text-xs text-muted-foreground font-mono">{formatCurrency(form.section_179_amount)}</span>
+                  )}
+                </div>
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-4">
