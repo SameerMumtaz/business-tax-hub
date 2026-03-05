@@ -85,7 +85,8 @@ export function useCrewCheckins() {
     jobId: string,
     jobSiteId: string,
     lat: number,
-    lng: number
+    lng: number,
+    expectedHours?: number | null
   ) => {
     if (!teamMemberId) {
       toast.error("Team member not found");
@@ -101,7 +102,8 @@ export function useCrewCheckins() {
         check_in_lat: lat,
         check_in_lng: lng,
         status: "checked_in",
-      })
+        expected_hours: expectedHours ?? null,
+      } as any)
       .select()
       .single();
 
@@ -115,7 +117,7 @@ export function useCrewCheckins() {
     return data;
   };
 
-  const checkOut = async (checkinId: string, lat: number, lng: number) => {
+  const checkOut = async (checkinId: string, lat: number, lng: number, overtimeNotes?: string) => {
     const checkin = checkins.find((c) => c.id === checkinId);
     if (!checkin) return;
 
@@ -157,7 +159,8 @@ export function useCrewCheckins() {
         total_hours: roundedHours,
         status: "checked_out",
         flag_reason: flagReason,
-      })
+        notes: overtimeNotes || null,
+      } as any)
       .eq("id", checkinId);
 
     if (error) {

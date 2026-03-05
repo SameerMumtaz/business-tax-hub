@@ -20,6 +20,30 @@ export function useGeofenceMonitor({ activeCheckin, jobSite, onAutoCheckout }: U
   const checkGeofence = useCallback(async () => {
     if (!activeCheckin || !jobSite?.latitude || !jobSite?.longitude) return;
 
+    // Check if expected hours cap exceeded (auto-flag but don't auto-checkout — let user explain)
+    const expectedHours = (activeCheckin as any).expected_hours;
+    if (expectedHours && expectedHours > 0) {
+      const elapsed = (Date.now() - new Date(activeCheckin.check_in_time).getTime()) / (1000 * 60 * 60);
+      // If 2x the expected hours have passed with no checkout, force auto-checkout
+      if (elapsed > expectedHours * 2) {
+        toast.error("Shift exceeded 2× scheduled duration — auto-checking out.");
+        const now = new Date();
+        const totalHours = Math.round(((now.getTime() - new Date(activeCheckin.check_in_time).getTime()) / (1000 * 60 * 60)) * 100) / 100;
+        await supabase
+          .from("crew_checkins")
+          .update({
+            check_out_time: now.toISOString(),
+            total_hours: totalHours,
+            status: "checked_out",
+            flag_reason: `Auto-checkout: exceeded 2× scheduled duration (${expectedHours}h scheduled, ${totalHours}h elapsed)`,
+          } as any)
+          .eq("id", activeCheckin.id);
+        missedPingsRef.current = 0;
+        onAutoCheckout();
+        return;
+      }
+    }
+
     try {
       const pos = await getCurrentPosition();
       const { latitude: lat, longitude: lng } = pos.coords;
@@ -33,7 +57,6 @@ export function useGeofenceMonitor({ activeCheckin, jobSite, onAutoCheckout }: U
         const dist = Math.round(haversineDistance(lat, lng, jobSite.latitude, jobSite.longitude));
 
         if (missedPingsRef.current >= MAX_MISSED_PINGS) {
-          // Auto-checkout and flag
           toast.warning("You've left the job site — auto-checking out.");
           
           const checkOutTime = new Date();
@@ -51,7 +74,7 @@ export function useGeofenceMonitor({ activeCheckin, jobSite, onAutoCheckout }: U
               total_hours: totalHours,
               status: "checked_out",
               flag_reason: `Auto-checkout: left geofence (${dist}m away, ${MAX_MISSED_PINGS} consecutive pings)`,
-            })
+            } as any)
             .eq("id", activeCheckin.id);
 
           missedPingsRef.current = 0;
@@ -63,7 +86,6 @@ export function useGeofenceMonitor({ activeCheckin, jobSite, onAutoCheckout }: U
         }
       }
     } catch (err) {
-      // GPS unavailable — don't penalize, just log
       console.warn("Geofence ping failed:", err);
     }
   }, [activeCheckin, jobSite, onAutoCheckout]);
