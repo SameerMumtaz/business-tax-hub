@@ -66,25 +66,64 @@ export default function PersonalImportPage() {
       pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
       const buf = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-      let fullText = "";
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const tc = await page.getTextContent();
-        fullText += tc.items.map((it: any) => ("str" in it ? it.str : "")).join(" ") + "\n";
+      const numPages = Math.min(pdf.numPages, 50);
+      const pageTexts: string[] = [];
+      for (let p = 1; p <= numPages; p++) {
+        const page = await pdf.getPage(p);
+        const content = await page.getTextContent();
+        // Reconstruct lines using Y-coordinate changes (same as business import)
+        const lines: string[] = [];
+        let lastY: number | null = null;
+        for (const item of content.items) {
+          if ("str" in item && item.str) {
+            const y = Math.round((item as any).transform?.[5] ?? 0);
+            if (lastY !== null && Math.abs(y - lastY) > 5) lines.push("\n");
+            lines.push(item.str + " ");
+            lastY = y;
+          }
+        }
+        pageTexts.push(lines.join(""));
+      }
+      const fullText = pageTexts.join("\n\n--- PAGE BREAK ---\n\n");
+
+      // Chunk large texts like business import does
+      const CHUNK_SIZE = 50000;
+      const textChunks: string[] = [];
+      if (fullText.length <= CHUNK_SIZE) {
+        textChunks.push(fullText);
+      } else {
+        let current = "";
+        for (const pt of pageTexts) {
+          if (current.length + pt.length > CHUNK_SIZE && current.length > 0) {
+            textChunks.push(current);
+            current = "";
+          }
+          current += pt + "\n\n--- PAGE BREAK ---\n\n";
+        }
+        if (current.trim()) textChunks.push(current);
       }
 
-      const { data, error } = await supabase.functions.invoke("parse-pdf", {
-        body: { text: fullText },
-      });
-      if (error) throw error;
+      const allTx: any[] = [];
+      for (const chunk of textChunks) {
+        const { data, error } = await supabase.functions.invoke("parse-pdf", {
+          body: { text: chunk },
+        });
+        if (error) throw error;
+        if (data?.transactions?.length) allTx.push(...data.transactions);
+      }
 
-      const parsed: ReviewTx[] = (data.transactions || []).map((t: any, i: number) => {
+      if (allTx.length === 0) {
+        toast.error("No transactions found in PDF");
+        return;
+      }
+
+      const parsed: ReviewTx[] = allTx.map((t: any, i: number) => {
         const cat = autoCategorize(t.description);
         return {
           id: `imp-${i}-${Date.now()}`,
           date: t.date,
           description: t.description,
-          amount: t.amount,
+          amount: Math.abs(t.amount),
           type: t.type as "income" | "expense",
           category: cat,
           include: t.type === "expense",
