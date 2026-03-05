@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Pencil, ChevronRight, Mail, Phone, MapPin, CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import ClientJobsPanel from "@/components/client/ClientJobsPanel";
 import { toast } from "sonner";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -234,6 +235,9 @@ export default function ClientsPage() {
                       ) : (
                         <div className="p-8 text-center text-muted-foreground">No invoices for this client yet.</div>
                       )}
+                    </div>
+                    <div className="rounded-lg border bg-card p-4">
+                      <ClientJobsPanel client={selectedClient} />
                     </div>
                   </div>
                 ) : (

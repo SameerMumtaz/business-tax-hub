@@ -39,24 +39,6 @@ export interface Job {
   updated_at: string;
 }
 
-export interface Job {
-  id: string;
-  title: string;
-  description: string | null;
-  site_id: string;
-  start_date: string;
-  end_date: string | null;
-  start_time: string | null;
-  estimated_hours: number | null;
-  status: string;
-  job_type: string;
-  recurring_interval: string | null;
-  recurring_end_date: string | null;
-  invoice_id: string | null;
-  user_id: string;
-  created_at: string;
-  updated_at: string;
-}
 
 export interface JobAssignment {
   id: string;
