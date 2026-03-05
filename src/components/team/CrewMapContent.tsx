@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useCrewCheckins } from "@/hooks/useCrewCheckins";
@@ -50,6 +50,23 @@ function FitBounds({ points }: { points: [number, number][] }) {
     }
   }, [points, map]);
   return null;
+}
+
+function LiveElapsed({ since }: { since: string }) {
+  const [elapsed, setElapsed] = useState("");
+  useEffect(() => {
+    const update = () => {
+      const diff = Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 1000));
+      const h = Math.floor(diff / 3600);
+      const m = Math.floor((diff % 3600) / 60);
+      const s = diff % 60;
+      setElapsed(`${h}h ${m.toString().padStart(2, "0")}m ${s.toString().padStart(2, "0")}s`);
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [since]);
+  return <span className="font-mono text-xs font-semibold">{elapsed}</span>;
 }
 
 export default function CrewMapContent() {
@@ -198,6 +215,7 @@ export default function CrewMapContent() {
                           <p className="text-xs text-muted-foreground">
                             Checked in {new Date(c.check_in_time).toLocaleTimeString()}
                           </p>
+                          <p className="text-xs">⏱ <LiveElapsed since={c.check_in_time} /></p>
                           <p className="text-xs font-medium">🟢 On-Site</p>
                         </div>
                       </Popup>
