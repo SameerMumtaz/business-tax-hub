@@ -136,33 +136,43 @@ const extractSpatial = (items: TextItem[], pageWidth: number, pageHeight: number
 
   // Helper: find the best money value near a label position
   // Look to the right on the same line, or below in the same column
+  // excludePositions: skip values already claimed by other boxes
+  const claimedPositions = new Set<string>();
+  
   const findValueNear = (labelX: number, labelY: number, direction: "right" | "below" | "both" = "both"): number => {
-    const candidates: { val: number; dist: number }[] = [];
+    const candidates: { val: number; dist: number; key: string }[] = [];
 
     for (const it of normalized) {
       if (!isDollarAmount(it.text)) continue;
       const val = parseAmount(it.text.replace(/[$,]/g, ""));
       if (val <= 0) continue;
 
+      const posKey = `${it.xPct.toFixed(4)},${it.yPct.toFixed(4)}`;
+      if (claimedPositions.has(posKey)) continue;
+
       const dx = it.xPct - labelX;
       const dy = it.yPct - labelY;
 
       if (direction === "right" || direction === "both") {
-        // Same line (within 2% vertically), to the right
-        if (Math.abs(dy) < 0.02 && dx > -0.02 && dx < 0.5) {
-          candidates.push({ val, dist: Math.abs(dx) + Math.abs(dy) * 5 });
+        // Same line (within 1.5% vertically), to the right
+        if (Math.abs(dy) < 0.015 && dx > -0.02 && dx < 0.5) {
+          candidates.push({ val, dist: Math.abs(dx) + Math.abs(dy) * 10, key: posKey });
         }
       }
       if (direction === "below" || direction === "both") {
-        // Below label (within 8% horizontally), close vertically
-        if (Math.abs(dx) < 0.08 && dy > 0 && dy < 0.08) {
-          candidates.push({ val, dist: dy + Math.abs(dx) * 3 });
+        // Below label (within 6% horizontally), very close vertically (within 3%)
+        if (Math.abs(dx) < 0.06 && dy > 0 && dy < 0.03) {
+          candidates.push({ val, dist: dy + Math.abs(dx) * 5, key: posKey });
         }
       }
     }
 
     candidates.sort((a, b) => a.dist - b.dist);
-    return candidates[0]?.val ?? 0;
+    if (candidates.length > 0) {
+      claimedPositions.add(candidates[0].key);
+      return candidates[0].val;
+    }
+    return 0;
   };
 
   // Helper: find a text string near a label position
