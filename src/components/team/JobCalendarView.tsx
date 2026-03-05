@@ -5,6 +5,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight, Clock, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useEffect, useState as useReactState } from "react";
+
+function useIsTablet() {
+  const [isTablet, setIsTablet] = useReactState(false);
+  useEffect(() => {
+    const check = () => setIsTablet(window.innerWidth >= 768 && window.innerWidth < 1024);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  return isTablet;
+}
 
 interface Props {
   jobs: Job[];
@@ -53,6 +65,8 @@ function toDateStr(y: number, m: number, d: number) {
 
 export default function JobCalendarView({ jobs, sites, onJobClick }: Props) {
   const isMobile = useIsMobile();
+  const isTablet = useIsTablet();
+  const useCompact = isMobile || isTablet;
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -142,7 +156,7 @@ export default function JobCalendarView({ jobs, sites, onJobClick }: Props) {
             const isToday = dateStr === todayStr;
             const isSelected = dateStr === selectedDate;
 
-            if (isMobile) {
+            if (useCompact) {
               // Compact mobile cell: just day number + dot indicators
               const hasJobs = dayJobs.length > 0;
               return (
@@ -150,7 +164,7 @@ export default function JobCalendarView({ jobs, sites, onJobClick }: Props) {
                   key={dateStr}
                   onClick={() => setSelectedDate(isSelected ? null : dateStr)}
                   className={cn(
-                    "border-r border-b border-border min-h-[44px] flex flex-col items-center justify-center gap-0.5 transition-colors",
+                    "border-r border-b border-border min-h-[44px] md:min-h-[56px] flex flex-col items-center justify-center gap-0.5 md:gap-1 transition-colors",
                     isSelected && "bg-primary/10",
                     !isSelected && "active:bg-muted/60"
                   )}
@@ -216,8 +230,8 @@ export default function JobCalendarView({ jobs, sites, onJobClick }: Props) {
           })}
         </div>
 
-        {/* Mobile: selected day agenda */}
-        {isMobile && selectedDate && (
+        {/* Compact: selected day agenda */}
+        {useCompact && selectedDate && (
           <div className="mt-3 space-y-2">
             <h4 className="text-sm font-semibold">
               {parseLocalDate(selectedDate).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
