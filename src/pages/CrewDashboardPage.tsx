@@ -106,12 +106,10 @@ export default function CrewDashboardPage() {
   }, [user, teamMemberId]);
 
   const handleCheckIn = async (job: AssignedJob) => {
-    // Only allow check-in on the scheduled date
-    const today = new Date().toDateString();
-    const jobStart = new Date(job.start_date).toDateString();
-    const jobEnd = job.end_date ? new Date(job.end_date).toDateString() : jobStart;
-    const startMs = new Date(job.start_date).setHours(0,0,0,0);
-    const endMs = job.end_date ? new Date(job.end_date).setHours(23,59,59,999) : new Date(job.start_date).setHours(23,59,59,999);
+    // Only allow check-in on the scheduled date — parse as local to avoid UTC offset issues
+    const parseLocal = (s: string) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+    const startMs = parseLocal(job.start_date).setHours(0,0,0,0);
+    const endMs = job.end_date ? parseLocal(job.end_date).setHours(23,59,59,999) : parseLocal(job.start_date).setHours(23,59,59,999);
     const nowMs = Date.now();
     if (nowMs < startMs || nowMs > endMs) {
       toast.error("You can only check in on the scheduled date for this job.");

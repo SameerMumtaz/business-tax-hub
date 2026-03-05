@@ -54,10 +54,16 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
     return null;
   };
 
+  const parseLocalDate = (dateStr: string) => {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  };
+
   const isJobToday = (job: AssignedJob) => {
     const now = Date.now();
-    const startMs = new Date(job.start_date).setHours(0,0,0,0);
-    const endMs = job.end_date ? new Date(job.end_date).setHours(23,59,59,999) : new Date(job.start_date).setHours(23,59,59,999);
+    const startMs = parseLocalDate(job.start_date).setHours(0,0,0,0);
+    const endDate = job.end_date ? parseLocalDate(job.end_date) : parseLocalDate(job.start_date);
+    const endMs = endDate.setHours(23,59,59,999);
     return now >= startMs && now <= endMs;
   };
 
