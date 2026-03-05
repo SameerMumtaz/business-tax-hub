@@ -135,47 +135,47 @@ export default function AppSidebar() {
     <NavLink
       key={to + label}
       to={to}
-      className={`flex items-center gap-3 ${indent ? "pl-9 pr-3" : "px-3"} py-2 rounded-md text-sm font-medium transition-colors ${
+      className={`flex items-center gap-3 ${indent ? "pl-10 pr-3" : "px-3"} py-2.5 rounded-lg text-sm font-medium transition-colors ${
         active
           ? "bg-sidebar-accent text-sidebar-primary"
-          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
       }`}
     >
-      <Icon className="h-4 w-4" />
+      <Icon className="h-4 w-4 shrink-0" />
       {label}
     </NavLink>
   );
 
   return (
     <aside className="w-64 h-screen bg-sidebar border-r border-sidebar-border flex flex-col sticky top-0">
-      <div className="p-6 border-b border-sidebar-border">
-        <div className="flex items-center gap-2">
+      <div className="p-5 border-b border-sidebar-border">
+        <div className="flex items-center gap-2.5">
           <Receipt className="h-6 w-6 text-sidebar-primary" />
           <span className="text-lg font-semibold text-sidebar-accent-foreground tracking-tight">
             Bookie
           </span>
         </div>
-        <p className="text-xs text-sidebar-foreground mt-1">All-in-One Business Management</p>
+        <p className="text-xs text-sidebar-foreground mt-1.5 opacity-70">All-in-One Business Management</p>
       </div>
 
-      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto flex flex-col justify-center">
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto flex flex-col justify-center">
         {links.map((item) => {
           if (item.children) {
             const groupOpen = openGroups[item.to] ?? false;
             const groupActive = isGroupActive(item);
             return (
-              <div key={item.to}>
+              <div key={item.to} className="space-y-0.5">
                 <button
                   onClick={() => toggleGroup(item.to)}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors w-full ${
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors w-full ${
                     groupActive
                       ? "bg-sidebar-accent text-sidebar-primary"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
                   }`}
                 >
-                  <item.icon className="h-4 w-4" />
+                  <item.icon className="h-4 w-4 shrink-0" />
                   {item.label}
-                  <ChevronDown className={`h-3.5 w-3.5 ml-auto transition-transform ${groupOpen ? "rotate-180" : ""}`} />
+                  <ChevronDown className={`h-3.5 w-3.5 ml-auto transition-transform duration-200 ${groupOpen ? "rotate-180" : ""}`} />
                 </button>
                 {groupOpen && (
                   <div className="mt-0.5 space-y-0.5">
@@ -192,21 +192,21 @@ export default function AppSidebar() {
         })}
       </nav>
 
-      <div className="p-4 border-t border-sidebar-border space-y-3">
+      <div className="p-4 border-t border-sidebar-border space-y-2.5">
         <AccountSwitcher current="business" />
         {user && (
-          <p className="text-xs text-sidebar-foreground truncate">{user.email}</p>
+          <p className="text-xs text-sidebar-foreground truncate opacity-70">{user.email}</p>
         )}
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-start text-sidebar-foreground hover:text-sidebar-accent-foreground"
+          className="w-full justify-start text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/60 rounded-lg"
           onClick={signOut}
         >
           <LogOut className="h-4 w-4 mr-2" />
           Sign Out
         </Button>
-        <p className="text-xs text-sidebar-foreground">Tax Year 2026</p>
+        <p className="text-[11px] text-sidebar-foreground opacity-50">Tax Year 2026</p>
       </div>
     </aside>
   );
