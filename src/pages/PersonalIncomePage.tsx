@@ -44,13 +44,43 @@ export default function PersonalIncomePage() {
       pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
       const buf = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-      let fullText = "";
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const tc = await page.getTextContent();
-        fullText += tc.items.map((it: any) => ("str" in it ? it.str : "")).join(" ") + "\n";
+
+      // Extract text items WITH position data from first page only (W-2 is single page)
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 1.0 });
+      const tc = await page.getTextContent();
+      
+      // Also try to extract form fields (many payroll W-2 PDFs are fillable)
+      let formFields: Record<string, string> = {};
+      try {
+        const annotations = await page.getAnnotations();
+        for (const ann of annotations) {
+          if (ann.subtype === "Widget" && ann.fieldName && ann.fieldValue) {
+            formFields[ann.fieldName] = String(ann.fieldValue);
+          }
+        }
+      } catch {
+        // Form field extraction not supported or failed, continue with text
       }
-      const { data, error } = await supabase.functions.invoke("parse-w2", { body: { text: fullText } });
+
+      const items = tc.items
+        .filter((it: any) => "str" in it && it.str.trim())
+        .map((it: any) => ({
+          text: it.str.trim(),
+          // transform[4] = x position, transform[5] = y position (from bottom-left)
+          x: Math.round(it.transform[4]),
+          y: Math.round(viewport.height - it.transform[5]), // flip to top-left origin
+          width: Math.round(it.width ?? 0),
+        }));
+
+      const { data, error } = await supabase.functions.invoke("parse-w2", {
+        body: {
+          items,
+          pageWidth: Math.round(viewport.width),
+          pageHeight: Math.round(viewport.height),
+          formFields: Object.keys(formFields).length > 0 ? formFields : null,
+        },
+      });
       if (error) throw error;
       if (data?.w2) {
         setForm({
