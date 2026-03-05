@@ -1,7 +1,9 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import JobBudgetFields from "@/components/job/JobBudgetFields";
+import CrewAssignmentPanel from "@/components/job/CrewAssignmentPanel";
 import { useJobs, type Job, type JobSite } from "@/hooks/useJobs";
 import { useClients } from "@/hooks/useClients";
+import { useAuth } from "@/hooks/useAuth";
 import JobCalendarView from "@/components/team/JobCalendarView";
 import { useJobPhotos } from "@/hooks/useJobPhotos";
 import { Button } from "@/components/ui/button";
@@ -16,12 +18,16 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, MapPin, Briefcase, Loader2, Pencil, Trash2, Camera, Calendar, UserCheck } from "lucide-react";
+import { Plus, MapPin, Briefcase, Loader2, Pencil, Trash2, Camera, Calendar, UserCheck, Clock } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 
 export default function JobSchedulerContent() {
-  const { sites, jobs, loading, createSite, updateSite, deleteSite, createJob, updateJob, deleteJob } = useJobs();
+  const { user } = useAuth();
+  const { sites, jobs, assignments, loading, createSite, updateSite, deleteSite, createJob, updateJob, deleteJob, assignWorker, removeAssignment, refetch } = useJobs();
   const { data: clients = [] } = useClients();
   const [tab, setTab] = useState("calendar");
 
@@ -88,6 +94,46 @@ export default function JobSchedulerContent() {
 
   // Photos dialog state
   const [photosJobId, setPhotosJobId] = useState<string | null>(null);
+
+  // Fetch team members for crew assignment
+  const { data: teamMembers = [] } = useQuery({
+    queryKey: ["team-members-for-assign", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data } = await supabase
+        .from("team_members")
+        .select("id, name, pay_rate, worker_type")
+        .eq("business_user_id", user.id)
+        .in("status", ["active", "invited"]);
+      return (data || []).map((m) => ({
+        id: m.id,
+        name: m.name,
+        pay_rate: m.pay_rate,
+        worker_type: m.worker_type,
+      }));
+    },
+    enabled: !!user,
+  });
+
+  // Helper: get labor summary for a job
+  const getLaborSummary = useCallback((job: Job) => {
+    const jobAssigns = assignments.filter((a) => a.job_id === job.id);
+    const assignedHrs = jobAssigns.reduce((s, a) => s + (a.assigned_hours || 0), 0);
+    const assignedDollars = jobAssigns.reduce((s, a) => {
+      const member = teamMembers.find((m) => m.id === a.worker_id);
+      return s + (a.assigned_hours || 0) * (member?.pay_rate || 0);
+    }, 0);
+    const budgetHrs = job.labor_budget_type === "hours" ? job.labor_budget_hours : 0;
+    const budgetDollars = job.labor_budget_type === "hours"
+      ? job.labor_budget_hours * job.labor_budget_rate
+      : job.labor_budget_amount;
+    const isHoursMode = job.labor_budget_type === "hours";
+    const hasBudget = budgetDollars > 0 || budgetHrs > 0;
+    const isOver = isHoursMode
+      ? assignedHrs > budgetHrs && budgetHrs > 0
+      : assignedDollars > budgetDollars && budgetDollars > 0;
+    return { assignedHrs, assignedDollars, budgetHrs, budgetDollars, isHoursMode, hasBudget, isOver, crewCount: jobAssigns.length };
+  }, [assignments, teamMembers]);
 
   const geocodeAddress = useCallback(async (address: string, city: string, state: string, setLat: (v: string) => void, setLng: (v: string) => void) => {
     const query = [address, city, state].filter(Boolean).join(", ");
@@ -442,6 +488,19 @@ export default function JobSchedulerContent() {
               onLaborBudgetTypeChange={setEditJobLaborType} onLaborBudgetAmountChange={setEditJobLaborAmount}
               onLaborBudgetHoursChange={setEditJobLaborHours} onLaborBudgetRateChange={setEditJobLaborRate}
             />
+            {editJob && (
+              <CrewAssignmentPanel
+                job={editJob}
+                assignments={assignments}
+                teamMembers={teamMembers}
+                onAssign={async (wId, wName, wType, hrs) => {
+                  await assignWorker(editJob.id, wId, wName, wType, hrs);
+                }}
+                onRemove={async (aId) => {
+                  await removeAssignment(aId);
+                }}
+              />
+            )}
             <Button className="w-full" onClick={handleUpdateJob}>Save Changes</Button>
           </div>
         </DialogContent>
@@ -454,7 +513,7 @@ export default function JobSchedulerContent() {
           <TabsTrigger value="sites">Sites</TabsTrigger>
         </TabsList>
         <TabsContent value="calendar" className="mt-4">
-          <JobCalendarView jobs={jobs} sites={sites} onJobClick={(j) => openEditJob(j)} />
+          <JobCalendarView jobs={jobs} sites={sites} assignments={assignments} teamMembers={teamMembers} onJobClick={(j) => openEditJob(j)} />
         </TabsContent>
         <TabsContent value="jobs" className="mt-4">
           <Card>
@@ -471,8 +530,10 @@ export default function JobSchedulerContent() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Title</TableHead>
-                      <TableHead>Description</TableHead>
                       <TableHead>Site</TableHead>
+                      <TableHead className="text-right">Price</TableHead>
+                      <TableHead>Labor Budget</TableHead>
+                      <TableHead>Crew</TableHead>
                       <TableHead>Type</TableHead>
                       <TableHead>Start</TableHead>
                       <TableHead>Status</TableHead>
@@ -481,11 +542,35 @@ export default function JobSchedulerContent() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {jobs.map((j) => (
+                    {jobs.map((j) => {
+                      const labor = getLaborSummary(j);
+                      return (
                       <TableRow key={j.id}>
                         <TableCell className="font-medium">{j.title}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground max-w-[160px] truncate">{j.description || "—"}</TableCell>
                         <TableCell>{siteMap.get(j.site_id)?.name || "—"}</TableCell>
+                        <TableCell className="text-right font-mono text-sm">
+                          {j.price > 0 ? `$${j.price.toLocaleString()}` : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {labor.hasBudget ? (
+                            <div className="flex items-center gap-1.5">
+                              <Clock className="h-3 w-3 text-muted-foreground" />
+                              <span className={cn(
+                                "text-xs font-mono",
+                                labor.isOver ? "text-destructive font-semibold" : labor.assignedHrs >= (labor.budgetHrs || Infinity) * 0.8 ? "text-chart-warning" : "text-chart-positive"
+                              )}>
+                                {labor.isHoursMode
+                                  ? `${labor.assignedHrs}/${labor.budgetHrs}h`
+                                  : `$${labor.assignedDollars.toFixed(0)}/$${labor.budgetDollars.toFixed(0)}`}
+                              </span>
+                            </div>
+                          ) : <span className="text-xs text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell>
+                          {labor.crewCount > 0 ? (
+                            <Badge variant="secondary" className="text-[10px]">{labor.crewCount} crew</Badge>
+                          ) : <span className="text-xs text-muted-foreground">—</span>}
+                        </TableCell>
                         <TableCell><Badge variant="outline">{j.job_type}</Badge></TableCell>
                         <TableCell>{j.start_date}</TableCell>
                         <TableCell>
@@ -533,7 +618,8 @@ export default function JobSchedulerContent() {
                           </AlertDialog>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}

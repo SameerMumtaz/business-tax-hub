@@ -601,6 +601,7 @@ export type Database = {
       }
       job_assignments: {
         Row: {
+          assigned_hours: number
           created_at: string
           id: string
           job_id: string
@@ -609,6 +610,7 @@ export type Database = {
           worker_type: string
         }
         Insert: {
+          assigned_hours?: number
           created_at?: string
           id?: string
           job_id: string
@@ -617,6 +619,7 @@ export type Database = {
           worker_type: string
         }
         Update: {
+          assigned_hours?: number
           created_at?: string
           id?: string
           job_id?: string

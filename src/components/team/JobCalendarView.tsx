@@ -1,11 +1,10 @@
-import { useState } from "react";
-import { type Job, type JobSite } from "@/hooks/useJobs";
+import { useState, useEffect, useState as useReactState } from "react";
+import { type Job, type JobSite, type JobAssignment } from "@/hooks/useJobs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight, Clock, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useEffect, useState as useReactState } from "react";
 
 function useIsTablet() {
   const [isTablet, setIsTablet] = useReactState(false);
@@ -21,6 +20,8 @@ function useIsTablet() {
 interface Props {
   jobs: Job[];
   sites: JobSite[];
+  assignments?: JobAssignment[];
+  teamMembers?: { id: string; name: string; pay_rate: number | null; worker_type: string }[];
   onJobClick?: (job: Job) => void;
 }
 
@@ -63,7 +64,7 @@ function toDateStr(y: number, m: number, d: number) {
   return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
-export default function JobCalendarView({ jobs, sites, onJobClick }: Props) {
+export default function JobCalendarView({ jobs, sites, assignments = [], teamMembers = [], onJobClick }: Props) {
   const isMobile = useIsMobile();
   const isTablet = useIsTablet();
   const useCompact = isMobile || isTablet;
@@ -74,6 +75,21 @@ export default function JobCalendarView({ jobs, sites, onJobClick }: Props) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const siteMap = new Map(sites.map((s) => [s.id, s]));
+
+  const getLaborLabel = (job: Job): string | null => {
+    const jobAssigns = assignments.filter((a) => a.job_id === job.id);
+    const assignedHrs = jobAssigns.reduce((s, a) => s + (a.assigned_hours || 0), 0);
+    const budgetHrs = job.labor_budget_type === "hours" ? job.labor_budget_hours : 0;
+    if (budgetHrs > 0) return `${assignedHrs}/${budgetHrs}h`;
+    if (job.labor_budget_amount > 0) {
+      const assignedDollars = jobAssigns.reduce((s, a) => {
+        const m = teamMembers.find((t) => t.id === a.worker_id);
+        return s + (a.assigned_hours || 0) * (m?.pay_rate || 0);
+      }, 0);
+      return `$${assignedDollars.toFixed(0)}/$${job.labor_budget_amount.toFixed(0)}`;
+    }
+    return null;
+  };
 
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
@@ -222,6 +238,10 @@ export default function JobCalendarView({ jobs, sites, onJobClick }: Props) {
                       {job.start_time && (
                         <span className="ml-1 opacity-70">{formatTime12(job.start_time)}</span>
                       )}
+                      {(() => {
+                        const label = getLaborLabel(job);
+                        return label ? <span className="ml-1 opacity-60 font-mono">{label}</span> : null;
+                      })()}
                     </button>
                   ))}
                 </div>

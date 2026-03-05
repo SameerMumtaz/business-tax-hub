@@ -52,6 +52,7 @@ export interface JobAssignment {
   worker_id: string;
   worker_name: string;
   worker_type: string;
+  assigned_hours: number;
   created_at: string;
 }
 
@@ -126,9 +127,9 @@ export function useJobs() {
     fetchAll();
   };
 
-  const assignWorker = async (jobId: string, workerId: string, workerName: string, workerType: string) => {
+  const assignWorker = async (jobId: string, workerId: string, workerName: string, workerType: string, assignedHours: number = 0) => {
     const { error } = await supabase.from("job_assignments").insert({
-      job_id: jobId, worker_id: workerId, worker_name: workerName, worker_type: workerType,
+      job_id: jobId, worker_id: workerId, worker_name: workerName, worker_type: workerType, assigned_hours: assignedHours,
     });
     if (error) { toast.error(error.message); return; }
     toast.success("Worker assigned");

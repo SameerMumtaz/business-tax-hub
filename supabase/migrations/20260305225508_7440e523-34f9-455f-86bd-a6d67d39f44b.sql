@@ -1,0 +1,1 @@
+ALTER TABLE public.job_assignments ADD COLUMN assigned_hours numeric NOT NULL DEFAULT 0;
