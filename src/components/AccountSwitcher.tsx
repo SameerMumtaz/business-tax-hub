@@ -50,7 +50,7 @@ export default function AccountSwitcher({ current }: { current: "business" | "in
               Switch to {target === "business" ? "Business" : "Personal"} mode?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              You'll be redirected to the {target === "business" ? "business dashboard" : "personal tax filing"} view. Your data in both modes is preserved — you can switch back anytime.
+              You'll be redirected to the {target === "business" ? "business management" : "personal finance"} view. Your data in both modes is preserved — you can switch back anytime.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

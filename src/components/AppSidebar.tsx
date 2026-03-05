@@ -155,7 +155,7 @@ export default function AppSidebar() {
             Bookie
           </span>
         </div>
-        <p className="text-xs text-sidebar-foreground mt-1">Reconciliation and Tax Filing</p>
+        <p className="text-xs text-sidebar-foreground mt-1">All-in-One Business Management</p>
       </div>
 
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">

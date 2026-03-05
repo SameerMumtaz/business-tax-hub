@@ -94,13 +94,13 @@ export default function AccountTypePage() {
       key: "business" as const,
       icon: Building2,
       title: "Business",
-      description: "Track business income & expenses, invoices, contractors, and file Schedule C.",
+      description: "Manage your business end-to-end — invoicing, expenses, team, jobs, and taxes.",
     },
     {
       key: "individual" as const,
       icon: User,
       title: "Individual",
-      description: "Track personal income, expenses, deductions, and preview your 1040 tax return.",
+      description: "Budget, track spending, manage income, and stay on top of your personal finances.",
     },
   ];
 
