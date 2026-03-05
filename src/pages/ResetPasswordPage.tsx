@@ -42,7 +42,7 @@ export default function ResetPasswordPage() {
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <Receipt className="h-8 w-8 text-primary" />
+            <img src="/favicon.png" alt="Bookie" className="h-8 w-8" />
             <span className="text-2xl font-bold tracking-tight">Bookie</span>
           </div>
           <p className="text-muted-foreground text-sm">Set your account password</p>

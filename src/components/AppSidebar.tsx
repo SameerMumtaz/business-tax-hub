@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from "react-router-dom";
 import { useState } from "react";
+import bookieLogo from "@/assets/bookie-logo.png";
 import {
   LayoutDashboard,
   TrendingUp,
@@ -150,7 +151,7 @@ export default function AppSidebar() {
     <aside className="w-64 min-h-screen bg-sidebar border-r border-sidebar-border flex flex-col">
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex items-center gap-2">
-          <Receipt className="h-6 w-6 text-sidebar-primary" />
+          <img src={bookieLogo} alt="Bookie" className="h-7 w-7" />
           <span className="text-lg font-semibold text-sidebar-accent-foreground tracking-tight">
             Bookie
           </span>
