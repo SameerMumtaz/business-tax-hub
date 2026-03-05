@@ -107,7 +107,12 @@ export default function JobCalendarView({ jobs, sites, onJobClick }: Props) {
               return <div key={`empty-${i}`} className="border-r border-b min-h-[90px] bg-muted/30" />;
             }
             const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-            const dayJobs = jobsByDate.get(dateStr) || [];
+            const dayJobs = (jobsByDate.get(dateStr) || []).slice().sort((a, b) => {
+              if (!a.start_time && !b.start_time) return 0;
+              if (!a.start_time) return 1;
+              if (!b.start_time) return -1;
+              return a.start_time.localeCompare(b.start_time);
+            });
             const isToday = dateStr === todayStr;
 
             return (
