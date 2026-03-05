@@ -1,41 +1,28 @@
 
 
-## Add "Suggested Rules" Section to Expenses & Sales Tabs
+## Plan: Link Booking Conflict Detection to Job Time Blocks
 
-### What
-Add a "Rules" tab to both the Expenses and Sales pages that shows:
-1. A "Detect Patterns" button that scans transactions for repeated vendor→category mappings
-2. A "Suggested Rules" card listing inferred patterns with Accept/Dismiss actions
-3. A link to the full Categorization Rules page for managing all rules
+### Problem
+The public booking page currently detects scheduling conflicts by **parsing time ranges from job descriptions** using fragile regex matching (e.g., looking for "📅 Booked Appointment: 9:00 AM – 11:00 AM" in the description text). Now that jobs have proper `start_time` and `estimated_hours` columns, the booking system should use those directly.
 
-### How
+### Changes
 
-**`src/pages/ExpensesPage.tsx`**
-- Add a third tab: `<TabsTrigger value="rules">Rules</TabsTrigger>`
-- In `<TabsContent value="rules">`: render a "Detect Patterns" button, the suggested rules list (reusing the same `InferredPattern` UI from CategorizationRulesPage), and existing expense rules summary
-- Import and call `detectPatterns` and `saveInferredRule` from `ruleInference.ts`
-- Add local state for `inferredPatterns` and `detectingPatterns`
+**1. Update `PublicBookingPage.tsx` — use real job time fields for conflicts**
 
-**`src/pages/SalesPage.tsx`**
-- Same approach: add a "Rules" tab with detect/suggest UI scoped to income/sales patterns
+- Change the jobs query from `select("start_date, description")` to `select("start_date, start_time, estimated_hours")`
+- Replace the `jobTimeBlocks` memo that parses description text with simple arithmetic: `start = start_time in minutes`, `end = start + (estimated_hours * 60)`
+- Remove the description-parsing regex entirely
+- Update the `existingJobs` state type to match the new shape
 
-**Shared pattern display** (optional extraction)
-- Consider extracting the suggested-rules card into a reusable `<SuggestedRulesPanel>` component to avoid duplicating the accept/dismiss UI across 3 pages
+This means:
+- Every job with a `start_time` and `estimated_hours` will properly block booking slots
+- Jobs created manually in the scheduler (not just from bookings) will also block availability
+- No more reliance on description text formatting
 
-### Implementation Details
+**2. No database changes needed** — `start_time` and `estimated_hours` columns already exist on the jobs table.
 
-1. **New component: `src/components/SuggestedRulesPanel.tsx`**
-   - Props: `type: "expense" | "income"`, `transactions: {id, vendor, category}[]`
-   - Contains detect button, pattern state, and accept/dismiss UI
-   - On accept: calls `saveInferredRule`, shows toast with count, invalidates queries
+**3. No changes to BookingRequestsPanel** — it already sets `start_time` and `estimated_hours` when creating jobs from confirmed bookings.
 
-2. **Update `ExpensesPage.tsx`**
-   - Add `<TabsTrigger value="rules">Rules</TabsTrigger>`
-   - Add `<TabsContent value="rules">` containing `<SuggestedRulesPanel type="expense" transactions={expenses} />`
-
-3. **Update `SalesPage.tsx`**
-   - Same pattern with `type="income"`
-
-4. **Update `CategorizationRulesPage.tsx`**
-   - Replace inline suggested rules UI with `<SuggestedRulesPanel>` to stay DRY
+### Summary
+One file change (`PublicBookingPage.tsx`): swap description-based time parsing for direct `start_time`/`estimated_hours` field usage in the conflict checker. This properly links the booking availability engine to the scheduler's time block data.
 
