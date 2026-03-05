@@ -1,0 +1,1 @@
+ALTER TABLE public.crew_checkins ADD COLUMN expected_hours numeric NULL;

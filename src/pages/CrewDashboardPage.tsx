@@ -8,7 +8,9 @@ import { getCurrentPosition, isWithinGeofence, haversineDistance } from "@/lib/g
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CheckCircle, Clock, LogOut, List, CalendarDays, MapPin as MapIcon, LogOut as SignOutIcon, UserCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { CheckCircle, Clock, LogOut, List, CalendarDays, MapPin as MapIcon, LogOut as SignOutIcon, UserCircle, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import LinkToBusinessCard from "@/components/LinkToBusinessCard";
 import CrewJobsList, { type AssignedJob } from "@/components/crew/CrewJobsList";
@@ -41,6 +43,9 @@ export default function CrewDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [gpsLoading, setGpsLoading] = useState<string | null>(null);
   const [payRate, setPayRate] = useState<number | null>(null);
+  const [overtimeDialogOpen, setOvertimeDialogOpen] = useState(false);
+  const [overtimeExplanation, setOvertimeExplanation] = useState("");
+  const [pendingCheckoutCoords, setPendingCheckoutCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   // Find the job site for the active check-in to feed into geofence monitor
   const activeJobSite = useMemo(() => {
@@ -160,7 +165,7 @@ export default function CrewDashboardPage() {
           return;
         }
       }
-      await checkIn(job.id, job.site.id, lat, lng);
+      await checkIn(job.id, job.site.id, lat, lng, job.expectedHours);
     } catch (err: any) {
       toast.error(err.message || "Failed to get GPS location");
     }
@@ -172,10 +177,38 @@ export default function CrewDashboardPage() {
     setGpsLoading("checkout");
     try {
       const pos = await getCurrentPosition();
-      await checkOut(activeCheckin.id, pos.coords.latitude, pos.coords.longitude);
+      const { latitude: lat, longitude: lng } = pos.coords;
+
+      // Check if over expected hours — prompt for explanation
+      const expectedHours = (activeCheckin as any).expected_hours;
+      if (expectedHours && expectedHours > 0) {
+        const elapsed = (Date.now() - new Date(activeCheckin.check_in_time).getTime()) / (1000 * 60 * 60);
+        if (elapsed > expectedHours) {
+          setPendingCheckoutCoords({ lat, lng });
+          setOvertimeDialogOpen(true);
+          setGpsLoading(null);
+          return;
+        }
+      }
+
+      await checkOut(activeCheckin.id, lat, lng);
     } catch (err: any) {
       toast.error(err.message || "Failed to get GPS location");
     }
+    setGpsLoading(null);
+  };
+
+  const handleOvertimeCheckout = async () => {
+    if (!activeCheckin || !pendingCheckoutCoords) return;
+    if (!overtimeExplanation.trim()) {
+      toast.error("Please provide an explanation for the overtime.");
+      return;
+    }
+    setGpsLoading("checkout");
+    await checkOut(activeCheckin.id, pendingCheckoutCoords.lat, pendingCheckoutCoords.lng, overtimeExplanation.trim());
+    setOvertimeDialogOpen(false);
+    setOvertimeExplanation("");
+    setPendingCheckoutCoords(null);
     setGpsLoading(null);
   };
 
@@ -267,6 +300,45 @@ export default function CrewDashboardPage() {
           </Tabs>
         )}
       </div>
+
+      <Dialog open={overtimeDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setOvertimeDialogOpen(false);
+          setOvertimeExplanation("");
+          setPendingCheckoutCoords(null);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              Overtime Explanation Required
+            </DialogTitle>
+            <DialogDescription>
+              You've exceeded the scheduled time for this job ({((activeCheckin as any)?.expected_hours || 0).toFixed(1)} hours).
+              Please explain why you needed additional time.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="e.g. Client requested additional work, weather delay, equipment issues..."
+            value={overtimeExplanation}
+            onChange={(e) => setOvertimeExplanation(e.target.value)}
+            rows={3}
+          />
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => {
+              setOvertimeDialogOpen(false);
+              setOvertimeExplanation("");
+              setPendingCheckoutCoords(null);
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={handleOvertimeCheckout} disabled={!overtimeExplanation.trim() || gpsLoading === "checkout"}>
+              {gpsLoading === "checkout" ? "Checking out…" : "Submit & Check Out"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
