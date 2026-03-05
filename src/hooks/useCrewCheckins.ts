@@ -125,6 +125,29 @@ export function useCrewCheckins() {
       (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
     const roundedHours = Math.round(totalHours * 100) / 100;
 
+    // Check if checkout location is far from job site (geofence validation)
+    let flagReason: string | null = null;
+    if (checkin.job_site_id) {
+      try {
+        const { data: site } = await supabase
+          .from("job_sites")
+          .select("latitude, longitude, geofence_radius")
+          .eq("id", checkin.job_site_id)
+          .single();
+
+        if (site?.latitude && site?.longitude) {
+          const { haversineDistance, isWithinGeofence } = await import("@/lib/geofence");
+          const radius = site.geofence_radius || 150;
+          if (!isWithinGeofence(lat, lng, site.latitude, site.longitude, radius)) {
+            const dist = Math.round(haversineDistance(lat, lng, site.latitude, site.longitude));
+            flagReason = `Checkout ${dist}m from job site (outside ${radius}m geofence)`;
+          }
+        }
+      } catch (err) {
+        console.warn("Geofence check on checkout failed:", err);
+      }
+    }
+
     const { error } = await supabase
       .from("crew_checkins")
       .update({
@@ -133,6 +156,7 @@ export function useCrewCheckins() {
         check_out_lng: lng,
         total_hours: roundedHours,
         status: "checked_out",
+        flag_reason: flagReason,
       })
       .eq("id", checkinId);
 
@@ -194,9 +218,11 @@ export function useCrewCheckins() {
       }
     }
 
-    toast.success(
-      `Checked out — ${totalHours.toFixed(1)} hours worked`
-    );
+    if (flagReason) {
+      toast.warning(`Checked out — ${totalHours.toFixed(1)} hours worked (flagged: checked out away from job site)`);
+    } else {
+      toast.success(`Checked out — ${totalHours.toFixed(1)} hours worked`);
+    }
     setActiveCheckin(null);
     fetchCheckins();
   };
