@@ -93,7 +93,7 @@ export default function ClientsPage() {
     }).filter((c) => c.revenue > 0 || c.cost > 0).sort((a, b) => b.profit - a.profit);
   }, [clients, sales, expenses]);
 
-  const ClientFormFields = () => (
+  const clientFormFields = (
     <div className="space-y-3">
       <Input placeholder="Client Name *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
       <Input placeholder="Email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
@@ -115,7 +115,7 @@ export default function ClientsPage() {
             <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-2" />Add Client</Button></DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>Add Client</DialogTitle></DialogHeader>
-              <ClientFormFields />
+              {clientFormFields}
               <Button onClick={handleCreate} className="w-full" disabled={addClient.isPending}>Save Client</Button>
             </DialogContent>
           </Dialog>
@@ -298,7 +298,7 @@ export default function ClientsPage() {
         <Dialog open={!!editClient} onOpenChange={(o) => { if (!o) { setEditClient(null); resetForm(); } }}>
           <DialogContent>
             <DialogHeader><DialogTitle>Edit Client</DialogTitle></DialogHeader>
-            <ClientFormFields />
+            {clientFormFields}
             <Button onClick={handleUpdate} className="w-full">Save Changes</Button>
           </DialogContent>
         </Dialog>
