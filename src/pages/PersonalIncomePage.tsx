@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import PersonalDashboardLayout from "@/components/PersonalDashboardLayout";
 import { useW2Income, useAddW2Income, useRemoveW2Income, W2Income } from "@/hooks/usePersonalData";
 import { formatCurrency } from "@/lib/format";
@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Trash2, Briefcase } from "lucide-react";
+import { Plus, Trash2, Briefcase, Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { US_STATES } from "@/lib/taxCalc";
+import { supabase } from "@/integrations/supabase/client";
 
 const emptyW2: Omit<W2Income, "id"> = {
   employer_name: "",
@@ -30,6 +31,49 @@ export default function PersonalIncomePage() {
   const removeW2 = useRemoveW2Income();
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState(emptyW2);
+  const [uploading, setUploading] = useState(false);
+  const w2FileRef = useRef<HTMLInputElement>(null);
+
+  const handleW2PdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setUploading(true);
+    try {
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      let fullText = "";
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const tc = await page.getTextContent();
+        fullText += tc.items.map((it: any) => ("str" in it ? it.str : "")).join(" ") + "\n";
+      }
+      const { data, error } = await supabase.functions.invoke("parse-w2", { body: { text: fullText } });
+      if (error) throw error;
+      if (data?.w2) {
+        setForm({
+          employer_name: data.w2.employer_name || "",
+          employer_ein: data.w2.employer_ein || "",
+          wages: data.w2.wages || 0,
+          federal_tax_withheld: data.w2.federal_tax_withheld || 0,
+          state_tax_withheld: data.w2.state_tax_withheld || 0,
+          social_security_withheld: data.w2.social_security_withheld || 0,
+          medicare_withheld: data.w2.medicare_withheld || 0,
+          state: data.w2.state || null,
+          tax_year: 2026,
+          notes: null,
+        });
+        setShowAdd(true);
+        toast.success("W-2 data extracted! Review and save.");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to parse W-2 PDF");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const totalWages = w2s.reduce((s, w) => s + w.wages, 0);
   const totalFedWithheld = w2s.reduce((s, w) => s + w.federal_tax_withheld, 0);
@@ -62,9 +106,16 @@ export default function PersonalIncomePage() {
             <h1 className="text-2xl font-bold tracking-tight">Income</h1>
             <p className="text-muted-foreground text-sm mt-1">Add your W-2 forms and other wage income</p>
           </div>
-          <Button onClick={() => setShowAdd(true)}>
-            <Plus className="h-4 w-4 mr-2" /> Add W-2
-          </Button>
+          <div className="flex gap-2">
+            <input ref={w2FileRef} type="file" accept=".pdf" className="hidden" onChange={handleW2PdfUpload} />
+            <Button variant="outline" onClick={() => w2FileRef.current?.click()} disabled={uploading}>
+              {uploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+              Upload W-2 PDF
+            </Button>
+            <Button onClick={() => setShowAdd(true)}>
+              <Plus className="h-4 w-4 mr-2" /> Add W-2
+            </Button>
+          </div>
         </div>
 
         {/* Summary cards */}

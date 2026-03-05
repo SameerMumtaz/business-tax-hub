@@ -29,6 +29,8 @@ import PersonalDeductionsPage from "./pages/PersonalDeductionsPage";
 import PersonalTaxCenterPage from "./pages/PersonalTaxCenterPage";
 import Personal1040Page from "./pages/Personal1040Page";
 import PersonalProfilePage from "./pages/PersonalProfilePage";
+import PersonalImportPage from "./pages/PersonalImportPage";
+import PersonalBudgetPage from "./pages/PersonalBudgetPage";
 import JobSchedulerPage from "./pages/JobSchedulerPage";
 import TimesheetsPage from "./pages/TimesheetsPage";
 import TeamPage from "./pages/TeamPage";
@@ -89,6 +91,8 @@ const App = () => (
             <Route path="/personal" element={<ProtectedRoute><PersonalDashboardPage /></ProtectedRoute>} />
             <Route path="/personal/income" element={<ProtectedRoute><PersonalIncomePage /></ProtectedRoute>} />
             <Route path="/personal/expenses" element={<ProtectedRoute><PersonalExpensesPage /></ProtectedRoute>} />
+            <Route path="/personal/import" element={<ProtectedRoute><PersonalImportPage /></ProtectedRoute>} />
+            <Route path="/personal/budget" element={<ProtectedRoute><PersonalBudgetPage /></ProtectedRoute>} />
             <Route path="/personal/deductions" element={<ProtectedRoute><PersonalDeductionsPage /></ProtectedRoute>} />
             <Route path="/personal/tax-center" element={<ProtectedRoute><PersonalTaxCenterPage /></ProtectedRoute>} />
             <Route path="/personal/1040" element={<ProtectedRoute><Personal1040Page /></ProtectedRoute>} />

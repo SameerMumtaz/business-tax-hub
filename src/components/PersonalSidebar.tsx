@@ -8,6 +8,8 @@ import {
   FileText,
   LogOut,
   UserCircle,
+  Upload,
+  PiggyBank,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -17,6 +19,8 @@ const links = [
   { to: "/personal", label: "Dashboard", icon: LayoutDashboard },
   { to: "/personal/income", label: "Income", icon: Wallet },
   { to: "/personal/expenses", label: "Expenses", icon: TrendingDown },
+  { to: "/personal/import", label: "Import", icon: Upload },
+  { to: "/personal/budget", label: "Budget", icon: PiggyBank },
   { to: "/personal/deductions", label: "Deductions", icon: Receipt },
   { to: "/personal/tax-center", label: "Tax Center", icon: Calculator },
   { to: "/personal/1040", label: "1040 Preview", icon: FileText },
