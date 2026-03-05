@@ -1,28 +1,31 @@
 
 
-## Plan: Link Booking Conflict Detection to Job Time Blocks
+## Plan: Editable Client Field with Client Linking on Sales Page
 
-### Problem
-The public booking page currently detects scheduling conflicts by **parsing time ranges from job descriptions** using fragile regex matching (e.g., looking for "📅 Booked Appointment: 9:00 AM – 11:00 AM" in the description text). Now that jobs have proper `start_time` and `estimated_hours` columns, the booking system should use those directly.
+### What changes
 
-### Changes
+**1. Make the Client column editable inline (like Category already is)**
+- Clicking the client name opens an inline edit mode with a combo-box/popover
+- The combo-box shows a searchable list of known clients (from the Clients table used by the job/site scheduler)
+- User can either select a known client OR type a custom name manually
+- Selecting a known client stores the clean client name; typing custom text stores that instead
 
-**1. Update `PublicBookingPage.tsx` — use real job time fields for conflicts**
+**2. Update `useSalesLogic` hook**
+- Add `editingClientId` state to track which row's client is being edited
+- Add a `handleClientChange(id, clientName)` handler that calls `updateSale.mutate({ id, client: clientName })`
+- Expose the `clients` list (already fetched via `useClients`) from the hook return
 
-- Change the jobs query from `select("start_date, description")` to `select("start_date, start_time, estimated_hours")`
-- Replace the `jobTimeBlocks` memo that parses description text with simple arithmetic: `start = start_time in minutes`, `end = start + (estimated_hours * 60)`
-- Remove the description-parsing regex entirely
-- Update the `existingJobs` state type to match the new shape
+**3. Build the inline client editor UI in `SalesPage.tsx`**
+- When `editingClientId === s.id`, render a `Popover` containing a `Command` (cmdk) component:
+  - `CommandInput` for searching/typing a custom name
+  - `CommandGroup` listing matched known clients from the clients table
+  - A "Use custom name" option that takes whatever text was typed
+- When not editing, show the formatted client name (via `extractVendorName`) with a hover pencil icon (same pattern as category editing)
 
-This means:
-- Every job with a `start_time` and `estimated_hours` will properly block booking slots
-- Jobs created manually in the scheduler (not just from bookings) will also block availability
-- No more reliance on description text formatting
+### Files to modify
+- `src/hooks/useSalesLogic.ts` — add `editingClientId` state, `handleClientChange`, expose `clients`
+- `src/pages/SalesPage.tsx` — replace static client `<td>` with inline editable combo-box using `Popover` + `Command`
 
-**2. No database changes needed** — `start_time` and `estimated_hours` columns already exist on the jobs table.
-
-**3. No changes to BookingRequestsPanel** — it already sets `start_time` and `estimated_hours` when creating jobs from confirmed bookings.
-
-### Summary
-One file change (`PublicBookingPage.tsx`): swap description-based time parsing for direct `start_time`/`estimated_hours` field usage in the conflict checker. This properly links the booking availability engine to the scheduler's time block data.
+### No database changes needed
+The `sales.client` column is already a text field that stores the client name.
 
