@@ -325,7 +325,7 @@ export default function JobSchedulerContent() {
           <DialogTrigger asChild>
             <Button size="sm"><Plus className="h-4 w-4 mr-2" />New Job</Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-h-[85vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Schedule Job</DialogTitle></DialogHeader>
             <div className="space-y-3 pt-2">
               <Input placeholder="Job title" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
@@ -424,7 +424,7 @@ export default function JobSchedulerContent() {
 
       {/* Edit Job Dialog */}
       <Dialog open={editJobOpen} onOpenChange={setEditJobOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Job</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-2">
             <Input placeholder="Job title" value={editJobTitle} onChange={(e) => setEditJobTitle(e.target.value)} />
