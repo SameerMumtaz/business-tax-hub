@@ -123,14 +123,26 @@ const extractSpatial = (items: TextItem[], pageWidth: number, pageHeight: number
     return combined;
   };
 
+  // Helper: check if a text item looks like a real dollar amount (not a box label number)
+  const isDollarAmount = (text: string): boolean => {
+    const cleaned = text.replace(/[$,\s]/g, "");
+    // Must have a decimal point with cents, or be a large integer with commas
+    // Reject standalone small integers like "1", "2", "15" which are box labels
+    if (/^\d{1,2}$/.test(cleaned)) return false; // single/double digit = box label
+    if (/^\d+\.\d{2}$/.test(cleaned)) return true; // 1234.56
+    if (/^\d{1,3}(,\d{3})+(\.\d{2})?$/.test(text.replace(/[$\s]/g, ""))) return true; // 1,234.56
+    return false;
+  };
+
   // Helper: find the best money value near a label position
   // Look to the right on the same line, or below in the same column
   const findValueNear = (labelX: number, labelY: number, direction: "right" | "below" | "both" = "both"): number => {
     const candidates: { val: number; dist: number }[] = [];
 
     for (const it of normalized) {
+      if (!isDollarAmount(it.text)) continue;
       const val = parseAmount(it.text.replace(/[$,]/g, ""));
-      if (val <= 0 || !/[\d]/.test(it.text)) continue;
+      if (val <= 0) continue;
 
       const dx = it.xPct - labelX;
       const dy = it.yPct - labelY;
@@ -261,6 +273,7 @@ const extractSpatial = (items: TextItem[], pageWidth: number, pageHeight: number
     // Try to find a value close to 6.2% of wages
     const expected = wages * 0.062;
     for (const it of normalized) {
+      if (!isDollarAmount(it.text)) continue;
       const val = parseAmount(it.text.replace(/[$,]/g, ""));
       if (val > 0 && Math.abs(val - expected) / expected < 0.15) {
         social_security_withheld = val;
@@ -271,6 +284,7 @@ const extractSpatial = (items: TextItem[], pageWidth: number, pageHeight: number
   if (wages > 0 && medicare_withheld === 0) {
     const expected = wages * 0.0145;
     for (const it of normalized) {
+      if (!isDollarAmount(it.text)) continue;
       const val = parseAmount(it.text.replace(/[$,]/g, ""));
       if (val > 0 && Math.abs(val - expected) / expected < 0.2) {
         medicare_withheld = val;
