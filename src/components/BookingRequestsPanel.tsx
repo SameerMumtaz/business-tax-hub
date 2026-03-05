@@ -65,6 +65,7 @@ export default function BookingRequestsPanel() {
       recurring_interval: null,
       recurring_end_date: null,
       invoice_id: null,
+      client_id: null,
     });
     toast.success("Job created in scheduler");
     setConfirmDialog(null);

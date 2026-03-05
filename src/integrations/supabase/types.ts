@@ -712,6 +712,7 @@ export type Database = {
         Row: {
           address: string | null
           city: string | null
+          client_id: string | null
           created_at: string
           geofence_radius: number | null
           id: string
@@ -726,6 +727,7 @@ export type Database = {
         Insert: {
           address?: string | null
           city?: string | null
+          client_id?: string | null
           created_at?: string
           geofence_radius?: number | null
           id?: string
@@ -740,6 +742,7 @@ export type Database = {
         Update: {
           address?: string | null
           city?: string | null
+          client_id?: string | null
           created_at?: string
           geofence_radius?: number | null
           id?: string
@@ -751,10 +754,19 @@ export type Database = {
           user_id?: string
           zip?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "job_sites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       jobs: {
         Row: {
+          client_id: string | null
           created_at: string
           description: string | null
           end_date: string | null
@@ -773,6 +785,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          client_id?: string | null
           created_at?: string
           description?: string | null
           end_date?: string | null
@@ -791,6 +804,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          client_id?: string | null
           created_at?: string
           description?: string | null
           end_date?: string | null
@@ -809,6 +823,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "jobs_invoice_id_fkey"
             columns: ["invoice_id"]
