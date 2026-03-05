@@ -15,10 +15,17 @@ interface ParsedTx {
   type: TxType;
 }
 
-const normalizeDate = (mmddyy: string): string => {
-  const [mm, dd, yy] = mmddyy.split("/");
-  const year = Number(yy) < 70 ? `20${yy}` : `19${yy}`;
-  return `${year}-${mm}-${dd}`;
+const normalizeDate = (raw: string): string => {
+  const parts = raw.split("/");
+  if (parts.length !== 3) return raw;
+  const [mm, dd, rest] = parts;
+  let year = rest;
+  if (year.length === 2) {
+    year = Number(year) < 70 ? `20${year}` : `19${year}`;
+  } else if (year.length === 4) {
+    // already full year
+  }
+  return `${year}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
 };
 
 const parseAmount = (raw: string): { value: number; negative: boolean } => {
@@ -103,6 +110,27 @@ const parseTransactionsFromText = (text: string): ParsedTx[] => {
   let pending: { date: string; descriptionParts: string[]; amountRaw?: string; startIndex: number } | null = null;
   let consumedChars = 0;
 
+  // Date patterns: MM/DD/YY or MM/DD/YYYY
+  const DATE_RE = /\b(\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4}))\b/;
+  const DATE_START_RE = /^(\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4}))\b\s*(.*)$/;
+  const AMOUNT_RE = /(-?\$?\d{1,3}(?:,\d{3})*\.\d{2})/;
+
+  // Pre-process: the PDF text may come as one long line per page.
+  // Insert line breaks before each date pattern to create parseable lines.
+  const preprocessed = text.replace(
+    new RegExp(`\\s(?=${DATE_RE.source})`, "g"),
+    "\n"
+  );
+
+  // Also log a sample for debugging
+  const sampleLines = preprocessed.split("\n").slice(0, 10);
+  console.log("Sample preprocessed lines:", JSON.stringify(sampleLines));
+
+  const lines = preprocessed.split(/\r?\n/);
+
+  let pending: { date: string; descriptionParts: string[]; amountRaw?: string; startIndex: number } | null = null;
+  let consumedChars = 0;
+
   const finalizePending = () => {
     if (!pending?.amountRaw) return;
 
@@ -137,7 +165,7 @@ const parseTransactionsFromText = (text: string): ParsedTx[] => {
       continue;
     }
 
-    const dateStart = line.match(/^(\d{2}\/\d{2}\/\d{2})\b\s*(.*)$/);
+    const dateStart = line.match(DATE_START_RE);
     if (dateStart) {
       // New transaction starts, close previous if complete
       finalizePending();
@@ -146,11 +174,15 @@ const parseTransactionsFromText = (text: string): ParsedTx[] => {
       pending = { date, descriptionParts: [], startIndex: consumedChars };
 
       if (remainder) {
-        const amountAtEnd = remainder.match(/(-?\$?\d{1,3}(?:,\d{3})*\.\d{2})\s*$/);
-        if (amountAtEnd) {
-          pending.amountRaw = amountAtEnd[1];
-          const descWithoutAmount = remainder.replace(/(-?\$?\d{1,3}(?:,\d{3})*\.\d{2})\s*$/, "").trim();
-          if (descWithoutAmount) pending.descriptionParts.push(descWithoutAmount);
+        // Try to find amount(s) at the end - statements often have multiple amounts
+        // (e.g. transaction amount and running balance)
+        const amounts = [...remainder.matchAll(new RegExp(AMOUNT_RE.source, "g"))];
+        if (amounts.length > 0) {
+          // The first amount is usually the transaction amount
+          const firstAmountIndex = remainder.indexOf(amounts[0][0]);
+          const descPart = remainder.slice(0, firstAmountIndex).trim();
+          if (descPart) pending.descriptionParts.push(descPart);
+          pending.amountRaw = amounts[0][1];
           finalizePending();
         } else {
           pending.descriptionParts.push(remainder);
@@ -164,6 +196,15 @@ const parseTransactionsFromText = (text: string): ParsedTx[] => {
     const amountOnly = line.match(/^(-?\$?\d{1,3}(?:,\d{3})*\.\d{2})$/);
     if (amountOnly) {
       pending.amountRaw = amountOnly[1];
+      finalizePending();
+      continue;
+    }
+
+    // Check if line ends with an amount
+    const lineWithAmount = line.match(/^(.*?)\s+(-?\$?\d{1,3}(?:,\d{3})*\.\d{2})\s*$/);
+    if (lineWithAmount && pending) {
+      pending.descriptionParts.push(lineWithAmount[1]);
+      pending.amountRaw = lineWithAmount[2];
       finalizePending();
       continue;
     }
