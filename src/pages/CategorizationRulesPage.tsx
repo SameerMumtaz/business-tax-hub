@@ -6,7 +6,7 @@ import { detectPatterns, saveInferredRule, InferredPattern } from "@/lib/ruleInf
 import SuggestedRulesPanel from "@/components/SuggestedRulesPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { useExpenses, useSales } from "@/hooks/useData";
-import { EXPENSE_CATEGORIES, ExpenseCategory } from "@/types/tax";
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, ExpenseCategory } from "@/types/tax";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,12 +14,6 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Tag, Sparkles, BookOpen, Lightbulb, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-
-const INCOME_CATEGORIES = [
-  "Product Sales", "Service Revenue", "Consulting",
-  "Subscription", "Licensing", "Affiliate", "Interest", "Other",
-];
-
 interface Rule {
   id: string;
   vendor_pattern: string;

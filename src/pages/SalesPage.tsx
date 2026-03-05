@@ -8,7 +8,7 @@ import useSalesLogic, { PAGE_SIZE } from "@/hooks/useSalesLogic";
 import DateRangeFilter from "@/components/DateRangeFilter";
 import ExportButton from "@/components/ExportButton";
 import { formatCurrency } from "@/lib/format";
-import { EXPENSE_CATEGORIES } from "@/types/tax";
+import { INCOME_CATEGORIES } from "@/types/tax";
 import StatCard from "@/components/StatCard";
 import AuditIssuesPanel from "@/components/AuditIssuesPanel";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -64,7 +64,7 @@ export default function SalesPage() {
             <ExportButton data={sorted.map((s) => ({ date: s.date, client: s.client, description: s.description, invoice: s.invoiceNumber, category: s.category, amount: s.amount, tax_collected: s.taxCollected }))} filename="sales" columns={[{ key: "date", label: "Date" }, { key: "client", label: "Client" }, { key: "description", label: "Description" }, { key: "invoice", label: "Invoice #" }, { key: "category", label: "Category" }, { key: "amount", label: "Amount" }, { key: "tax_collected", label: "Tax Collected" }]} />
             <Select value={filterCategory} onValueChange={(v) => { setFilterCategory(v); setCurrentPage(0); }}>
               <SelectTrigger className="w-[180px]"><Filter className="h-3.5 w-3.5 mr-2" /><SelectValue placeholder="All Categories" /></SelectTrigger>
-              <SelectContent><SelectItem value="all">All Categories</SelectItem>{EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              <SelectContent><SelectItem value="all">All Categories</SelectItem>{INCOME_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <Dialog open={open} onOpenChange={setOpen}>
@@ -152,7 +152,7 @@ export default function SalesPage() {
                 <p className="text-sm text-muted-foreground">Auto-categorize future imports matching this keyword.</p>
                 <div className="space-y-3">
                   <div><label className="text-xs text-muted-foreground mb-1 block">Keyword</label><Input value={ruleKeyword} onChange={(e) => setRuleKeyword(e.target.value)} placeholder="e.g. acme" /></div>
-                  <div><label className="text-xs text-muted-foreground mb-1 block">Category</label><Select value={ruleCategory} onValueChange={setRuleCategory}><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger><SelectContent>{EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></div>
+                  <div><label className="text-xs text-muted-foreground mb-1 block">Category</label><Select value={ruleCategory} onValueChange={setRuleCategory}><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger><SelectContent>{INCOME_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></div>
                   <Button onClick={saveBulkRule} className="w-full" disabled={!ruleKeyword || !ruleCategory}>Save Rule</Button>
                 </div>
               </DialogContent>
@@ -185,7 +185,7 @@ export default function SalesPage() {
                         {editingCategoryId === s.id ? (
                           <Select value={s.category} onValueChange={(v) => handleSingleCategoryChange(s.id, v)}>
                             <SelectTrigger className="h-7 text-xs w-[150px]"><SelectValue /></SelectTrigger>
-                            <SelectContent>{EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                            <SelectContent>{INCOME_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                           </Select>
                         ) : (
                           <button onClick={() => setEditingCategoryId(s.id)} className="group flex items-center gap-1">

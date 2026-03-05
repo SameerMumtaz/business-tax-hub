@@ -53,6 +53,39 @@ export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   "Other",
 ];
 
+export type IncomeCategory =
+  | "Product Sales"
+  | "Service Revenue"
+  | "Consulting"
+  | "Subscription"
+  | "Licensing & Royalties"
+  | "Affiliate & Referral"
+  | "Interest & Dividends"
+  | "Rental Income"
+  | "Refunds & Rebates"
+  | "Grants & Awards"
+  | "Commission Income"
+  | "Tips & Gratuities"
+  | "Deposits"
+  | "Other";
+
+export const INCOME_CATEGORIES: IncomeCategory[] = [
+  "Product Sales",
+  "Service Revenue",
+  "Consulting",
+  "Subscription",
+  "Licensing & Royalties",
+  "Affiliate & Referral",
+  "Interest & Dividends",
+  "Rental Income",
+  "Refunds & Rebates",
+  "Grants & Awards",
+  "Commission Income",
+  "Tips & Gratuities",
+  "Deposits",
+  "Other",
+];
+
 export interface Expense {
   id: string;
   date: string;
