@@ -17,6 +17,7 @@ import {
   useAddVehicle,
   useRemoveVehicle,
   useVehiclePayments,
+  useAllVehiclePayments,
   useAddVehiclePayment,
   useRemoveVehiclePayment,
   useVehicleExpenses,
@@ -51,6 +52,7 @@ const emptyVehicle: Omit<Vehicle, "id"> = {
 
 export default function VehiclesPage() {
   const { data: vehicles = [], isLoading } = useVehicles();
+  const { data: allPrincipalPaid = {} } = useAllVehiclePayments();
   const addVehicle = useAddVehicle();
   const removeVehicle = useRemoveVehicle();
   const updateVehicle = useUpdateVehicle();
@@ -329,7 +331,7 @@ export default function VehiclesPage() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Balance</span>
-                  <span className="font-mono">{v.id === selectedId ? formatCurrency(currentBalance) : formatCurrency(v.loan_amount)}</span>
+                  <span className="font-mono">{formatCurrency(Math.max(v.loan_amount - (allPrincipalPaid[v.id] || 0), 0))}</span>
                 </div>
               </button>
             ))}
