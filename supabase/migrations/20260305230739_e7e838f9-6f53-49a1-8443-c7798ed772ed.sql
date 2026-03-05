@@ -1,0 +1,1 @@
+ALTER TABLE public.crew_checkins ADD COLUMN IF NOT EXISTS last_seen_at timestamp with time zone DEFAULT now();
