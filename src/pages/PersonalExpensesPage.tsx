@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Trash2, ShoppingCart } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, Upload } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 const PERSONAL_CATEGORIES = [
@@ -45,6 +46,7 @@ export default function PersonalExpensesPage() {
   const [form, setForm] = useState(emptyExpense);
   const [filterCat, setFilterCat] = useState("all");
   const [search, setSearch] = useState("");
+  const navigate = useNavigate();
 
   const filtered = useMemo(() => {
     let list = expenses;
@@ -81,9 +83,14 @@ export default function PersonalExpensesPage() {
             <h1 className="text-2xl font-bold tracking-tight">Personal Expenses</h1>
             <p className="text-muted-foreground text-sm mt-1">Track spending and flag tax-deductible items</p>
           </div>
-          <Button onClick={() => setShowAdd(true)}>
-            <Plus className="h-4 w-4 mr-2" /> Add Expense
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => navigate("/personal/import")}>
+              <Upload className="h-4 w-4 mr-2" /> Import Statement
+            </Button>
+            <Button onClick={() => setShowAdd(true)}>
+              <Plus className="h-4 w-4 mr-2" /> Add Expense
+            </Button>
+          </div>
         </div>
 
         {/* Summary */}
