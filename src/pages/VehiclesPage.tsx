@@ -75,6 +75,10 @@ export default function VehiclesPage() {
   const [matchingPaymentRow, setMatchingPaymentRow] = useState<number | null>(null);
   const [matchSearch, setMatchSearch] = useState("");
 
+  // Payment detail dialog
+  const [paymentDetailOpen, setPaymentDetailOpen] = useState(false);
+  const [paymentDetailData, setPaymentDetailData] = useState<{ payment: any; expense: any } | null>(null);
+
   const selected = vehicles.find((v) => v.id === selectedId) ?? null;
   const { data: payments = [] } = useVehiclePayments(selectedId);
   const { data: linkedExpenses = [] } = useVehicleExpenses(selectedId);
@@ -447,7 +451,22 @@ export default function VehiclesPage() {
                         return (
                           <tr key={row.number} className={row.paid ? "opacity-60" : ""}>
                             <td className="font-mono text-xs">{row.number}</td>
-                            <td className="font-mono text-xs">{row.date}</td>
+                            <td className={`font-mono text-xs ${row.paid ? "cursor-pointer hover:text-primary hover:underline" : ""}`}
+                              onClick={() => {
+                                if (row.paid && payment) {
+                                  // Find linked expense by matching date + amount through vehicle_expenses
+                                  const linked = linkedExpenses.find((le: any) =>
+                                    le.expenses?.date === payment.date_paid &&
+                                    Math.abs(Number(le.expenses?.amount ?? 0) - payment.amount_paid) < 0.02
+                                  );
+                                  setPaymentDetailData({
+                                    payment,
+                                    expense: linked?.expenses ?? null,
+                                  });
+                                  setPaymentDetailOpen(true);
+                                }
+                              }}
+                            >{row.date}{row.paid && <span className="ml-1 text-muted-foreground">↗</span>}</td>
                             <td className="text-right font-mono text-xs">
                               {row.paid && payment ? formatCurrency(payment.amount_paid) : formatCurrency(row.payment)}
                               {isExtra && <Badge variant="secondary" className="ml-1 text-[10px] py-0">Extra</Badge>}
@@ -870,6 +889,66 @@ export default function VehiclesPage() {
                 ))
               )}
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Payment Detail dialog */}
+        <Dialog open={paymentDetailOpen} onOpenChange={setPaymentDetailOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle>Payment Details</DialogTitle></DialogHeader>
+            {paymentDetailData && (
+              <div className="space-y-4">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Payment #</span>
+                    <span className="font-mono">{paymentDetailData.payment.payment_number}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Date Paid</span>
+                    <span className="font-mono">{paymentDetailData.payment.date_paid}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Amount</span>
+                    <span className="font-mono font-semibold">{formatCurrency(paymentDetailData.payment.amount_paid)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Principal</span>
+                    <span className="font-mono">{formatCurrency(paymentDetailData.payment.principal_portion)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Interest</span>
+                    <span className="font-mono">{formatCurrency(paymentDetailData.payment.interest_portion)}</span>
+                  </div>
+                  {paymentDetailData.payment.notes && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Notes</span>
+                      <span className="text-xs text-right max-w-[200px]">{paymentDetailData.payment.notes}</span>
+                    </div>
+                  )}
+                </div>
+
+                <hr className="border-border" />
+
+                {paymentDetailData.expense ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Linked Transaction</p>
+                    <div className="rounded-md bg-muted p-3 space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="font-medium">{paymentDetailData.expense.vendor}</span>
+                        <span className="font-mono">{formatCurrency(Number(paymentDetailData.expense.amount))}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{paymentDetailData.expense.date}</p>
+                      {paymentDetailData.expense.description && (
+                        <p className="text-xs text-muted-foreground">{paymentDetailData.expense.description}</p>
+                      )}
+                      <Badge variant="secondary" className="text-xs mt-1">{paymentDetailData.expense.category}</Badge>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground text-center py-2">No linked transaction found — this payment was recorded manually.</p>
+                )}
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </div>
