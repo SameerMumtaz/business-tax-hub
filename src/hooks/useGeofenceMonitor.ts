@@ -20,6 +20,12 @@ export function useGeofenceMonitor({ activeCheckin, jobSite, onAutoCheckout }: U
   const checkGeofence = useCallback(async () => {
     if (!activeCheckin || !jobSite?.latitude || !jobSite?.longitude) return;
 
+    // Update last_seen_at so the server knows the client is alive
+    await supabase
+      .from("crew_checkins")
+      .update({ last_seen_at: new Date().toISOString() } as any)
+      .eq("id", activeCheckin.id);
+
     // Check if expected hours cap exceeded (auto-flag but don't auto-checkout — let user explain)
     const expectedHours = (activeCheckin as any).expected_hours;
     if (expectedHours && expectedHours > 0) {

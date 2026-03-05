@@ -255,6 +255,7 @@ export type Database = {
           id: string
           job_id: string | null
           job_site_id: string | null
+          last_seen_at: string | null
           notes: string | null
           status: string
           team_member_id: string
@@ -273,6 +274,7 @@ export type Database = {
           id?: string
           job_id?: string | null
           job_site_id?: string | null
+          last_seen_at?: string | null
           notes?: string | null
           status?: string
           team_member_id: string
@@ -291,6 +293,7 @@ export type Database = {
           id?: string
           job_id?: string | null
           job_site_id?: string | null
+          last_seen_at?: string | null
           notes?: string | null
           status?: string
           team_member_id?: string

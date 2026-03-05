@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.invite-crew]
 verify_jwt = false
+
+[functions.stale-checkout]
+verify_jwt = false
