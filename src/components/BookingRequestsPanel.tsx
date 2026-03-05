@@ -66,6 +66,12 @@ export default function BookingRequestsPanel() {
       recurring_end_date: null,
       invoice_id: null,
       client_id: null,
+      price: req.price || 0,
+      material_budget: 0,
+      labor_budget_type: "amount",
+      labor_budget_amount: 0,
+      labor_budget_hours: 0,
+      labor_budget_rate: 0,
     });
     toast.success("Job created in scheduler");
     setConfirmDialog(null);

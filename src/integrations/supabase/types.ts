@@ -774,6 +774,12 @@ export type Database = {
           id: string
           invoice_id: string | null
           job_type: string
+          labor_budget_amount: number
+          labor_budget_hours: number
+          labor_budget_rate: number
+          labor_budget_type: string
+          material_budget: number
+          price: number
           recurring_end_date: string | null
           recurring_interval: string | null
           site_id: string
@@ -793,6 +799,12 @@ export type Database = {
           id?: string
           invoice_id?: string | null
           job_type?: string
+          labor_budget_amount?: number
+          labor_budget_hours?: number
+          labor_budget_rate?: number
+          labor_budget_type?: string
+          material_budget?: number
+          price?: number
           recurring_end_date?: string | null
           recurring_interval?: string | null
           site_id: string
@@ -812,6 +824,12 @@ export type Database = {
           id?: string
           invoice_id?: string | null
           job_type?: string
+          labor_budget_amount?: number
+          labor_budget_hours?: number
+          labor_budget_rate?: number
+          labor_budget_type?: string
+          material_budget?: number
+          price?: number
           recurring_end_date?: string | null
           recurring_interval?: string | null
           site_id?: string

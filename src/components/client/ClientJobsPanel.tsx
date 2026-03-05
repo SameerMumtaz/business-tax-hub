@@ -14,8 +14,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, MapPin, Briefcase, Loader2, Trash2, Calendar, Clock, Link2, Unlink } from "lucide-react";
+import { Plus, MapPin, Briefcase, Loader2, Trash2, Calendar, Clock, Link2, Unlink, DollarSign } from "lucide-react";
 import { toast } from "sonner";
+import JobBudgetFields, { getExpectedProfit } from "@/components/job/JobBudgetFields";
 
 const STATUS_COLORS: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
   scheduled: "default",
@@ -48,6 +49,12 @@ export default function ClientJobsPanel({ client }: Props) {
   const [jobInterval, setJobInterval] = useState("");
   const [jobStartTime, setJobStartTime] = useState("");
   const [jobEstHours, setJobEstHours] = useState("");
+  const [jobPrice, setJobPrice] = useState("");
+  const [jobMaterialBudget, setJobMaterialBudget] = useState("");
+  const [jobLaborType, setJobLaborType] = useState("amount");
+  const [jobLaborAmount, setJobLaborAmount] = useState("");
+  const [jobLaborHours, setJobLaborHours] = useState("");
+  const [jobLaborRate, setJobLaborRate] = useState("");
 
   // Address mode: "client" uses client address to create a new site, "existing" picks existing site, "new" enters a new address
   const [addressMode, setAddressMode] = useState<"client" | "existing" | "new">("client");
@@ -94,6 +101,8 @@ export default function ClientJobsPanel({ client }: Props) {
     setAddressMode("client"); setSelectedSiteId("");
     setNewSiteName(""); setNewSiteAddress(""); setNewSiteCity("");
     setNewSiteState(""); setNewSiteLat(""); setNewSiteLng("");
+    setJobPrice(""); setJobMaterialBudget(""); setJobLaborType("amount");
+    setJobLaborAmount(""); setJobLaborHours(""); setJobLaborRate("");
   };
 
   const handleCreateJob = async () => {
@@ -164,6 +173,12 @@ export default function ClientJobsPanel({ client }: Props) {
         start_time: jobStartTime || null,
         estimated_hours: jobEstHours ? Number(jobEstHours) : null,
         client_id: client.id,
+        price: Number(jobPrice) || 0,
+        material_budget: Number(jobMaterialBudget) || 0,
+        labor_budget_type: jobLaborType,
+        labor_budget_amount: Number(jobLaborAmount) || 0,
+        labor_budget_hours: Number(jobLaborHours) || 0,
+        labor_budget_rate: Number(jobLaborRate) || 0,
       });
 
       setJobOpen(false);
@@ -301,7 +316,26 @@ export default function ClientJobsPanel({ client }: Props) {
                       <Clock className="h-3 w-3" /> {job.estimated_hours}h
                     </span>
                   )}
+                  {job.price > 0 && (
+                    <span className="flex items-center gap-1">
+                      <DollarSign className="h-3 w-3" /> ${job.price.toLocaleString()}
+                    </span>
+                  )}
                 </div>
+                {job.price > 0 && (() => {
+                  const { profit, margin } = getExpectedProfit(
+                    job.price, job.material_budget, job.labor_budget_type,
+                    job.labor_budget_amount, job.labor_budget_hours, job.labor_budget_rate,
+                  );
+                  const hasBudget = job.material_budget > 0 || job.labor_budget_amount > 0 || job.labor_budget_hours > 0;
+                  return hasBudget ? (
+                    <div className="flex gap-3 text-xs">
+                      <span className={`font-mono font-medium ${profit >= 0 ? "text-chart-positive" : "text-destructive"}`}>
+                        Exp. Profit: ${profit.toLocaleString()} ({margin.toFixed(0)}%)
+                      </span>
+                    </div>
+                  ) : null;
+                })()}
                 {job.description && <p className="text-xs text-muted-foreground">{job.description}</p>}
               </div>
             );
@@ -423,6 +457,15 @@ export default function ClientJobsPanel({ client }: Props) {
                 </SelectContent>
               </Select>
             )}
+
+            <JobBudgetFields
+              price={jobPrice} materialBudget={jobMaterialBudget}
+              laborBudgetType={jobLaborType} laborBudgetAmount={jobLaborAmount}
+              laborBudgetHours={jobLaborHours} laborBudgetRate={jobLaborRate}
+              onPriceChange={setJobPrice} onMaterialBudgetChange={setJobMaterialBudget}
+              onLaborBudgetTypeChange={setJobLaborType} onLaborBudgetAmountChange={setJobLaborAmount}
+              onLaborBudgetHoursChange={setJobLaborHours} onLaborBudgetRateChange={setJobLaborRate}
+            />
 
             <Button className="w-full" onClick={handleCreateJob} disabled={creating}>
               {creating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
