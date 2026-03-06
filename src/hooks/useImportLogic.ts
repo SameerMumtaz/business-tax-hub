@@ -156,9 +156,7 @@ export default function useImportLogic() {
     finally { setCategorizing(false); }
   }, []);
 
-  const handlePdfUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !file.name.toLowerCase().endsWith(".pdf")) { toast.error("Please select a PDF file"); return; }
+  const handlePdfFile = useCallback(async (file: File) => {
     if (file.size > 20 * 1024 * 1024) { toast.error("File too large — max 20MB"); return; }
     setPdfProcessing(true); setPdfStatus("Loading PDF…"); setPdfProgress(0);
     try {
@@ -210,13 +208,11 @@ export default function useImportLogic() {
       toast.success(`Extracted ${reviewed.length} transactions from ${numPages} pages${dupeCount > 0 ? ` (${dupeCount} duplicates excluded)` : ""}`);
       await categorizeReviewed(reviewed);
     } catch (err) { console.error(err); toast.error(err instanceof Error ? err.message : "Failed to parse PDF"); }
-    finally { setPdfProcessing(false); setPdfStatus(""); setPdfProgress(0); if (pdfInputRef.current) pdfInputRef.current.value = ""; }
+    finally { setPdfProcessing(false); setPdfStatus(""); setPdfProgress(0); }
   }, [existingExpenses, existingSales, categorizeReviewed]);
 
-  const processFile = useCallback((file: File) => {
+  const processSpreadsheetFile = useCallback((file: File) => {
     const isExcel = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
-    const isCsv = file.name.endsWith(".csv") || file.name.endsWith(".tsv") || file.name.endsWith(".txt");
-    if (!isCsv && !isExcel) { toast.error("Please upload a CSV or Excel file"); return; }
     const reader = new FileReader();
     reader.onload = async (e) => {
       const parsed = isExcel ? await parseExcel(e.target?.result as ArrayBuffer) : parseCSV(e.target?.result as string);
@@ -230,8 +226,27 @@ export default function useImportLogic() {
     if (isExcel) reader.readAsArrayBuffer(file); else reader.readAsText(file);
   }, [existingExpenses, existingSales, categorizeReviewed]);
 
-  const handleDrop = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragOver(false); const file = e.dataTransfer.files[0]; if (file) processFile(file); }, [processFile]);
-  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) processFile(file); }, [processFile]);
+  // Unified file handler — auto-detects PDF vs CSV/Excel
+  const handleFileUpload = useCallback((file: File) => {
+    const ext = file.name.toLowerCase().split(".").pop() || "";
+    if (ext === "pdf") {
+      handlePdfFile(file);
+    } else if (["csv", "tsv", "txt", "xlsx", "xls"].includes(ext)) {
+      processSpreadsheetFile(file);
+    } else {
+      toast.error("Unsupported file type. Upload a PDF, CSV, or Excel file.");
+    }
+  }, [handlePdfFile, processSpreadsheetFile]);
+
+  // Legacy handlers for backward compat — now delegate to unified handler
+  const handlePdfUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFileUpload(file);
+    if (pdfInputRef.current) pdfInputRef.current.value = "";
+  }, [handleFileUpload]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragOver(false); setPdfDragOver(false); const file = e.dataTransfer.files[0]; if (file) handleFileUpload(file); }, [handleFileUpload]);
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) handleFileUpload(file); }, [handleFileUpload]);
 
   const toggleInclude = (id: string) => setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, include: !t.include } : t)));
   const deleteTransaction = (id: string) => setTransactions((prev) => prev.filter((t) => t.id !== id));
