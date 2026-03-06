@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { memo } from "react";
 import {
-  Upload, FileText, Landmark, Check, X, FileUp, ArrowRight, Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown,
+  Upload, Check, X, ArrowRight, Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown,
   Lightbulb, Plus, XCircle, ShieldAlert, AlertTriangle, Info, Ban, Tag, ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
