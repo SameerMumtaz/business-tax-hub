@@ -6,6 +6,7 @@ import { categorizeTransactions, invalidateRulesCache } from "@/lib/categorize";
 import { generateId } from "@/lib/format";
 import { ExpenseCategory } from "@/types/tax";
 import { supabase } from "@/integrations/supabase/client";
+import { reconstructPageText } from "@/lib/pdfTextExtract";
 import { toast } from "sonner";
 
 export interface AuditIssue {
