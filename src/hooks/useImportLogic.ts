@@ -6,7 +6,7 @@ import { categorizeTransactions, invalidateRulesCache } from "@/lib/categorize";
 import { generateId } from "@/lib/format";
 import { ExpenseCategory } from "@/types/tax";
 import { supabase } from "@/integrations/supabase/client";
-import { reconstructPageText } from "@/lib/pdfTextExtract";
+import { reconstructPageText, detectDocType } from "@/lib/pdfTextExtract";
 import { toast } from "sonner";
 
 export interface AuditIssue {
@@ -181,6 +181,7 @@ export default function useImportLogic() {
         pageTexts.push(reconstructPageText(textItems));
       }
       const fullText = pageTexts.join("\n\n--- PAGE BREAK ---\n\n");
+      const docType = detectDocType(fullText);
       setPdfStatus("Extracting transactions…"); setPdfProgress(40);
       const CHUNK_SIZE = 50000; const textChunks: string[] = [];
       if (fullText.length <= CHUNK_SIZE) { textChunks.push(fullText); } else {
@@ -192,7 +193,7 @@ export default function useImportLogic() {
       for (let i = 0; i < textChunks.length; i++) {
         if (textChunks.length > 1) setPdfStatus(`Extracting chunk ${i + 1}/${textChunks.length}…`);
         setPdfProgress(40 + Math.round(((i + 1) / textChunks.length) * 50));
-        const { data, error } = await supabase.functions.invoke("parse-pdf", { body: { text: textChunks[i] } });
+        const { data, error } = await supabase.functions.invoke("parse-pdf", { body: { text: textChunks[i], docType } });
         if (error) { chunkErrors.push(`Chunk ${i + 1}: ${(error as any).message || "failed"}`); continue; }
         if (data?.transactions?.length) allTx.push(...data.transactions);
       }
