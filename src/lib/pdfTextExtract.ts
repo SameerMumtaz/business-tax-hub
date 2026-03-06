@@ -1,6 +1,6 @@
 // Spatial PDF text reconstruction utility
 // Preserves column layout by detecting X-coordinate gaps between text items
-// This ensures amounts in right-aligned columns appear on the same line as descriptions
+// Uses tolerance-based Y-band clustering that adapts to font size
 
 export interface TextItem {
   str: string;
@@ -14,74 +14,119 @@ interface LineItem {
   y: number;
   text: string;
   width: number;
+  height: number;
+}
+
+interface ReconstructedLine {
+  y: number;
+  items: LineItem[];
+  text: string;
+}
+
+export type DocType = "bank_statement" | "w2" | "unknown";
+
+/**
+ * Detect document type from extracted text.
+ */
+export function detectDocType(fullText: string): DocType {
+  const upper = fullText.toUpperCase();
+
+  if (
+    upper.includes("WAGE AND TAX STATEMENT") ||
+    upper.includes("FORM W-2") ||
+    upper.includes("W-2 WAGE")
+  ) {
+    return "w2";
+  }
+
+  if (
+    upper.includes("ACCOUNT STATEMENT") ||
+    upper.includes("STATEMENT OF ACCOUNT") ||
+    upper.includes("BEGINNING BALANCE") ||
+    upper.includes("ENDING BALANCE") ||
+    upper.includes("AVAILABLE BALANCE") ||
+    upper.includes("DEPOSITS AND ADDITIONS") ||
+    upper.includes("WITHDRAWALS AND DEDUCTIONS") ||
+    upper.includes("DEPOSITS AND OTHER CREDITS") ||
+    upper.includes("WITHDRAWALS AND OTHER DEBITS") ||
+    upper.includes("TRANSACTION DETAIL") ||
+    upper.includes("PREVIOUS BALANCE") ||
+    upper.includes("NEW BALANCE") ||
+    upper.includes("PAYMENT DUE DATE") ||
+    upper.includes("MINIMUM PAYMENT")
+  ) {
+    return "bank_statement";
+  }
+
+  return "unknown";
 }
 
 /**
  * Reconstructs text from PDF page content items, preserving spatial layout.
- * Groups items by Y-coordinate (line), sorts by X within each line,
- * and inserts tab separators for large horizontal gaps (column boundaries).
+ * Uses tolerance-based Y-band clustering that adapts to font size,
+ * and inserts separators based on character-relative gap detection.
  */
 export function reconstructPageText(items: TextItem[]): string {
   const lineItems: LineItem[] = [];
 
   for (const item of items) {
     if (!item.str || !item.str.trim()) continue;
-    const x = Math.round(item.transform?.[4] ?? 0);
-    const y = Math.round(item.transform?.[5] ?? 0);
-    const width = Math.round(item.width ?? item.str.length * 6);
-    lineItems.push({ x, y, text: item.str, width });
+    const x = item.transform?.[4] ?? 0;
+    const y = item.transform?.[5] ?? 0;
+    const width = item.width ?? item.str.length * 6;
+    const height = item.height ?? 12;
+    lineItems.push({ x, y, text: item.str, width, height });
   }
 
   if (lineItems.length === 0) return "";
 
-  // Group by Y-coordinate (tolerance of 3px for slight vertical offsets)
-  const yGroups = new Map<number, LineItem[]>();
-  const sortedByY = [...lineItems].sort((a, b) => b.y - a.y); // top to bottom (PDF Y is bottom-up)
+  // Sort by Y descending (top of page first in PDF coords), then X ascending
+  const sorted = [...lineItems].sort((a, b) => b.y - a.y || a.x - b.x);
 
-  for (const item of sortedByY) {
-    let matched = false;
-    for (const [groupY, group] of yGroups) {
-      if (Math.abs(item.y - groupY) <= 3) {
-        group.push(item);
-        matched = true;
-        break;
-      }
-    }
-    if (!matched) {
-      yGroups.set(item.y, [item]);
+  // Group into lines using adaptive Y-tolerance based on item height
+  const lines: { y: number; items: LineItem[] }[] = [];
+  let currentBand: LineItem[] = [sorted[0]];
+  let bandY = sorted[0].y;
+
+  for (let i = 1; i < sorted.length; i++) {
+    const item = sorted[i];
+    // Tolerance: ~30% of the item's font height, minimum 2px
+    const tolerance = Math.max(item.height * 0.3, 2);
+    if (Math.abs(item.y - bandY) <= tolerance) {
+      currentBand.push(item);
+    } else {
+      lines.push({ y: bandY, items: [...currentBand] });
+      currentBand = [item];
+      bandY = item.y;
     }
   }
+  lines.push({ y: bandY, items: [...currentBand] });
 
-  // Sort groups top-to-bottom, items within each group left-to-right
-  const sortedGroups = [...yGroups.entries()]
-    .sort((a, b) => b[0] - a[0]) // Higher Y = higher on page
-    .map(([, group]) => group.sort((a, b) => a.x - b.x));
-
+  // Build text for each line
   const outputLines: string[] = [];
 
-  for (const group of sortedGroups) {
-    let lineText = "";
-    let prevEndX = 0;
+  for (const line of lines) {
+    // Sort items left-to-right within the line
+    const sortedItems = [...line.items].sort((a, b) => a.x - b.x);
 
-    for (let i = 0; i < group.length; i++) {
-      const item = group[i];
-      const gap = item.x - prevEndX;
+    let text = sortedItems[0].text;
+    for (let i = 1; i < sortedItems.length; i++) {
+      const prev = sortedItems[i - 1];
+      const curr = sortedItems[i];
+      const gap = curr.x - (prev.x + prev.width);
 
-      if (i > 0) {
-        // Large gap = column separator (use multiple spaces to preserve column structure)
-        if (gap > 40) {
-          lineText += "    "; // 4 spaces = column separator
-        } else if (gap > 8) {
-          lineText += " ";
-        }
-        // Overlapping or very close = no separator
+      // Gap detection relative to font height
+      if (gap > prev.height * 2) {
+        text += "    "; // Large gap = column separator
+      } else if (gap > prev.height * 0.3) {
+        text += " "; // Normal word gap
       }
+      // Very close or overlapping = no separator
 
-      lineText += item.text;
-      prevEndX = item.x + item.width;
+      text += curr.text;
     }
 
-    outputLines.push(lineText.trimEnd());
+    outputLines.push(text.trimEnd());
   }
 
   return outputLines.join("\n");
