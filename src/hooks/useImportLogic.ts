@@ -184,37 +184,53 @@ export default function useImportLogic() {
       const fullText = pageTexts.join("\n\n--- PAGE BREAK ---\n\n");
       const docType = detectDocType(fullText);
 
-      const CHUNK_SIZE = 25000; const textChunks: string[] = [];
+      const CHUNK_SIZE = 12000; const textChunks: string[] = [];
       if (fullText.length <= CHUNK_SIZE) { textChunks.push(fullText); } else {
         let current = "";
         for (const pt of pageTexts) { if (current.length + pt.length > CHUNK_SIZE && current.length > 0) { textChunks.push(current); current = ""; } current += pt + "\n\n--- PAGE BREAK ---\n\n"; }
         if (current.trim()) textChunks.push(current);
       }
 
-      // AI analysis with live elapsed timer
+      // Blistering mode: parallel AI chunk analysis with timeout safeguards
       const allTx: any[] = []; const chunkErrors: string[] = [];
-      for (let i = 0; i < textChunks.length; i++) {
-        const chunkLabel = textChunks.length > 1
-          ? `AI analyzing transactions (${i + 1}/${textChunks.length})`
-          : `AI analyzing transactions`;
+      const totalChunks = textChunks.length;
+      const concurrency = Math.min(4, totalChunks);
+      let nextChunkIndex = 0;
+      let completed = 0;
+      const aiStart = Date.now();
 
-        // Live elapsed timer that updates every second
-        let elapsed = 0;
-        const timer = setInterval(() => {
-          elapsed++;
-          setPdfStatus(`${chunkLabel}… ${elapsed}s elapsed`);
-        }, 1000);
-        setPdfStatus(`${chunkLabel}…`);
-        setPdfProgress(30 + Math.round((i / textChunks.length) * 55));
+      const statusTimer = setInterval(() => {
+        const elapsed = Math.round((Date.now() - aiStart) / 1000);
+        const inFlight = Math.min(concurrency, Math.max(totalChunks - completed, 0));
+        setPdfStatus(`AI analyzing chunks… ${completed}/${totalChunks} done, ${inFlight} in flight, ${elapsed}s elapsed`);
+      }, 1000);
 
-        try {
-          const { data, error } = await supabase.functions.invoke("parse-pdf", { body: { text: textChunks[i], docType } });
-          if (error) { chunkErrors.push(`Chunk ${i + 1}: ${(error as any).message || "failed"}`); continue; }
-          if (data?.transactions?.length) allTx.push(...data.transactions);
-        } finally {
-          clearInterval(timer);
+      const runWorker = async () => {
+        while (nextChunkIndex < totalChunks) {
+          const chunkIndex = nextChunkIndex++;
+          const timeoutMs = 45000;
+
+          try {
+            const chunkPromise = supabase.functions.invoke("parse-pdf", { body: { text: textChunks[chunkIndex], docType } });
+            const timeoutPromise = new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(`Chunk ${chunkIndex + 1} timed out after ${timeoutMs / 1000}s`)), timeoutMs)
+            );
+
+            const { data, error } = await Promise.race([chunkPromise, timeoutPromise]) as Awaited<typeof chunkPromise>;
+            if (error) chunkErrors.push(`Chunk ${chunkIndex + 1}: ${(error as any).message || "failed"}`);
+            else if (data?.transactions?.length) allTx.push(...data.transactions);
+          } catch (e) {
+            chunkErrors.push(`Chunk ${chunkIndex + 1}: ${e instanceof Error ? e.message : "failed"}`);
+          } finally {
+            completed++;
+            setPdfProgress(30 + Math.round((completed / totalChunks) * 55));
+          }
         }
-      }
+      };
+
+      await Promise.all(Array.from({ length: concurrency }, () => runWorker()));
+      clearInterval(statusTimer);
+      setPdfStatus(`AI analysis complete (${completed}/${totalChunks} chunks)`);
       if (allTx.length === 0) { toast.error(chunkErrors[0] || "No transactions found in PDF"); return; }
 
       setPdfProgress(90); setPdfStatus("Processing results…");
