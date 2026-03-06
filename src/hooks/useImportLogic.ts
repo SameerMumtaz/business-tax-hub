@@ -245,7 +245,7 @@ export default function useImportLogic() {
 
       await Promise.all(Array.from({ length: concurrency }, () => runWorker()));
       clearInterval(statusTimer);
-      setPdfStatus(`AI analysis complete (${completed}/${totalChunks} chunks)`);
+      setPdfStatus(`Analysis complete (${completed}/${totalChunks} chunks)`);
       if (allTx.length === 0) { toast.error(chunkErrors[0] || "No transactions found in PDF"); return; }
 
       setPdfProgress(90); setPdfStatus("Processing results…");
