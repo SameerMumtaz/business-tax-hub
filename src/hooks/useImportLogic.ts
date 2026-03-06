@@ -212,7 +212,7 @@ export default function useImportLogic() {
       };
 
       const updateStatus = () => {
-        setPdfStatus(`AI analyzing… ${completed}/${totalChunks} chunks done, ${getEta()}`);
+        setPdfStatus(`Analyzing transactions… ${completed}/${totalChunks} chunks done, ${getEta()}`);
       };
       updateStatus();
       const statusTimer = setInterval(updateStatus, 1000);
