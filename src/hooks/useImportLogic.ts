@@ -6,6 +6,7 @@ import { categorizeTransactions, invalidateRulesCache } from "@/lib/categorize";
 import { generateId } from "@/lib/format";
 import { ExpenseCategory } from "@/types/tax";
 import { supabase } from "@/integrations/supabase/client";
+import { reconstructPageText } from "@/lib/pdfTextExtract";
 import { toast } from "sonner";
 
 export interface AuditIssue {
@@ -172,15 +173,14 @@ export default function useImportLogic() {
         setPdfProgress(Math.round((p / numPages) * 30));
         const page = await pdf.getPage(p);
         const content = await page.getTextContent();
-        const lines: string[] = []; let lastY: number | null = null;
-        for (const item of content.items) {
-          if ("str" in item && item.str) {
-            const y = Math.round((item as any).transform?.[5] ?? 0);
-            if (lastY !== null && Math.abs(y - lastY) > 5) lines.push("\n");
-            lines.push(item.str + " "); lastY = y;
-          }
-        }
-        pageTexts.push(lines.join(""));
+        const textItems = content.items
+          .filter((item: any) => "str" in item && item.str)
+          .map((item: any) => ({
+            str: item.str,
+            transform: item.transform,
+            width: item.width,
+          }));
+        pageTexts.push(reconstructPageText(textItems));
       }
       const fullText = pageTexts.join("\n\n--- PAGE BREAK ---\n\n");
       setPdfStatus("Extracting transactions…"); setPdfProgress(40);

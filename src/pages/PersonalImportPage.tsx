@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Upload, FileText, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { reconstructPageText } from "@/lib/pdfTextExtract";
 
 const PERSONAL_CATEGORIES = [
   "Housing", "Medical & Health", "Charitable Giving", "Education", "Childcare",
@@ -72,17 +73,14 @@ export default function PersonalImportPage() {
         const page = await pdf.getPage(p);
         const content = await page.getTextContent();
         // Reconstruct lines using Y-coordinate changes (same as business import)
-        const lines: string[] = [];
-        let lastY: number | null = null;
-        for (const item of content.items) {
-          if ("str" in item && item.str) {
-            const y = Math.round((item as any).transform?.[5] ?? 0);
-            if (lastY !== null && Math.abs(y - lastY) > 5) lines.push("\n");
-            lines.push(item.str + " ");
-            lastY = y;
-          }
-        }
-        pageTexts.push(lines.join(""));
+        const textItems = content.items
+          .filter((item: any) => "str" in item && item.str)
+          .map((item: any) => ({
+            str: item.str,
+            transform: item.transform,
+            width: item.width,
+          }));
+        pageTexts.push(reconstructPageText(textItems));
       }
       const fullText = pageTexts.join("\n\n--- PAGE BREAK ---\n\n");
 
