@@ -197,14 +197,15 @@ export default function useImportLogic() {
       const concurrency = Math.min(4, totalChunks);
       let nextChunkIndex = 0;
       let completed = 0;
-      const chunkTimes: number[] = []; // track last 3 chunk durations
+      const chunkTimes: number[] = [];
+      // For ≤7 chunks, need ceil(total/2) done before showing ETA; otherwise need 4
+      const etaThreshold = totalChunks <= 7 ? Math.ceil(totalChunks / 2) : 4;
 
       const getEta = () => {
-        if (chunkTimes.length === 0) return "estimating…";
-        const recent = chunkTimes.slice(-3);
-        const avgMs = recent.reduce((a, b) => a + b, 0) / recent.length;
+        if (chunkTimes.length < etaThreshold) return "estimating…";
+        const window = totalChunks <= 7 ? chunkTimes.slice(-etaThreshold) : chunkTimes.slice(-4);
+        const avgMs = window.reduce((a, b) => a + b, 0) / window.length;
         const remaining = totalChunks - completed;
-        // With concurrency, remaining chunks process in ceil(remaining/concurrency) rounds
         const rounds = Math.ceil(remaining / concurrency);
         const etaSec = Math.max(1, Math.round((avgMs * rounds) / 1000));
         return etaSec >= 60 ? `~${Math.ceil(etaSec / 60)}min remaining` : `~${etaSec}s remaining`;
