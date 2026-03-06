@@ -191,24 +191,36 @@ export default function useImportLogic() {
         if (current.trim()) textChunks.push(current);
       }
 
-      // Blistering mode: parallel AI chunk analysis with timeout safeguards
+      // Blistering mode: parallel AI chunk analysis with rolling ETA
       const allTx: any[] = []; const chunkErrors: string[] = [];
       const totalChunks = textChunks.length;
       const concurrency = Math.min(4, totalChunks);
       let nextChunkIndex = 0;
       let completed = 0;
-      const aiStart = Date.now();
+      const chunkTimes: number[] = []; // track last 3 chunk durations
 
-      const statusTimer = setInterval(() => {
-        const elapsed = Math.round((Date.now() - aiStart) / 1000);
-        const inFlight = Math.min(concurrency, Math.max(totalChunks - completed, 0));
-        setPdfStatus(`AI analyzing chunks… ${completed}/${totalChunks} done, ${inFlight} in flight, ${elapsed}s elapsed`);
-      }, 1000);
+      const getEta = () => {
+        if (chunkTimes.length === 0) return "estimating…";
+        const recent = chunkTimes.slice(-3);
+        const avgMs = recent.reduce((a, b) => a + b, 0) / recent.length;
+        const remaining = totalChunks - completed;
+        // With concurrency, remaining chunks process in ceil(remaining/concurrency) rounds
+        const rounds = Math.ceil(remaining / concurrency);
+        const etaSec = Math.max(1, Math.round((avgMs * rounds) / 1000));
+        return etaSec >= 60 ? `~${Math.ceil(etaSec / 60)}min remaining` : `~${etaSec}s remaining`;
+      };
+
+      const updateStatus = () => {
+        setPdfStatus(`AI analyzing… ${completed}/${totalChunks} chunks done, ${getEta()}`);
+      };
+      updateStatus();
+      const statusTimer = setInterval(updateStatus, 1000);
 
       const runWorker = async () => {
         while (nextChunkIndex < totalChunks) {
           const chunkIndex = nextChunkIndex++;
           const timeoutMs = 45000;
+          const chunkStart = performance.now();
 
           try {
             const chunkPromise = supabase.functions.invoke("parse-pdf", { body: { text: textChunks[chunkIndex], docType } });
@@ -222,8 +234,10 @@ export default function useImportLogic() {
           } catch (e) {
             chunkErrors.push(`Chunk ${chunkIndex + 1}: ${e instanceof Error ? e.message : "failed"}`);
           } finally {
+            chunkTimes.push(performance.now() - chunkStart);
             completed++;
             setPdfProgress(30 + Math.round((completed / totalChunks) * 55));
+            updateStatus();
           }
         }
       };
