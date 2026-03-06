@@ -184,34 +184,36 @@ export default function useImportLogic() {
       const fullText = pageTexts.join("\n\n--- PAGE BREAK ---\n\n");
       const docType = detectDocType(fullText);
 
-      const CHUNK_SIZE = 50000; const textChunks: string[] = [];
+      const CHUNK_SIZE = 25000; const textChunks: string[] = [];
       if (fullText.length <= CHUNK_SIZE) { textChunks.push(fullText); } else {
         let current = "";
         for (const pt of pageTexts) { if (current.length + pt.length > CHUNK_SIZE && current.length > 0) { textChunks.push(current); current = ""; } current += pt + "\n\n--- PAGE BREAK ---\n\n"; }
         if (current.trim()) textChunks.push(current);
       }
 
-      // AI analysis with ETA tracking
-      let estSecondsPerChunk = 8;
+      // AI analysis with live elapsed timer
       const allTx: any[] = []; const chunkErrors: string[] = [];
       for (let i = 0; i < textChunks.length; i++) {
-        const remainingChunks = textChunks.length - i;
-        const etaSeconds = Math.round(remainingChunks * estSecondsPerChunk);
-        const etaLabel = etaSeconds >= 60 ? `~${Math.ceil(etaSeconds / 60)}min remaining` : `~${etaSeconds}s remaining`;
         const chunkLabel = textChunks.length > 1
-          ? `AI analyzing transactions (${i + 1}/${textChunks.length})… ${etaLabel}`
-          : `AI analyzing transactions… ${etaLabel}`;
-        setPdfStatus(chunkLabel);
-        setPdfProgress(30 + Math.round(((i + 1) / textChunks.length) * 55));
+          ? `AI analyzing transactions (${i + 1}/${textChunks.length})`
+          : `AI analyzing transactions`;
 
-        const chunkStart = performance.now();
-        const { data, error } = await supabase.functions.invoke("parse-pdf", { body: { text: textChunks[i], docType } });
-        const chunkElapsed = (performance.now() - chunkStart) / 1000;
-        // Refine ETA based on actual timing of first chunk
-        if (i === 0) estSecondsPerChunk = Math.max(chunkElapsed, 2);
+        // Live elapsed timer that updates every second
+        let elapsed = 0;
+        const timer = setInterval(() => {
+          elapsed++;
+          setPdfStatus(`${chunkLabel}… ${elapsed}s elapsed`);
+        }, 1000);
+        setPdfStatus(`${chunkLabel}…`);
+        setPdfProgress(30 + Math.round((i / textChunks.length) * 55));
 
-        if (error) { chunkErrors.push(`Chunk ${i + 1}: ${(error as any).message || "failed"}`); continue; }
-        if (data?.transactions?.length) allTx.push(...data.transactions);
+        try {
+          const { data, error } = await supabase.functions.invoke("parse-pdf", { body: { text: textChunks[i], docType } });
+          if (error) { chunkErrors.push(`Chunk ${i + 1}: ${(error as any).message || "failed"}`); continue; }
+          if (data?.transactions?.length) allTx.push(...data.transactions);
+        } finally {
+          clearInterval(timer);
+        }
       }
       if (allTx.length === 0) { toast.error(chunkErrors[0] || "No transactions found in PDF"); return; }
 
