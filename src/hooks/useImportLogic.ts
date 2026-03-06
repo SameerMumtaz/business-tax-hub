@@ -212,7 +212,7 @@ export default function useImportLogic() {
       };
 
       const updateStatus = () => {
-        setPdfStatus(`AI analyzing… ${completed}/${totalChunks} chunks done, ${getEta()}`);
+        setPdfStatus(`Analyzing transactions… ${completed}/${totalChunks} chunks done, ${getEta()}`);
       };
       updateStatus();
       const statusTimer = setInterval(updateStatus, 1000);
@@ -245,7 +245,7 @@ export default function useImportLogic() {
 
       await Promise.all(Array.from({ length: concurrency }, () => runWorker()));
       clearInterval(statusTimer);
-      setPdfStatus(`AI analysis complete (${completed}/${totalChunks} chunks)`);
+      setPdfStatus(`Analysis complete (${completed}/${totalChunks} chunks)`);
       if (allTx.length === 0) { toast.error(chunkErrors[0] || "No transactions found in PDF"); return; }
 
       setPdfProgress(90); setPdfStatus("Processing results…");
