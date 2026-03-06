@@ -181,20 +181,33 @@ export default function useImportLogic() {
           }));
         pageTexts.push(reconstructPageText(textItems));
       }
-      const fullText = pageTexts.join("\n\n--- PAGE BREAK ---\n\n");
+      // Pre-filter: strip junk lines from each page before chunking
+      const JUNK_LINE_RE = /^(page \d+|continued on|account number|routing number|member fdic|equal housing|www\.|http|privacy policy|terms and conditions|disclosures?|©|\*{3,}|={3,}|-{5,}|\s*)$/i;
+      const DISCLOSURE_RE = /\b(terms and conditions|privacy policy|arbitration|governing law|electronic fund|truth in savings|reg(ulation)?\s+[a-z]|important information|please read|fdic|equal housing)\b/i;
+
+      const filteredPageTexts = pageTexts.map((pageText) => {
+        const lines = pageText.split("\n");
+        // Skip entire page if >60% of lines are disclosure/legal content
+        const disclosureLines = lines.filter((l) => DISCLOSURE_RE.test(l)).length;
+        if (lines.length > 5 && disclosureLines / lines.length > 0.6) return null;
+        // Filter individual junk lines
+        return lines.filter((l) => !JUNK_LINE_RE.test(l.trim())).join("\n");
+      }).filter((p): p is string => p !== null && p.trim().length > 20);
+
+      const fullText = filteredPageTexts.join("\n\n--- PAGE BREAK ---\n\n");
       const docType = detectDocType(fullText);
 
-      const CHUNK_SIZE = 12000; const textChunks: string[] = [];
+      const CHUNK_SIZE = 20000; const textChunks: string[] = [];
       if (fullText.length <= CHUNK_SIZE) { textChunks.push(fullText); } else {
         let current = "";
-        for (const pt of pageTexts) { if (current.length + pt.length > CHUNK_SIZE && current.length > 0) { textChunks.push(current); current = ""; } current += pt + "\n\n--- PAGE BREAK ---\n\n"; }
+        for (const pt of filteredPageTexts) { if (current.length + pt.length > CHUNK_SIZE && current.length > 0) { textChunks.push(current); current = ""; } current += pt + "\n\n--- PAGE BREAK ---\n\n"; }
         if (current.trim()) textChunks.push(current);
       }
 
-      // Blistering mode: parallel AI chunk analysis with rolling ETA
+      // Parallel chunk analysis with rolling ETA
       const allTx: any[] = []; const chunkErrors: string[] = [];
       const totalChunks = textChunks.length;
-      const concurrency = Math.min(4, totalChunks);
+      const concurrency = Math.min(6, totalChunks);
       let nextChunkIndex = 0;
       let completed = 0;
       const chunkTimes: number[] = [];
