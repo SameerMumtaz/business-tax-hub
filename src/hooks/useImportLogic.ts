@@ -369,7 +369,7 @@ export default function useImportLogic() {
     dismissedIssues, pdfProcessing, pdfStatus, pdfProgress, pdfInputRef, highlightedId, highlightedRowRef,
     inlineRuleIssueIdx, setInlineRuleIssueIdx, inlineRuleKeyword, setInlineRuleKeyword, inlineRuleCategory, setInlineRuleCategory,
     currentPage, setCurrentPage, PAGE_SIZE, sortedTransactions, totalPages, pagedTransactions,
-    navigateToTransaction, handlePdfUpload, processFile, handleDrop, handleFileInput, toggleInclude, deleteTransaction,
+    navigateToTransaction, handlePdfUpload, handleFileUpload, handleDrop, handleFileInput, toggleInclude, deleteTransaction,
     toggleSort, updateCategory, ruleSuggestions, visibleSuggestions, saveRule, dismissRule, saveAllRules, saveInlineRule,
     handleAudit, applyIssueSuggestion, dismissIssue, uncategorizedCount, handleImport, setStep, setTransactions,
     incomeCount, expenseCountN, totalIncome, totalExpenseAmt, getAffectedTransactions,
