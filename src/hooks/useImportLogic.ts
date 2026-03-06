@@ -158,17 +158,17 @@ export default function useImportLogic() {
 
   const handlePdfFile = useCallback(async (file: File) => {
     if (file.size > 20 * 1024 * 1024) { toast.error("File too large — max 20MB"); return; }
-    setPdfProcessing(true); setPdfStatus("Loading PDF…"); setPdfProgress(0);
+    setPdfProcessing(true); setPdfStatus("Reading PDF…"); setPdfProgress(0);
     try {
       const pdfjsLib = await import("pdfjs-dist");
       pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       const numPages = Math.min(pdf.numPages, 50);
-      setPdfStatus(`Extracting text from ${numPages} pages…`);
       const pageTexts: string[] = [];
       for (let p = 1; p <= numPages; p++) {
-        setPdfProgress(Math.round((p / numPages) * 30));
+        setPdfProgress(Math.round((p / numPages) * 25));
+        setPdfStatus(`Reading page ${p} of ${numPages}…`);
         const page = await pdf.getPage(p);
         const content = await page.getTextContent();
         const textItems = content.items
@@ -177,27 +177,44 @@ export default function useImportLogic() {
             str: item.str,
             transform: item.transform,
             width: item.width,
+            height: item.height,
           }));
         pageTexts.push(reconstructPageText(textItems));
       }
       const fullText = pageTexts.join("\n\n--- PAGE BREAK ---\n\n");
       const docType = detectDocType(fullText);
-      setPdfStatus("Extracting transactions…"); setPdfProgress(40);
+
       const CHUNK_SIZE = 50000; const textChunks: string[] = [];
       if (fullText.length <= CHUNK_SIZE) { textChunks.push(fullText); } else {
         let current = "";
         for (const pt of pageTexts) { if (current.length + pt.length > CHUNK_SIZE && current.length > 0) { textChunks.push(current); current = ""; } current += pt + "\n\n--- PAGE BREAK ---\n\n"; }
         if (current.trim()) textChunks.push(current);
       }
+
+      // AI analysis with ETA tracking
+      let estSecondsPerChunk = 8;
       const allTx: any[] = []; const chunkErrors: string[] = [];
       for (let i = 0; i < textChunks.length; i++) {
-        if (textChunks.length > 1) setPdfStatus(`Extracting chunk ${i + 1}/${textChunks.length}…`);
-        setPdfProgress(40 + Math.round(((i + 1) / textChunks.length) * 50));
+        const remainingChunks = textChunks.length - i;
+        const etaSeconds = Math.round(remainingChunks * estSecondsPerChunk);
+        const etaLabel = etaSeconds >= 60 ? `~${Math.ceil(etaSeconds / 60)}min remaining` : `~${etaSeconds}s remaining`;
+        const chunkLabel = textChunks.length > 1
+          ? `AI analyzing transactions (${i + 1}/${textChunks.length})… ${etaLabel}`
+          : `AI analyzing transactions… ${etaLabel}`;
+        setPdfStatus(chunkLabel);
+        setPdfProgress(30 + Math.round(((i + 1) / textChunks.length) * 55));
+
+        const chunkStart = performance.now();
         const { data, error } = await supabase.functions.invoke("parse-pdf", { body: { text: textChunks[i], docType } });
+        const chunkElapsed = (performance.now() - chunkStart) / 1000;
+        // Refine ETA based on actual timing of first chunk
+        if (i === 0) estSecondsPerChunk = Math.max(chunkElapsed, 2);
+
         if (error) { chunkErrors.push(`Chunk ${i + 1}: ${(error as any).message || "failed"}`); continue; }
         if (data?.transactions?.length) allTx.push(...data.transactions);
       }
       if (allTx.length === 0) { toast.error(chunkErrors[0] || "No transactions found in PDF"); return; }
+
       setPdfProgress(90); setPdfStatus("Processing results…");
       const reviewed: ReviewTransaction[] = allTx.map((t: any) => ({
         date: t.date || "", description: t.description || "", originalDescription: t.description || "",
@@ -207,6 +224,7 @@ export default function useImportLogic() {
       const { dupeCount, withDupeFlags } = detectDuplicates(reviewed, existingExpenses, existingSales);
       setTransactions(withDupeFlags); setStep("review");
       toast.success(`Extracted ${reviewed.length} transactions from ${numPages} pages${dupeCount > 0 ? ` (${dupeCount} duplicates excluded)` : ""}`);
+      setPdfStatus("Categorizing transactions…"); setPdfProgress(95);
       await categorizeReviewed(reviewed);
     } catch (err) { console.error(err); toast.error(err instanceof Error ? err.message : "Failed to parse PDF"); }
     finally { setPdfProcessing(false); setPdfStatus(""); setPdfProgress(0); }
