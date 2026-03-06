@@ -45,10 +45,11 @@ export default function ImportPage() {
   const {
     step, importing, importProgress, importStatus, dragOver, setDragOver, pdfDragOver, setPdfDragOver,
     categorizing, sortField, sortDir, auditIssues, auditSummary, auditRiskLevel, auditEstimatedTax,
-    dismissedIssues, pdfProcessing, pdfStatus, pdfProgress, pdfInputRef, highlightedId, highlightedRowRef,
+    dismissedIssues, pdfProcessing, pdfStatus, pdfProgress, highlightedId, highlightedRowRef,
     inlineRuleIssueIdx, setInlineRuleIssueIdx, inlineRuleKeyword, setInlineRuleKeyword, inlineRuleCategory, setInlineRuleCategory,
     currentPage, setCurrentPage, PAGE_SIZE, sortedTransactions, totalPages, pagedTransactions, transactions,
-    navigateToTransaction, handlePdfUpload, handleDrop, handleFileInput, toggleInclude, deleteTransaction,
+    navigateToTransaction, handleFileUpload, handleDrop, handleFileInput,
+    toggleInclude, deleteTransaction,
     toggleSort, updateCategory, visibleSuggestions, saveRule, dismissRule, saveAllRules, saveInlineRule,
     handleAudit, applyIssueSuggestion, dismissIssue, uncategorizedCount, handleImport, setStep, setTransactions,
     incomeCount, expenseCountN, totalIncome, totalExpenseAmt, getAffectedTransactions, auditing,
