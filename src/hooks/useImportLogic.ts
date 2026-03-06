@@ -181,18 +181,13 @@ export default function useImportLogic() {
           }));
         pageTexts.push(reconstructPageText(textItems));
       }
-      // Pre-filter: strip junk lines from each page before chunking
-      const JUNK_LINE_RE = /^(page \d+|continued on|account number|routing number|member fdic|equal housing|www\.|http|privacy policy|terms and conditions|disclosures?|©|\*{3,}|={3,}|-{5,}|\s*)$/i;
-      const DISCLOSURE_RE = /\b(terms and conditions|privacy policy|arbitration|governing law|electronic fund|truth in savings|reg(ulation)?\s+[a-z]|important information|please read|fdic|equal housing)\b/i;
+      // Light pre-filter: only strip purely decorative/empty lines — never content that could be transactions
+      const EMPTY_LINE_RE = /^(\s*|\*{5,}|={5,}|-{8,}|_{5,})$/;
 
       const filteredPageTexts = pageTexts.map((pageText) => {
         const lines = pageText.split("\n");
-        // Skip entire page if >60% of lines are disclosure/legal content
-        const disclosureLines = lines.filter((l) => DISCLOSURE_RE.test(l)).length;
-        if (lines.length > 5 && disclosureLines / lines.length > 0.6) return null;
-        // Filter individual junk lines
-        return lines.filter((l) => !JUNK_LINE_RE.test(l.trim())).join("\n");
-      }).filter((p): p is string => p !== null && p.trim().length > 20);
+        return lines.filter((l) => !EMPTY_LINE_RE.test(l)).join("\n");
+      }).filter((p) => p.trim().length > 10);
 
       const fullText = filteredPageTexts.join("\n\n--- PAGE BREAK ---\n\n");
       const docType = detectDocType(fullText);
