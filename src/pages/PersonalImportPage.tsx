@@ -209,7 +209,7 @@ export default function PersonalImportPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Import Statements</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Upload bank or credit card statements (PDF) to auto-import expenses
+            Upload bank or credit card statements to auto-import expenses
           </p>
         </div>
 

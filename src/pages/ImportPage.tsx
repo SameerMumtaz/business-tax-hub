@@ -6,11 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { memo } from "react";
 import {
-  Upload, FileText, Landmark, Check, X, FileUp, ArrowRight, Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown,
+  Upload, Check, X, ArrowRight, Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown,
   Lightbulb, Plus, XCircle, ShieldAlert, AlertTriangle, Info, Ban, Tag, ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -45,10 +44,11 @@ export default function ImportPage() {
   const {
     step, importing, importProgress, importStatus, dragOver, setDragOver, pdfDragOver, setPdfDragOver,
     categorizing, sortField, sortDir, auditIssues, auditSummary, auditRiskLevel, auditEstimatedTax,
-    dismissedIssues, pdfProcessing, pdfStatus, pdfProgress, pdfInputRef, highlightedId, highlightedRowRef,
+    dismissedIssues, pdfProcessing, pdfStatus, pdfProgress, highlightedId, highlightedRowRef,
     inlineRuleIssueIdx, setInlineRuleIssueIdx, inlineRuleKeyword, setInlineRuleKeyword, inlineRuleCategory, setInlineRuleCategory,
     currentPage, setCurrentPage, PAGE_SIZE, sortedTransactions, totalPages, pagedTransactions, transactions,
-    navigateToTransaction, handlePdfUpload, handleDrop, handleFileInput, toggleInclude, deleteTransaction,
+    navigateToTransaction, handleFileUpload, handleDrop, handleFileInput,
+    toggleInclude, deleteTransaction,
     toggleSort, updateCategory, visibleSuggestions, saveRule, dismissRule, saveAllRules, saveInlineRule,
     handleAudit, applyIssueSuggestion, dismissIssue, uncategorizedCount, handleImport, setStep, setTransactions,
     incomeCount, expenseCountN, totalIncome, totalExpenseAmt, getAffectedTransactions, auditing,
@@ -68,47 +68,39 @@ export default function ImportPage() {
         </div>
 
         {step === "upload" && (
-          <Tabs defaultValue="csv">
-            <TabsList>
-              <TabsTrigger value="csv"><FileText className="h-4 w-4 mr-2" />CSV Upload</TabsTrigger>
-              <TabsTrigger value="pdf"><FileUp className="h-4 w-4 mr-2" />PDF Statements</TabsTrigger>
-              <TabsTrigger value="bank"><Landmark className="h-4 w-4 mr-2" />Link Bank</TabsTrigger>
-            </TabsList>
-            <TabsContent value="csv" className="mt-6">
-              <div className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${dragOver ? "border-primary bg-accent" : "border-border"}`}
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={handleDrop}>
+          <div
+            className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
+              pdfProcessing ? "border-primary bg-accent/50" : (dragOver || pdfDragOver) ? "border-primary bg-accent" : "border-border"
+            }`}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+          >
+            {pdfProcessing ? (
+              <div className="flex flex-col items-center gap-3 max-w-xs mx-auto">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">{pdfStatus}</p>
+                {pdfProgress > 0 && <Progress value={pdfProgress} className="h-2 w-full" />}
+              </div>
+            ) : (
+              <>
                 <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Drop your CSV or Excel file here</h3>
-                <p className="text-sm text-muted-foreground mb-4">Supports CSV, TSV, XLSX, and XLS formats.</p>
-                <label><input type="file" accept=".csv,.tsv,.txt,.xlsx,.xls" className="hidden" onChange={handleFileInput} /><Button variant="outline" asChild><span>Browse Files</span></Button></label>
-              </div>
-            </TabsContent>
-            <TabsContent value="pdf" className="mt-6">
-              <div className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${pdfProcessing ? "border-primary bg-accent/50" : pdfDragOver ? "border-primary bg-accent" : "border-border"}`}
-                onDragOver={(e) => { e.preventDefault(); setPdfDragOver(true); }} onDragLeave={() => setPdfDragOver(false)}
-                onDrop={(e) => { e.preventDefault(); setPdfDragOver(false); const file = e.dataTransfer.files[0]; if (file?.name.toLowerCase().endsWith(".pdf")) { const dt = new DataTransfer(); dt.items.add(file); if (pdfInputRef.current) { pdfInputRef.current.files = dt.files; pdfInputRef.current.dispatchEvent(new Event("change", { bubbles: true })); } } else if (file) toast.error("Please drop a PDF file"); }}>
-                <FileUp className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Drop your PDF here or browse</h3>
-                <p className="text-sm text-muted-foreground mb-4">Upload PDF bank statements — up to 50 pages per file.</p>
-                {pdfProcessing ? (
-                  <div className="flex flex-col items-center gap-3 max-w-xs mx-auto">
-                    <Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="text-sm text-muted-foreground">{pdfStatus}</p>
-                    {pdfProgress > 0 && <Progress value={pdfProgress} className="h-2 w-full" />}
-                  </div>
-                ) : (
-                  <label><input type="file" accept=".pdf" className="hidden" ref={pdfInputRef} onChange={handlePdfUpload} /><Button variant="outline" asChild><span>Browse PDF Files</span></Button></label>
-                )}
-              </div>
-            </TabsContent>
-            <TabsContent value="bank" className="mt-6">
-              <div className="border-2 border-dashed rounded-lg p-12 text-center border-border">
-                <Landmark className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Link Bank Account</h3>
-                <p className="text-sm text-muted-foreground mb-4">Connect via Plaid for automatic syncing.</p>
-                <Badge variant="secondary" className="text-xs">Coming soon</Badge>
-              </div>
-            </TabsContent>
-          </Tabs>
+                <h3 className="text-lg font-semibold mb-2">Drop your bank statement here</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Supports PDF statements, CSV, TSV, XLSX, and XLS — from any bank.
+                </p>
+                <label>
+                  <input
+                    type="file"
+                    accept=".pdf,.csv,.tsv,.txt,.xlsx,.xls"
+                    className="hidden"
+                    onChange={handleFileInput}
+                  />
+                  <Button variant="outline" asChild><span>Browse Files</span></Button>
+                </label>
+              </>
+            )}
+          </div>
         )}
 
         {step === "review" && (
