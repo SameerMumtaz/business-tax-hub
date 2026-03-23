@@ -531,7 +531,28 @@ export default function JobSchedulerContent() {
           <TabsTrigger value="sites">Sites</TabsTrigger>
         </TabsList>
         <TabsContent value="calendar" className="mt-4">
-          <JobCalendarView jobs={jobs} sites={sites} assignments={assignments} teamMembers={teamMembers} onJobClick={(j) => openEditJob(j)} />
+          <JobCalendarView
+            jobs={jobs}
+            sites={sites}
+            assignments={assignments}
+            teamMembers={teamMembers}
+            onJobClick={(j) => openEditJob(j)}
+            onJobMove={async (jobId, newDate) => {
+              const job = jobs.find((j) => j.id === jobId);
+              if (!job) return;
+              const parseD = (s: string) => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
+              const fmtD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+              let updates: Record<string, any> = { start_date: newDate };
+              if (job.end_date) {
+                const diffDays = Math.round((parseD(job.end_date).getTime() - parseD(job.start_date).getTime()) / 86400000);
+                const newEnd = parseD(newDate);
+                newEnd.setDate(newEnd.getDate() + diffDays);
+                updates.end_date = fmtD(newEnd);
+              }
+              await updateJob(jobId, updates);
+              toast.success(`"${job.title}" moved to ${parseD(newDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}`);
+            }}
+          />
         </TabsContent>
         <TabsContent value="jobs" className="mt-4">
           <Card>
