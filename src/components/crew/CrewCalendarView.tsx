@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, DollarSign, MapPin } from "lucide-react";
 import type { AssignedJob } from "./CrewJobsList";
-import { formatDateOnlyKey, parseDateOnlyLocal } from "@/lib/dateOnly";
+import { dateOnlyKeyFromLocalDate, formatDateOnlyLong, getJobDateKeysInRange } from "@/lib/dateOnly";
 
 interface Props {
   jobs: AssignedJob[];
@@ -21,34 +21,20 @@ export default function CrewCalendarView({ jobs }: Props) {
     jobDates.get(dateStr)!.push(job);
   };
 
-  const toKey = (d: Date) => formatDateOnlyKey(d);
-
-  // Generate up to 1 year of recurring instances
-  const horizon = new Date();
-  horizon.setFullYear(horizon.getFullYear() + 1);
+  const toKey = (d: Date) => dateOnlyKeyFromLocalDate(d);
+  const selectedDateKey = selectedDate ? toKey(selectedDate) : undefined;
+  const rangeStart = selectedDateKey ?? toKey(new Date());
+  const rangeEnd = `${rangeStart.slice(0, 4)}-12-31`;
 
   jobs.forEach((job) => {
-    if (job.job_type === "recurring" && job.recurring_interval) {
-      const start = parseDateOnlyLocal(job.start_date);
-      const endDate = job.recurring_end_date ? parseDateOnlyLocal(job.recurring_end_date) : horizon;
-      const intervalDays = job.recurring_interval === "weekly" ? 7
-        : job.recurring_interval === "biweekly" ? 14 : 0;
-
-      const cursor = new Date(start);
-      while (cursor <= endDate) {
-        addJob(toKey(cursor), job);
-        if (job.recurring_interval === "monthly") {
-          cursor.setMonth(cursor.getMonth() + 1);
-        } else if (intervalDays > 0) {
-          cursor.setDate(cursor.getDate() + intervalDays);
-        } else {
-          break;
-        }
-      }
-    } else {
-      const key = toKey(parseDateOnlyLocal(job.start_date));
+    const keys = getJobDateKeysInRange(job, job.start_date, rangeEnd);
+    if (keys.length === 0) {
+      const key = job.start_date;
       addJob(key, job);
+      return;
     }
+
+    keys.forEach((key) => addJob(key, job));
   });
 
   const modifiers = {
@@ -64,7 +50,7 @@ export default function CrewCalendarView({ jobs }: Props) {
     },
   };
 
-  const selectedJobs = selectedDate ? (jobDates.get(toKey(selectedDate)) || []) : [];
+  const selectedJobs = selectedDateKey ? (jobDates.get(selectedDateKey) || []) : [];
 
   return (
     <div className="space-y-4">
@@ -83,7 +69,7 @@ export default function CrewCalendarView({ jobs }: Props) {
       {selectedDate && (
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-muted-foreground">
-            {selectedDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+            {selectedDateKey ? formatDateOnlyLong(selectedDateKey) : ""}
           </h3>
           {selectedJobs.length === 0 ? (
             <p className="text-sm text-muted-foreground">No jobs scheduled</p>
