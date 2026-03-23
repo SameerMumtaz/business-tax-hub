@@ -235,6 +235,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
   const [gapSuggestions, setGapSuggestions] = useState<string[]>([]);
   const dragStartDate = useRef<string | null>(null);
   const dragIsRecurringInstance = useRef(false);
+  const wasDragging = useRef(false);
 
   // Recurring drag dialog state
   const [recurringDialogOpen, setRecurringDialogOpen] = useState(false);
