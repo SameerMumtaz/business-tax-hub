@@ -39,6 +39,16 @@ Deno.serve(async (req) => {
 
     const { email, name, role, business_user_id, worker_type, pay_rate, address, state_employed, resend } = await req.json();
 
+    // Fetch business profile to get Bookie ID for the invite email
+    const bizAdminClient = createClient(supabaseUrl, serviceRoleKey);
+    const { data: bizProfile } = await bizAdminClient
+      .from("profiles")
+      .select("bookie_id, business_name")
+      .eq("user_id", business_user_id)
+      .single();
+    const bookieId = bizProfile?.bookie_id || "";
+    const businessName = bizProfile?.business_name || "your team";
+
     if (user.id !== business_user_id) {
       const adminClient = createClient(supabaseUrl, serviceRoleKey);
       const { data: membership } = await adminClient
