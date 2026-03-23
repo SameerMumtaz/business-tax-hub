@@ -51,8 +51,10 @@ export default function AuthPage() {
       }
     } catch (err: any) {
       const msg = err.message || "Authentication failed";
-      if (!isLogin && msg.toLowerCase().includes("already registered")) {
-        toast.error("An account with this email already exists. Try signing in or resetting your password.");
+      if (!isLogin && (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("already been registered"))) {
+        toast.error("An account with this email already exists. Try signing in instead, or use 'Forgot password' to reset your password.");
+      } else if (!isLogin && msg.toLowerCase().includes("already invited")) {
+        toast.error("You've been invited! Check your email for the invite link, or try signing in with your password.");
       } else {
         toast.error(msg);
       }
