@@ -323,6 +323,50 @@ export type Database = {
           },
         ]
       }
+      deletion_requests: {
+        Row: {
+          business_user_id: string
+          created_at: string
+          id: string
+          reason: string | null
+          requester_user_id: string
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          team_member_id: string
+        }
+        Insert: {
+          business_user_id: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+          requester_user_id: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          team_member_id: string
+        }
+        Update: {
+          business_user_id?: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+          requester_user_id?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          team_member_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deletion_requests_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employees: {
         Row: {
           address: string | null
