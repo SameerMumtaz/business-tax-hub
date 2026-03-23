@@ -531,7 +531,32 @@ export default function JobSchedulerContent() {
           <TabsTrigger value="sites">Sites</TabsTrigger>
         </TabsList>
         <TabsContent value="calendar" className="mt-4">
-          <JobCalendarView jobs={jobs} sites={sites} assignments={assignments} teamMembers={teamMembers} onJobClick={(j) => openEditJob(j)} />
+          <JobCalendarView
+            jobs={jobs}
+            sites={sites}
+            assignments={assignments}
+            teamMembers={teamMembers}
+            onJobClick={(j) => openEditJob(j)}
+            onJobMove={async (jobId, newDate) => {
+              const job = jobs.find((j) => j.id === jobId);
+              if (!job) return;
+              // Calculate date difference to shift end_date proportionally
+              const oldStart = new Date(job.start_date.split("-").map(Number).reduce((_, v, i, a) => i === 0 ? new Date(a[0], a[1] - 1, a[2]) : _, new Date()) as unknown as number);
+              let updates: Record<string, any> = { start_date: newDate };
+              if (job.end_date) {
+                const [oy, om, od] = job.start_date.split("-").map(Number);
+                const [ey, em, ed] = job.end_date.split("-").map(Number);
+                const diffMs = new Date(ey, em - 1, ed).getTime() - new Date(oy, om - 1, od).getTime();
+                const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+                const [ny, nm, nd] = newDate.split("-").map(Number);
+                const newEnd = new Date(ny, nm - 1, nd);
+                newEnd.setDate(newEnd.getDate() + diffDays);
+                updates.end_date = `${newEnd.getFullYear()}-${String(newEnd.getMonth() + 1).padStart(2, "0")}-${String(newEnd.getDate()).padStart(2, "0")}`;
+              }
+              await updateJob(jobId, updates);
+              toast.success(`"${job.title}" moved to ${new Date(newDate.split("-").map(Number).reduce((_, v, i, a) => new Date(a[0], a[1] - 1, a[2]) as any, 0)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}`);
+            }}
+          />
         </TabsContent>
         <TabsContent value="jobs" className="mt-4">
           <Card>
