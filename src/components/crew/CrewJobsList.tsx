@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { MapPin, Clock, LogIn, AlertTriangle, DollarSign, Navigation, CalendarOff, Camera } from "lucide-react";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
+import { formatDateOnly, parseDateOnlyLocal } from "@/lib/dateOnly";
 export interface AssignedJob {
   id: string;
   title: string;
@@ -57,15 +58,10 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
     return null;
   };
 
-  const parseLocalDate = (dateStr: string) => {
-    const [y, m, d] = dateStr.split("-").map(Number);
-    return new Date(y, m - 1, d);
-  };
-
   const isJobToday = (job: AssignedJob) => {
     const now = Date.now();
-    const startMs = parseLocalDate(job.start_date).setHours(0,0,0,0);
-    const endDate = job.end_date ? parseLocalDate(job.end_date) : parseLocalDate(job.start_date);
+    const startMs = parseDateOnlyLocal(job.start_date).setHours(0,0,0,0);
+    const endDate = job.end_date ? parseDateOnlyLocal(job.end_date) : parseDateOnlyLocal(job.start_date);
     const endMs = endDate.setHours(23,59,59,999);
     return now >= startMs && now <= endMs;
   };
@@ -93,7 +89,7 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
               <div className="flex flex-wrap gap-3 text-sm">
                 <div className="flex items-center gap-1.5 text-muted-foreground">
                   <Clock className="h-3.5 w-3.5" />
-                  <span>{parseLocalDate(job.start_date).toLocaleDateString()}</span>
+                  <span>{formatDateOnly(job.start_date)}</span>
                 </div>
                 {job.expectedHours != null && (
                   <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -130,7 +126,7 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
                 {!activeCheckin && !todayJob && (
                   <div className="flex-1 flex items-center gap-2 text-xs text-muted-foreground bg-muted px-3 py-2 rounded-md">
                     <CalendarOff className="h-3.5 w-3.5" />
-                    Check-in available on {parseLocalDate(job.start_date).toLocaleDateString()}
+                    Check-in available on {formatDateOnly(job.start_date)}
                   </div>
                 )}
                 <Button

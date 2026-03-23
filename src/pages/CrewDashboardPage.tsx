@@ -19,6 +19,7 @@ import CrewCalendarView from "@/components/crew/CrewCalendarView";
 import CrewMapView from "@/components/crew/CrewMapView";
 import CrewProfileTab from "@/components/crew/CrewProfileTab";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
+import { parseDateOnlyLocal } from "@/lib/dateOnly";
 
 function LiveElapsed({ since }: { since: string }) {
   const [elapsed, setElapsed] = useState("");
@@ -128,7 +129,7 @@ export default function CrewDashboardPage() {
           // Use estimated_hours from the job if set, otherwise estimate from dates
           let expectedHours: number | null = j.estimated_hours ?? null;
           if (expectedHours == null && j.end_date) {
-            const diff = new Date(j.end_date).getTime() - new Date(j.start_date).getTime();
+            const diff = parseDateOnlyLocal(j.end_date).getTime() - parseDateOnlyLocal(j.start_date).getTime();
             expectedHours = Math.round((diff / (1000 * 60 * 60)) * 10) / 10;
             if (expectedHours > 24) expectedHours = 8; // default for multi-day
           }
@@ -152,9 +153,8 @@ export default function CrewDashboardPage() {
 
   const handleCheckIn = async (job: AssignedJob) => {
     // Only allow check-in on the scheduled date — parse as local to avoid UTC offset issues
-    const parseLocal = (s: string) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
-    const startMs = parseLocal(job.start_date).setHours(0,0,0,0);
-    const endMs = job.end_date ? parseLocal(job.end_date).setHours(23,59,59,999) : parseLocal(job.start_date).setHours(23,59,59,999);
+    const startMs = parseDateOnlyLocal(job.start_date).setHours(0,0,0,0);
+    const endMs = job.end_date ? parseDateOnlyLocal(job.end_date).setHours(23,59,59,999) : parseDateOnlyLocal(job.start_date).setHours(23,59,59,999);
     const nowMs = Date.now();
     if (nowMs < startMs || nowMs > endMs) {
       toast.error("You can only check in on the scheduled date for this job.");

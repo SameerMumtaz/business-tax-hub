@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, DollarSign, MapPin } from "lucide-react";
 import type { AssignedJob } from "./CrewJobsList";
+import { formatDateOnlyKey, parseDateOnlyLocal } from "@/lib/dateOnly";
 
 interface Props {
   jobs: AssignedJob[];
@@ -20,12 +21,7 @@ export default function CrewCalendarView({ jobs }: Props) {
     jobDates.get(dateStr)!.push(job);
   };
 
-  const parseLocal = (s: string) => {
-    const [y, m, d] = s.split("-").map(Number);
-    return new Date(y, m - 1, d);
-  };
-
-  const toKey = (d: Date) => d.toDateString();
+  const toKey = (d: Date) => formatDateOnlyKey(d);
 
   // Generate up to 1 year of recurring instances
   const horizon = new Date();
@@ -34,7 +30,8 @@ export default function CrewCalendarView({ jobs }: Props) {
   jobs.forEach((job) => {
     if (job.job_type === "recurring" && job.recurring_interval) {
       const start = parseLocal(job.start_date);
-      const endDate = job.recurring_end_date ? parseLocal(job.recurring_end_date) : horizon;
+      const start = parseDateOnlyLocal(job.start_date);
+      const endDate = job.recurring_end_date ? parseDateOnlyLocal(job.recurring_end_date) : horizon;
       const intervalDays = job.recurring_interval === "weekly" ? 7
         : job.recurring_interval === "biweekly" ? 14 : 0;
 
@@ -50,13 +47,13 @@ export default function CrewCalendarView({ jobs }: Props) {
         }
       }
     } else {
-      const key = toKey(parseLocal(job.start_date));
+      const key = toKey(parseDateOnlyLocal(job.start_date));
       addJob(key, job);
     }
   });
 
   const modifiers = {
-    hasJob: (date: Date) => jobDates.has(date.toDateString()),
+    hasJob: (date: Date) => jobDates.has(toKey(date)),
   };
 
   const modifiersStyles = {
@@ -68,7 +65,7 @@ export default function CrewCalendarView({ jobs }: Props) {
     },
   };
 
-  const selectedJobs = selectedDate ? (jobDates.get(selectedDate.toDateString()) || []) : [];
+  const selectedJobs = selectedDate ? (jobDates.get(toKey(selectedDate)) || []) : [];
 
   return (
     <div className="space-y-4">
