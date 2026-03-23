@@ -267,6 +267,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
   // ── Drag handlers ──
 
   const handleDragStart = (e: React.DragEvent, job: Job, fromDate: string) => {
+    if (!editMode) { e.preventDefault(); return; }
     if (job.job_type === "recurring") {
       toast.error("Recurring jobs can't be dragged — edit the start date instead");
       e.preventDefault();
