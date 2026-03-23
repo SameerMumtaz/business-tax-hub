@@ -85,13 +85,25 @@ function getWorkloadBarColor(hours: number): string {
 
 /* ── Types ── */
 
+export interface JobMoveEvent {
+  jobId: string;
+  newDate: string;
+  newTime?: string | null;
+  /** For recurring jobs: "this" = create one-off copy, "all" = update the recurring job itself */
+  recurringMode?: "this" | "all";
+  /** The original recurring job to reference when creating a one-off copy */
+  sourceJob?: Job;
+  /** The specific instance date being moved (for recurring) */
+  instanceDate?: string;
+}
+
 interface Props {
   jobs: Job[];
   sites: JobSite[];
   assignments?: JobAssignment[];
   teamMembers?: { id: string; name: string; pay_rate: number | null; worker_type: string }[];
   onJobClick?: (job: Job) => void;
-  onJobMove?: (jobId: string, newDate: string) => void;
+  onJobMove?: (event: JobMoveEvent) => void;
 }
 
 type ViewMode = "week" | "month";
