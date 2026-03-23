@@ -229,6 +229,14 @@ export function useCrewCheckins() {
       }
     }
 
+    // Update job status to completed
+    if (checkin.job_id) {
+      await supabase.rpc("update_job_status_on_checkin", {
+        _job_id: checkin.job_id,
+        _new_status: "completed",
+      });
+    }
+
     if (flagReason) {
       toast.warning(`Checked out — ${totalHours.toFixed(1)} hours worked (flagged: checked out away from job site)`);
     } else {
