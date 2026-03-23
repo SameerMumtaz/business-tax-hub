@@ -89,6 +89,8 @@ export interface JobMoveEvent {
   jobId: string;
   newDate: string;
   newTime?: string | null;
+  fromDate?: string;
+  dropIndex?: number;
   /** For recurring jobs: "this" = create one-off copy, "all" = update the recurring job itself */
   recurringMode?: "this" | "all";
   /** The original recurring job to reference when creating a one-off copy */
@@ -448,6 +450,8 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
       jobId: dragJob.id,
       newDate: dateStr,
       newTime: sameDay ? newTime : (newTime || undefined),
+      fromDate: dragStartDate.current || undefined,
+      dropIndex: typeof dropIdx === "number" ? dropIdx : undefined,
     });
     clearDragState();
   }, [dragJob, jobs, jobsByDate, assignments, onJobMove]);

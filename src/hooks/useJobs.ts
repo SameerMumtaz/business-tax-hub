@@ -119,6 +119,19 @@ export function useJobs() {
     fetchAll();
   };
 
+  const updateJobsBatch = async (jobUpdates: Array<{ id: string; updates: Partial<Job> }>) => {
+    if (jobUpdates.length === 0) return;
+    const results = await Promise.all(
+      jobUpdates.map(({ id, updates }) => supabase.from("jobs").update(updates).eq("id", id))
+    );
+    const firstError = results.find((result) => result.error)?.error;
+    if (firstError) {
+      toast.error(firstError.message);
+      return;
+    }
+    fetchAll();
+  };
+
   const deleteJob = async (id: string) => {
     await supabase.from("job_assignments").delete().eq("job_id", id);
     const { error } = await supabase.from("jobs").delete().eq("id", id);
@@ -248,7 +261,7 @@ export function useJobs() {
   return {
     sites, jobs, assignments, loading,
     createSite, updateSite, deleteSite,
-    createJob, updateJob, deleteJob,
+    createJob, updateJob, updateJobsBatch, deleteJob,
     assignWorker, removeAssignment,
     refetch: fetchAll,
   };
