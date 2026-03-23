@@ -52,8 +52,11 @@ Deno.serve(async (req) => {
 
       // Delete team members where user is business owner
       await adminClient.from("team_members").delete().eq("business_user_id", user.id);
-      // Delete team members where user is a member
+      // Delete team members where user is a member (by user_id and by email)
       await adminClient.from("team_members").delete().eq("member_user_id", user.id);
+      if (user.email) {
+        await adminClient.from("team_members").delete().eq("email", user.email).is("member_user_id", null);
+      }
 
       // Delete booking pages (and their requests via cascade)
       await adminClient.from("booking_pages").delete().eq("user_id", user.id);
