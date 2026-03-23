@@ -4,7 +4,7 @@ import CrewAssignmentPanel from "@/components/job/CrewAssignmentPanel";
 import { useJobs, type Job, type JobSite } from "@/hooks/useJobs";
 import { useClients } from "@/hooks/useClients";
 import { useAuth } from "@/hooks/useAuth";
-import JobCalendarView from "@/components/team/JobCalendarView";
+import JobCalendarView, { type JobMoveEvent } from "@/components/team/JobCalendarView";
 import { useJobPhotos } from "@/hooks/useJobPhotos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
