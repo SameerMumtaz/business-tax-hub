@@ -112,6 +112,14 @@ export function useCrewCheckins() {
       return null;
     }
 
+    // Update job status to in_progress
+    if (jobId) {
+      await supabase.rpc("update_job_status_on_checkin", {
+        _job_id: jobId,
+        _new_status: "in_progress",
+      });
+    }
+
     toast.success("Checked in successfully!");
     setActiveCheckin(data as CrewCheckin);
     return data;
