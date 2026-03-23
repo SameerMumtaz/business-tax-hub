@@ -789,12 +789,16 @@ export default function MembersContent() {
                           <DropdownMenuItem onClick={() => openEdit(m)}>
                             <Pencil className="h-3.5 w-3.5 mr-2" /> Edit Info
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openRateChange(m)}>
-                            <DollarSign className="h-3.5 w-3.5 mr-2" /> Change Pay Rate
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openHistory(m)}>
-                            <History className="h-3.5 w-3.5 mr-2" /> Rate History
-                          </DropdownMenuItem>
+                          {!(currentRole === "manager" && m.role !== "crew") && (
+                            <>
+                              <DropdownMenuItem onClick={() => openRateChange(m)}>
+                                <DollarSign className="h-3.5 w-3.5 mr-2" /> Change Pay Rate
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => openHistory(m)}>
+                                <History className="h-3.5 w-3.5 mr-2" /> Rate History
+                              </DropdownMenuItem>
+                            </>
+                          )}
                           {m.status === "invited" && (
                             <>
                               <DropdownMenuItem
