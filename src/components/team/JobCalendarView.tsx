@@ -593,7 +593,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                       draggable={canDrag}
                       onDragStart={(e) => handleDragStart(e, job, dateStr)}
                       onDragEnd={handleDragEnd}
-                      onClick={() => onJobClick?.(job)}
+                      onClick={() => { if (!wasDragging.current) onJobClick?.(job); }}
                       className={cn(
                         "group rounded-md border px-2 py-1.5 cursor-pointer transition-all hover:shadow-sm",
                         STATUS_BG[job.status] || STATUS_BG.scheduled,
