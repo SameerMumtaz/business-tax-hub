@@ -37,9 +37,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { email, name, role, business_user_id, worker_type, pay_rate, address, state_employed, resend, redirect_to } = await req.json();
+    const { email, name, role, business_user_id, worker_type, pay_rate, address, state_employed, resend } = await req.json();
 
-    const inviteRedirectTo = redirect_to || `${req.headers.get("origin") || ""}/reset-password`;
     if (user.id !== business_user_id) {
       const adminClient = createClient(supabaseUrl, serviceRoleKey);
       const { data: membership } = await adminClient
@@ -83,34 +82,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Resend should always re-trigger invite email
     if (resend) {
-      const { error: resendError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-        data: {
-          invited_by: business_user_id,
-          team_role: role,
-          display_name: name,
-        },
-        redirectTo: inviteRedirectTo,
-      });
-
-      if (resendError) {
-        return new Response(
-          JSON.stringify({ error: resendError.message }),
-          {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
-        );
-      }
-
+      // For resend, just confirm the record exists — user signs up on their own
       return new Response(
-        JSON.stringify({ success: true, message: "Invite email resent." }),
+        JSON.stringify({ success: true, message: "Please share the signup link with the team member." }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Check if user already exists in auth
+    // Check if user already exists in auth (they may have signed up already)
     const { data: existingUsers } = await adminClient.auth.admin.listUsers();
     const existingUser = existingUsers?.users?.find(
       (u: any) => u.email === email
@@ -119,24 +99,8 @@ Deno.serve(async (req) => {
     let memberUserId = existingUser?.id || null;
     let memberStatus = existingUser ? "active" : "invited";
 
-    // If user doesn't exist, send an invite email via Auth
-    if (!existingUser) {
-      const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-        data: {
-          invited_by: business_user_id,
-          team_role: role,
-          display_name: name,
-        },
-        redirectTo: inviteRedirectTo,
-      });
-
-      if (inviteError) {
-        console.error("Invite email error:", inviteError);
-        // Still create the team member record even if email fails
-      } else if (inviteData?.user) {
-        memberUserId = inviteData.user.id;
-      }
-    }
+    // Do NOT call inviteUserByEmail — let the user sign up on their own.
+    // The accept-team-invite function will link them when they sign in.
 
     // Create team_members row with worker_type and pay_rate
     const { data: teamMember, error: insertError } = await adminClient
@@ -191,7 +155,7 @@ Deno.serve(async (req) => {
         success: true,
         message: existingUser
           ? "User added to team"
-          : "Invitation email sent. User will be activated when they accept.",
+          : "Team member record created. They can sign up at the app and will be automatically linked.",
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
