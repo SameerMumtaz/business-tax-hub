@@ -20,6 +20,7 @@ import CrewMapView from "@/components/crew/CrewMapView";
 import CrewProfileTab from "@/components/crew/CrewProfileTab";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 import { parseDateOnlyLocal } from "@/lib/dateOnly";
+import { getNextInstanceDate } from "@/lib/dateOnly";
 
 function LiveElapsed({ since }: { since: string }) {
   const [elapsed, setElapsed] = useState("");
@@ -152,9 +153,10 @@ export default function CrewDashboardPage() {
   }, [user, teamMemberId]);
 
   const handleCheckIn = async (job: AssignedJob) => {
-    // Only allow check-in on the scheduled date — parse as local to avoid UTC offset issues
-    const startMs = parseDateOnlyLocal(job.start_date).setHours(0,0,0,0);
-    const endMs = job.end_date ? parseDateOnlyLocal(job.end_date).setHours(23,59,59,999) : parseDateOnlyLocal(job.start_date).setHours(23,59,59,999);
+    // Only allow check-in on the current instance date
+    const instanceDate = getNextInstanceDate(job);
+    const startMs = parseDateOnlyLocal(instanceDate).setHours(0,0,0,0);
+    const endMs = parseDateOnlyLocal(instanceDate).setHours(23,59,59,999);
     const nowMs = Date.now();
     if (nowMs < startMs || nowMs > endMs) {
       toast.error("You can only check in on the scheduled date for this job.");
