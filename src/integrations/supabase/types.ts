@@ -1813,6 +1813,10 @@ export type Database = {
         Args: { _business_user_id: string; _user_id: string }
         Returns: boolean
       }
+      update_job_status_on_checkin: {
+        Args: { _job_id: string; _new_status: string }
+        Returns: undefined
+      }
     }
     Enums: {
       team_role: "admin" | "manager" | "crew"
