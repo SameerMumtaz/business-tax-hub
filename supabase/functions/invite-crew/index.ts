@@ -222,7 +222,7 @@ Deno.serve(async (req) => {
         success: true,
         message: existingUser
           ? "User added to team"
-          : "Team member record created. They can sign up at the app and will be automatically linked.",
+          : `Team member record created. They can sign up at the app and use Bookie ID ${bookieId || "(not set)"} to link to your business.`,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
