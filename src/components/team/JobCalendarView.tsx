@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { type Job, type JobSite, type JobAssignment } from "@/hooks/useJobs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { ChevronLeft, ChevronRight, Clock, MapPin, AlertTriangle, Sparkles, GripVertical, Calendar, Lock, Unlock } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { ChevronLeft, ChevronRight, Clock, MapPin, AlertTriangle, Sparkles, GripVertical, Lock, Unlock, Copy, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
@@ -85,13 +85,25 @@ function getWorkloadBarColor(hours: number): string {
 
 /* ── Types ── */
 
+export interface JobMoveEvent {
+  jobId: string;
+  newDate: string;
+  newTime?: string | null;
+  /** For recurring jobs: "this" = create one-off copy, "all" = update the recurring job itself */
+  recurringMode?: "this" | "all";
+  /** The original recurring job to reference when creating a one-off copy */
+  sourceJob?: Job;
+  /** The specific instance date being moved (for recurring) */
+  instanceDate?: string;
+}
+
 interface Props {
   jobs: Job[];
   sites: JobSite[];
   assignments?: JobAssignment[];
   teamMembers?: { id: string; name: string; pay_rate: number | null; worker_type: string }[];
   onJobClick?: (job: Job) => void;
-  onJobMove?: (jobId: string, newDate: string) => void;
+  onJobMove?: (event: JobMoveEvent) => void;
 }
 
 type ViewMode = "week" | "month";
@@ -218,9 +230,20 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
   const [dragJob, setDragJob] = useState<Job | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [showConflicts, setShowConflicts] = useState<ConflictInfo[]>([]);
   const [gapSuggestions, setGapSuggestions] = useState<string[]>([]);
   const dragStartDate = useRef<string | null>(null);
+  const dragIsRecurringInstance = useRef(false);
+
+  // Recurring drag dialog state
+  const [recurringDialogOpen, setRecurringDialogOpen] = useState(false);
+  const [pendingRecurringMove, setPendingRecurringMove] = useState<{
+    job: Job;
+    fromDate: string;
+    toDate: string;
+    newTime?: string | null;
+  } | null>(null);
 
   const siteMap = useMemo(() => new Map(sites.map((s) => [s.id, s])), [sites]);
 
@@ -264,21 +287,66 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
     ? `${weekDays[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${weekDays[weekDays.length - 1].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
     : currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
+  // ── Helper: compute new start_time based on drop index ──
+
+  const computeTimeForIndex = (dateStr: string, dropIndex: number, excludeJobId?: string): string | null => {
+    const dayJobs = sortJobs((jobsByDate.get(dateStr) || []).filter((j) => j.id !== excludeJobId));
+    if (dayJobs.length === 0) return null; // keep existing time
+
+    if (dropIndex <= 0) {
+      // Dropped before first job — place 30min before it
+      const firstTime = dayJobs[0]?.start_time;
+      if (!firstTime) return null;
+      const [h, m] = firstTime.split(":").map(Number);
+      const mins = Math.max(0, h * 60 + m - 30);
+      return `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+    }
+
+    if (dropIndex >= dayJobs.length) {
+      // Dropped after last job — place after last job ends
+      const lastJob = dayJobs[dayJobs.length - 1];
+      const lastTime = lastJob?.start_time;
+      if (!lastTime) return null;
+      const [h, m] = lastTime.split(":").map(Number);
+      const estHours = lastJob.estimated_hours || 1;
+      const mins = h * 60 + m + estHours * 60;
+      return `${String(Math.floor(mins / 60) % 24).padStart(2, "0")}:${String(Math.floor(mins) % 60).padStart(2, "0")}`;
+    }
+
+    // Between two jobs — place in the middle
+    const before = dayJobs[dropIndex - 1];
+    const after = dayJobs[dropIndex];
+    if (before?.start_time && after?.start_time) {
+      const [bh, bm] = before.start_time.split(":").map(Number);
+      const [ah, am] = after.start_time.split(":").map(Number);
+      const bMins = bh * 60 + bm + (before.estimated_hours || 1) * 60;
+      const aMins = ah * 60 + am;
+      const midMins = Math.floor((bMins + aMins) / 2);
+      return `${String(Math.floor(midMins / 60) % 24).padStart(2, "0")}:${String(midMins % 60).padStart(2, "0")}`;
+    }
+    return null;
+  };
+
   // ── Drag handlers ──
+
+  const clearDragState = () => {
+    setDragJob(null);
+    setDragOverDate(null);
+    setDragOverIndex(null);
+    setShowConflicts([]);
+    setGapSuggestions([]);
+    dragIsRecurringInstance.current = false;
+  };
 
   const handleDragStart = (e: React.DragEvent, job: Job, fromDate: string) => {
     if (!editMode) { e.preventDefault(); return; }
-    if (job.job_type === "recurring") {
-      toast.error("Recurring jobs can't be dragged — edit the start date instead");
-      e.preventDefault();
-      return;
-    }
     if (job.status === "completed" || job.status === "cancelled") {
       e.preventDefault();
       return;
     }
     setDragJob(job);
     dragStartDate.current = fromDate;
+    dragIsRecurringInstance.current = job.job_type === "recurring";
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", job.id);
 
@@ -300,45 +368,96 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
 
   const handleDragLeave = useCallback(() => {
     setDragOverDate(null);
+    setDragOverIndex(null);
     setShowConflicts([]);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent, dateStr: string) => {
+  const handleCardDragOver = useCallback((e: React.DragEvent, dateStr: string, index: number) => {
     e.preventDefault();
-    if (!dragJob || dateStr === dragStartDate.current) {
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverDate(dateStr);
+    setDragOverIndex(index);
+  }, []);
+
+  const executeDrop = useCallback((dateStr: string, dropIdx?: number) => {
+    if (!dragJob) return;
+    const sameDay = dateStr === dragStartDate.current;
+    const newTime = typeof dropIdx === "number" ? computeTimeForIndex(dateStr, dropIdx, dragJob.id) : undefined;
+
+    // For intra-day with no position change, skip
+    if (sameDay && newTime === undefined) {
+      clearDragState();
+      return;
+    }
+
+    // Recurring job — show dialog
+    if (dragJob.job_type === "recurring") {
+      setPendingRecurringMove({
+        job: dragJob,
+        fromDate: dragStartDate.current || dateStr,
+        toDate: dateStr,
+        newTime,
+      });
+      setRecurringDialogOpen(true);
       setDragJob(null);
       setDragOverDate(null);
+      setDragOverIndex(null);
       setShowConflicts([]);
       setGapSuggestions([]);
       return;
     }
 
-    const conflicts = detectConflicts(dragJob, dateStr, jobs, jobsByDate, assignments);
-    if (conflicts.some((c) => c.type === "crew_overlap")) {
-      const proceed = window.confirm(
-        `⚠️ Scheduling conflict:\n${conflicts.map((c) => c.message).join("\n")}\n\nMove anyway?`
-      );
-      if (!proceed) {
-        setDragJob(null);
-        setDragOverDate(null);
-        setShowConflicts([]);
-        setGapSuggestions([]);
-        return;
+    // Conflict check
+    if (!sameDay) {
+      const conflicts = detectConflicts(dragJob, dateStr, jobs, jobsByDate, assignments);
+      if (conflicts.some((c) => c.type === "crew_overlap")) {
+        const proceed = window.confirm(
+          `⚠️ Scheduling conflict:\n${conflicts.map((c) => c.message).join("\n")}\n\nMove anyway?`
+        );
+        if (!proceed) { clearDragState(); return; }
       }
     }
 
-    onJobMove?.(dragJob.id, dateStr);
-    setDragJob(null);
-    setDragOverDate(null);
-    setShowConflicts([]);
-    setGapSuggestions([]);
+    onJobMove?.({
+      jobId: dragJob.id,
+      newDate: dateStr,
+      newTime: sameDay ? newTime : (newTime || undefined),
+    });
+    clearDragState();
   }, [dragJob, jobs, jobsByDate, assignments, onJobMove]);
 
-  const handleDragEnd = () => {
-    setDragJob(null);
-    setDragOverDate(null);
-    setShowConflicts([]);
-    setGapSuggestions([]);
+  const handleDrop = useCallback((e: React.DragEvent, dateStr: string) => {
+    e.preventDefault();
+    // If we have a specific drop index from a card zone, use it
+    executeDrop(dateStr, dragOverIndex ?? undefined);
+  }, [executeDrop, dragOverIndex]);
+
+  const handleCardDrop = useCallback((e: React.DragEvent, dateStr: string, index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    executeDrop(dateStr, index);
+  }, [executeDrop]);
+
+  const handleDragEnd = () => clearDragState();
+
+  // ── Recurring dialog handlers ──
+
+  const handleRecurringChoice = (mode: "this" | "all") => {
+    if (!pendingRecurringMove) return;
+    const { job, fromDate, toDate, newTime } = pendingRecurringMove;
+
+    onJobMove?.({
+      jobId: job.id,
+      newDate: toDate,
+      newTime,
+      recurringMode: mode,
+      sourceJob: job,
+      instanceDate: fromDate,
+    });
+
+    setRecurringDialogOpen(false);
+    setPendingRecurringMove(null);
   };
 
   // ── Day column compute ──
@@ -435,105 +554,130 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
               )}
             </div>
 
-            {/* Job cards */}
-            <div className="flex-1 p-1 space-y-1 overflow-y-auto">
+            {/* Job cards with intra-day drop zones */}
+            <div className="flex-1 p-1 overflow-y-auto">
               {dayJobs.length === 0 && !isDragTarget && (
                 <div className="h-full flex items-center justify-center">
                   <span className="text-[10px] text-muted-foreground/50">No jobs</span>
                 </div>
               )}
-              {dayJobs.map((job) => {
+
+              {/* Top drop zone */}
+              {editMode && dragJob && isDragTarget && (
+                <div
+                  className={cn(
+                    "h-1 rounded-full mb-1 transition-all",
+                    dragOverIndex === 0 ? "h-6 border-2 border-dashed border-primary/50 bg-primary/5 flex items-center justify-center" : "bg-transparent"
+                  )}
+                  onDragOver={(e) => handleCardDragOver(e, dateStr, 0)}
+                  onDrop={(e) => handleCardDrop(e, dateStr, 0)}
+                >
+                  {dragOverIndex === 0 && <span className="text-[9px] text-primary">Drop here</span>}
+                </div>
+              )}
+
+              {dayJobs.map((job, idx) => {
                 const site = siteMap.get(job.site_id);
                 const isDragging = dragJob?.id === job.id;
-                const canDrag = editMode && job.job_type !== "recurring" && job.status !== "completed" && job.status !== "cancelled";
+                const canDrag = editMode && job.status !== "completed" && job.status !== "cancelled";
 
                 return (
-                  <div
-                    key={`${job.id}-${dateStr}`}
-                    draggable={canDrag}
-                    onDragStart={(e) => handleDragStart(e, job, dateStr)}
-                    onDragEnd={handleDragEnd}
-                    onClick={() => onJobClick?.(job)}
-                    className={cn(
-                      "group rounded-md border px-2 py-1.5 cursor-pointer transition-all hover:shadow-sm",
-                      STATUS_BG[job.status] || STATUS_BG.scheduled,
-                      isDragging && "opacity-40 scale-95",
-                      canDrag && "hover:ring-1 hover:ring-primary/30"
-                    )}
-                  >
-                    {/* Accent strip + title */}
-                    <div className="flex items-start gap-1.5">
-                      {canDrag && (
-                        <GripVertical className="h-3.5 w-3.5 mt-0.5 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 cursor-grab" />
+                  <div key={`${job.id}-${dateStr}`} className="space-y-0">
+                    <div
+                      draggable={canDrag}
+                      onDragStart={(e) => handleDragStart(e, job, dateStr)}
+                      onDragEnd={handleDragEnd}
+                      onClick={() => onJobClick?.(job)}
+                      className={cn(
+                        "group rounded-md border px-2 py-1.5 cursor-pointer transition-all hover:shadow-sm",
+                        STATUS_BG[job.status] || STATUS_BG.scheduled,
+                        isDragging && "opacity-40 scale-95",
+                        canDrag && "hover:ring-1 hover:ring-primary/30"
                       )}
-                      <div className="min-w-0 flex-1">
-                        <div className={cn("text-xs font-semibold truncate", STATUS_TEXT[job.status])}>
-                          {job.title}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0 mt-0.5">
-                          {job.start_time && (
-                            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                              <Clock className="h-2.5 w-2.5" />
-                              {formatTime12(job.start_time)}
-                            </span>
-                          )}
-                          {job.estimated_hours && (
-                            <span className="text-[10px] text-muted-foreground font-mono">
-                              {job.estimated_hours}h
-                            </span>
-                          )}
-                          {site && (
-                            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 truncate">
-                              <MapPin className="h-2.5 w-2.5 shrink-0" />
-                              <span className="truncate">{site.name}</span>
-                            </span>
-                          )}
-                        </div>
-                        {/* Crew badges */}
-                        {assignments.filter((a) => a.job_id === job.id).length > 0 && (
-                          <div className="flex flex-wrap gap-0.5 mt-1">
-                            {assignments
-                              .filter((a) => a.job_id === job.id)
-                              .slice(0, 3)
-                              .map((a) => (
-                                <span
-                                  key={a.id}
-                                  className="text-[9px] bg-background/80 border border-border/50 rounded px-1 py-0 text-muted-foreground"
-                                >
-                                  {a.worker_name.split(" ")[0]}
-                                </span>
-                              ))}
-                            {assignments.filter((a) => a.job_id === job.id).length > 3 && (
-                              <span className="text-[9px] text-muted-foreground">
-                                +{assignments.filter((a) => a.job_id === job.id).length - 3}
+                    >
+                      <div className="flex items-start gap-1.5">
+                        {canDrag && (
+                          <GripVertical className="h-3.5 w-3.5 mt-0.5 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 cursor-grab" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className={cn("text-xs font-semibold truncate", STATUS_TEXT[job.status])}>
+                            {job.title}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0 mt-0.5">
+                            {job.start_time && (
+                              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                                <Clock className="h-2.5 w-2.5" />
+                                {formatTime12(job.start_time)}
+                              </span>
+                            )}
+                            {job.estimated_hours && (
+                              <span className="text-[10px] text-muted-foreground font-mono">
+                                {job.estimated_hours}h
+                              </span>
+                            )}
+                            {site && (
+                              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 truncate">
+                                <MapPin className="h-2.5 w-2.5 shrink-0" />
+                                <span className="truncate">{site.name}</span>
                               </span>
                             )}
                           </div>
-                        )}
-                        {job.job_type === "recurring" && (
-                          <span className="text-[9px] text-muted-foreground/60 italic">
-                            ↻ {job.recurring_interval}
-                          </span>
-                        )}
+                          {assignments.filter((a) => a.job_id === job.id).length > 0 && (
+                            <div className="flex flex-wrap gap-0.5 mt-1">
+                              {assignments
+                                .filter((a) => a.job_id === job.id)
+                                .slice(0, 3)
+                                .map((a) => (
+                                  <span key={a.id} className="text-[9px] bg-background/80 border border-border/50 rounded px-1 py-0 text-muted-foreground">
+                                    {a.worker_name.split(" ")[0]}
+                                  </span>
+                                ))}
+                              {assignments.filter((a) => a.job_id === job.id).length > 3 && (
+                                <span className="text-[9px] text-muted-foreground">
+                                  +{assignments.filter((a) => a.job_id === job.id).length - 3}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {job.job_type === "recurring" && (
+                            <span className="text-[9px] text-muted-foreground/60 italic">
+                              ↻ {job.recurring_interval}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
+
+                    {/* Between-card drop zone */}
+                    {editMode && dragJob && isDragTarget && (
+                      <div
+                        className={cn(
+                          "h-1 rounded-full my-0.5 transition-all",
+                          dragOverIndex === idx + 1 ? "h-6 border-2 border-dashed border-primary/50 bg-primary/5 flex items-center justify-center" : "bg-transparent"
+                        )}
+                        onDragOver={(e) => handleCardDragOver(e, dateStr, idx + 1)}
+                        onDrop={(e) => handleCardDrop(e, dateStr, idx + 1)}
+                      >
+                        {dragOverIndex === idx + 1 && <span className="text-[9px] text-primary">Drop here</span>}
+                      </div>
+                    )}
                   </div>
                 );
               })}
 
-              {/* Drop zone indicator */}
-              {isDragTarget && (
+              {/* Bottom drop zone for empty days or conflict display */}
+              {isDragTarget && dayJobs.length === 0 && (
                 <div className={cn(
                   "rounded-md border-2 border-dashed py-3 flex flex-col items-center justify-center gap-1 transition-all",
                   showConflicts.length > 0
-                    ? "border-red-400 bg-red-500/5"
+                    ? "border-destructive/40 bg-destructive/5"
                     : "border-primary/40 bg-primary/5"
                 )}>
                   {showConflicts.length > 0 ? (
                     <>
-                      <AlertTriangle className="h-4 w-4 text-red-500" />
+                      <AlertTriangle className="h-4 w-4 text-destructive" />
                       {showConflicts.map((c, i) => (
-                        <span key={i} className="text-[9px] text-red-600 dark:text-red-400 text-center px-1">
+                        <span key={i} className="text-[9px] text-destructive text-center px-1">
                           {c.message}
                         </span>
                       ))}
@@ -624,7 +768,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                   {dayJobs.slice(0, 3).map((job) => (
                     <div
                       key={`${job.id}-${dateStr}`}
-                      draggable={editMode && job.job_type !== "recurring" && job.status !== "completed"}
+                      draggable={editMode && job.status !== "completed" && job.status !== "cancelled"}
                       onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, job, dateStr); }}
                       onDragEnd={handleDragEnd}
                       onClick={(e) => { e.stopPropagation(); onJobClick?.(job); }}
@@ -649,6 +793,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
   };
 
   return (
+    <>
     <Card>
       <CardContent className="pt-4 px-2 sm:px-6">
         {/* Header */}
@@ -724,5 +869,47 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
         </div>
       </CardContent>
     </Card>
+
+    {/* Recurring move dialog */}
+    <Dialog open={recurringDialogOpen} onOpenChange={setRecurringDialogOpen}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Move Recurring Job</DialogTitle>
+          <DialogDescription>
+            "{pendingRecurringMove?.job.title}" is a {pendingRecurringMove?.job.recurring_interval} recurring job. How would you like to apply this change?
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
+          <Button
+            variant="outline"
+            className="justify-start gap-2 h-auto py-3"
+            onClick={() => handleRecurringChoice("this")}
+          >
+            <Copy className="h-4 w-4 shrink-0" />
+            <div className="text-left">
+              <div className="font-medium text-sm">This instance only</div>
+              <div className="text-xs text-muted-foreground">Creates a one-time copy for the new date. The recurring schedule stays unchanged.</div>
+            </div>
+          </Button>
+          <Button
+            variant="outline"
+            className="justify-start gap-2 h-auto py-3"
+            onClick={() => handleRecurringChoice("all")}
+          >
+            <RefreshCw className="h-4 w-4 shrink-0" />
+            <div className="text-left">
+              <div className="font-medium text-sm">All future instances</div>
+              <div className="text-xs text-muted-foreground">Updates the recurring job's start date. All future occurrences will shift.</div>
+            </div>
+          </Button>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => { setRecurringDialogOpen(false); setPendingRecurringMove(null); }}>
+            Cancel
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
