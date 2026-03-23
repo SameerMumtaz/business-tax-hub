@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Save, UserCircle } from "lucide-react";
 import { toast } from "sonner";
 import SetPasswordCard from "@/components/SetPasswordCard";
+import DeleteAccountSection from "@/components/DeleteAccountSection";
 
 interface PersonalFields {
   first_name: string;
