@@ -554,105 +554,130 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
               )}
             </div>
 
-            {/* Job cards */}
-            <div className="flex-1 p-1 space-y-1 overflow-y-auto">
+            {/* Job cards with intra-day drop zones */}
+            <div className="flex-1 p-1 overflow-y-auto">
               {dayJobs.length === 0 && !isDragTarget && (
                 <div className="h-full flex items-center justify-center">
                   <span className="text-[10px] text-muted-foreground/50">No jobs</span>
                 </div>
               )}
-              {dayJobs.map((job) => {
+
+              {/* Top drop zone */}
+              {editMode && dragJob && isDragTarget && (
+                <div
+                  className={cn(
+                    "h-1 rounded-full mb-1 transition-all",
+                    dragOverIndex === 0 ? "h-6 border-2 border-dashed border-primary/50 bg-primary/5 flex items-center justify-center" : "bg-transparent"
+                  )}
+                  onDragOver={(e) => handleCardDragOver(e, dateStr, 0)}
+                  onDrop={(e) => handleCardDrop(e, dateStr, 0)}
+                >
+                  {dragOverIndex === 0 && <span className="text-[9px] text-primary">Drop here</span>}
+                </div>
+              )}
+
+              {dayJobs.map((job, idx) => {
                 const site = siteMap.get(job.site_id);
                 const isDragging = dragJob?.id === job.id;
-                const canDrag = editMode && job.job_type !== "recurring" && job.status !== "completed" && job.status !== "cancelled";
+                const canDrag = editMode && job.status !== "completed" && job.status !== "cancelled";
 
                 return (
-                  <div
-                    key={`${job.id}-${dateStr}`}
-                    draggable={canDrag}
-                    onDragStart={(e) => handleDragStart(e, job, dateStr)}
-                    onDragEnd={handleDragEnd}
-                    onClick={() => onJobClick?.(job)}
-                    className={cn(
-                      "group rounded-md border px-2 py-1.5 cursor-pointer transition-all hover:shadow-sm",
-                      STATUS_BG[job.status] || STATUS_BG.scheduled,
-                      isDragging && "opacity-40 scale-95",
-                      canDrag && "hover:ring-1 hover:ring-primary/30"
-                    )}
-                  >
-                    {/* Accent strip + title */}
-                    <div className="flex items-start gap-1.5">
-                      {canDrag && (
-                        <GripVertical className="h-3.5 w-3.5 mt-0.5 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 cursor-grab" />
+                  <div key={`${job.id}-${dateStr}`} className="space-y-0">
+                    <div
+                      draggable={canDrag}
+                      onDragStart={(e) => handleDragStart(e, job, dateStr)}
+                      onDragEnd={handleDragEnd}
+                      onClick={() => onJobClick?.(job)}
+                      className={cn(
+                        "group rounded-md border px-2 py-1.5 cursor-pointer transition-all hover:shadow-sm",
+                        STATUS_BG[job.status] || STATUS_BG.scheduled,
+                        isDragging && "opacity-40 scale-95",
+                        canDrag && "hover:ring-1 hover:ring-primary/30"
                       )}
-                      <div className="min-w-0 flex-1">
-                        <div className={cn("text-xs font-semibold truncate", STATUS_TEXT[job.status])}>
-                          {job.title}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0 mt-0.5">
-                          {job.start_time && (
-                            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                              <Clock className="h-2.5 w-2.5" />
-                              {formatTime12(job.start_time)}
-                            </span>
-                          )}
-                          {job.estimated_hours && (
-                            <span className="text-[10px] text-muted-foreground font-mono">
-                              {job.estimated_hours}h
-                            </span>
-                          )}
-                          {site && (
-                            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 truncate">
-                              <MapPin className="h-2.5 w-2.5 shrink-0" />
-                              <span className="truncate">{site.name}</span>
-                            </span>
-                          )}
-                        </div>
-                        {/* Crew badges */}
-                        {assignments.filter((a) => a.job_id === job.id).length > 0 && (
-                          <div className="flex flex-wrap gap-0.5 mt-1">
-                            {assignments
-                              .filter((a) => a.job_id === job.id)
-                              .slice(0, 3)
-                              .map((a) => (
-                                <span
-                                  key={a.id}
-                                  className="text-[9px] bg-background/80 border border-border/50 rounded px-1 py-0 text-muted-foreground"
-                                >
-                                  {a.worker_name.split(" ")[0]}
-                                </span>
-                              ))}
-                            {assignments.filter((a) => a.job_id === job.id).length > 3 && (
-                              <span className="text-[9px] text-muted-foreground">
-                                +{assignments.filter((a) => a.job_id === job.id).length - 3}
+                    >
+                      <div className="flex items-start gap-1.5">
+                        {canDrag && (
+                          <GripVertical className="h-3.5 w-3.5 mt-0.5 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 cursor-grab" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className={cn("text-xs font-semibold truncate", STATUS_TEXT[job.status])}>
+                            {job.title}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0 mt-0.5">
+                            {job.start_time && (
+                              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                                <Clock className="h-2.5 w-2.5" />
+                                {formatTime12(job.start_time)}
+                              </span>
+                            )}
+                            {job.estimated_hours && (
+                              <span className="text-[10px] text-muted-foreground font-mono">
+                                {job.estimated_hours}h
+                              </span>
+                            )}
+                            {site && (
+                              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 truncate">
+                                <MapPin className="h-2.5 w-2.5 shrink-0" />
+                                <span className="truncate">{site.name}</span>
                               </span>
                             )}
                           </div>
-                        )}
-                        {job.job_type === "recurring" && (
-                          <span className="text-[9px] text-muted-foreground/60 italic">
-                            ↻ {job.recurring_interval}
-                          </span>
-                        )}
+                          {assignments.filter((a) => a.job_id === job.id).length > 0 && (
+                            <div className="flex flex-wrap gap-0.5 mt-1">
+                              {assignments
+                                .filter((a) => a.job_id === job.id)
+                                .slice(0, 3)
+                                .map((a) => (
+                                  <span key={a.id} className="text-[9px] bg-background/80 border border-border/50 rounded px-1 py-0 text-muted-foreground">
+                                    {a.worker_name.split(" ")[0]}
+                                  </span>
+                                ))}
+                              {assignments.filter((a) => a.job_id === job.id).length > 3 && (
+                                <span className="text-[9px] text-muted-foreground">
+                                  +{assignments.filter((a) => a.job_id === job.id).length - 3}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {job.job_type === "recurring" && (
+                            <span className="text-[9px] text-muted-foreground/60 italic">
+                              ↻ {job.recurring_interval}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
+
+                    {/* Between-card drop zone */}
+                    {editMode && dragJob && isDragTarget && (
+                      <div
+                        className={cn(
+                          "h-1 rounded-full my-0.5 transition-all",
+                          dragOverIndex === idx + 1 ? "h-6 border-2 border-dashed border-primary/50 bg-primary/5 flex items-center justify-center" : "bg-transparent"
+                        )}
+                        onDragOver={(e) => handleCardDragOver(e, dateStr, idx + 1)}
+                        onDrop={(e) => handleCardDrop(e, dateStr, idx + 1)}
+                      >
+                        {dragOverIndex === idx + 1 && <span className="text-[9px] text-primary">Drop here</span>}
+                      </div>
+                    )}
                   </div>
                 );
               })}
 
-              {/* Drop zone indicator */}
-              {isDragTarget && (
+              {/* Bottom drop zone for empty days or conflict display */}
+              {isDragTarget && dayJobs.length === 0 && (
                 <div className={cn(
                   "rounded-md border-2 border-dashed py-3 flex flex-col items-center justify-center gap-1 transition-all",
                   showConflicts.length > 0
-                    ? "border-red-400 bg-red-500/5"
+                    ? "border-destructive/40 bg-destructive/5"
                     : "border-primary/40 bg-primary/5"
                 )}>
                   {showConflicts.length > 0 ? (
                     <>
-                      <AlertTriangle className="h-4 w-4 text-red-500" />
+                      <AlertTriangle className="h-4 w-4 text-destructive" />
                       {showConflicts.map((c, i) => (
-                        <span key={i} className="text-[9px] text-red-600 dark:text-red-400 text-center px-1">
+                        <span key={i} className="text-[9px] text-destructive text-center px-1">
                           {c.message}
                         </span>
                       ))}
