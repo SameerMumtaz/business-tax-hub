@@ -445,7 +445,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
               {dayJobs.map((job) => {
                 const site = siteMap.get(job.site_id);
                 const isDragging = dragJob?.id === job.id;
-                const canDrag = job.job_type !== "recurring" && job.status !== "completed" && job.status !== "cancelled";
+                const canDrag = editMode && job.job_type !== "recurring" && job.status !== "completed" && job.status !== "cancelled";
 
                 return (
                   <div
