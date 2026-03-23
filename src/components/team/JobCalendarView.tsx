@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { type Job, type JobSite, type JobAssignment } from "@/hooks/useJobs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { ChevronLeft, ChevronRight, Clock, MapPin, AlertTriangle, Sparkles, GripVertical, Calendar, Lock, Unlock } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { ChevronLeft, ChevronRight, Clock, MapPin, AlertTriangle, Sparkles, GripVertical, Lock, Unlock, Copy, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
