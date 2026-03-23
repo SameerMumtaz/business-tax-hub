@@ -588,10 +588,31 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
             </div>
 
             {/* Job cards with intra-day drop zones */}
-            <div className="flex-1 p-1 overflow-y-auto">
-              {dayJobs.length === 0 && !isDragTarget && (
+            <div className="flex-1 p-1 overflow-y-auto space-y-0">
+              {dayJobs.length === 0 && !dragJob && (
                 <div className="h-full flex items-center justify-center">
                   <span className="text-[10px] text-muted-foreground/50">No jobs</span>
+                </div>
+              )}
+
+              {/* "Move here" zone at the very top */}
+              {dragJob && dragJob.id !== dayJobs[0]?.id && (
+                <div
+                  className={cn(
+                    "rounded-md border-2 border-dashed flex items-center justify-center cursor-pointer transition-all mb-1",
+                    dragOverDate === dateStr && dragOverIndex === 0
+                      ? "h-9 border-primary bg-primary/15 shadow-sm"
+                      : "h-7 border-primary/30 bg-primary/5 hover:border-primary hover:bg-primary/10"
+                  )}
+                  onDragOver={(e) => handleCardDragOver(e, dateStr, 0)}
+                  onDrop={(e) => handleCardDrop(e, dateStr, 0)}
+                >
+                  <span className={cn(
+                    "text-[10px] font-medium",
+                    dragOverDate === dateStr && dragOverIndex === 0 ? "text-primary" : "text-primary/60"
+                  )}>
+                    ↑ Move here
+                  </span>
                 </div>
               )}
 
@@ -600,27 +621,12 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                 const isDragging = dragJob?.id === job.id;
                 const isRescheduled = !!(job as CalendarJob)._rescheduled;
                 const canDrag = editMode && !isRescheduled && job.status !== "completed" && job.status !== "cancelled";
+                const isLastCard = idx === dayJobs.length - 1;
+                const nextJob = dayJobs[idx + 1];
+                const showDropAfter = dragJob && dragJob.id !== job.id && (!nextJob || dragJob.id !== nextJob.id);
 
                 return (
                   <div key={`${job.id}-${dateStr}-${idx}`}>
-                    {/* Drop zone ABOVE this card */}
-                    {editMode && dragJob && isDragTarget && (
-                      <div
-                        className={cn(
-                          "rounded transition-all mx-0.5",
-                          dragOverIndex === idx
-                            ? "h-8 border-2 border-dashed border-primary bg-primary/10 flex items-center justify-center my-1"
-                            : "h-3 hover:h-8 hover:border-2 hover:border-dashed hover:border-primary/40 hover:bg-primary/5 my-0.5"
-                        )}
-                        onDragOver={(e) => handleCardDragOver(e, dateStr, idx)}
-                        onDrop={(e) => handleCardDrop(e, dateStr, idx)}
-                      >
-                        {dragOverIndex === idx && (
-                          <span className="text-[9px] text-primary font-medium">Drop here</span>
-                        )}
-                      </div>
-                    )}
-
                     <div
                       draggable={canDrag}
                       onDragStart={(e) => handleDragStart(e, job, dateStr)}
@@ -635,7 +641,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                               STATUS_BG[job.status] || STATUS_BG.scheduled,
                               canDrag && "hover:ring-1 hover:ring-primary/30"
                             ),
-                        isDragging && "opacity-40 scale-95",
+                        isDragging && "opacity-30 scale-95",
                       )}
                     >
                       <div className="flex items-start gap-1.5">
@@ -694,44 +700,51 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                         </div>
                       </div>
                     </div>
+
+                    {/* "Move here" zone BELOW this card */}
+                    {showDropAfter && (
+                      <div
+                        className={cn(
+                          "rounded-md border-2 border-dashed flex items-center justify-center cursor-pointer transition-all my-1",
+                          dragOverDate === dateStr && dragOverIndex === idx + 1
+                            ? "h-9 border-primary bg-primary/15 shadow-sm"
+                            : "h-7 border-primary/30 bg-primary/5 hover:border-primary hover:bg-primary/10"
+                        )}
+                        onDragOver={(e) => handleCardDragOver(e, dateStr, idx + 1)}
+                        onDrop={(e) => handleCardDrop(e, dateStr, idx + 1)}
+                      >
+                        <span className={cn(
+                          "text-[10px] font-medium",
+                          dragOverDate === dateStr && dragOverIndex === idx + 1 ? "text-primary" : "text-primary/60"
+                        )}>
+                          {isLastCard ? "↓ Move here" : "Move here"}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 );
               })}
 
-              {/* Bottom drop zone — after all cards or for empty days */}
-              {editMode && dragJob && isDragTarget && (
+              {/* Empty-day drop zone */}
+              {dragJob && dayJobs.length === 0 && (
                 <div
                   className={cn(
-                    "rounded transition-all mx-0.5",
-                    (dragOverIndex === dayJobs.length || dayJobs.length === 0)
-                      ? "h-10 border-2 border-dashed py-2 flex flex-col items-center justify-center gap-1 my-1"
-                      : "h-3 hover:h-10 hover:border-2 hover:border-dashed hover:border-primary/40 hover:bg-primary/5 my-0.5",
-                    (dragOverIndex === dayJobs.length || dayJobs.length === 0) && showConflicts.length > 0
-                      ? "border-destructive/40 bg-destructive/5"
-                      : (dragOverIndex === dayJobs.length || dayJobs.length === 0)
-                        ? "border-primary bg-primary/10"
-                        : ""
+                    "rounded-md border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-all py-4",
+                    dragOverDate === dateStr
+                      ? "border-primary bg-primary/15 shadow-sm"
+                      : "border-primary/30 bg-primary/5 hover:border-primary hover:bg-primary/10"
                   )}
-                  onDragOver={(e) => handleCardDragOver(e, dateStr, dayJobs.length)}
-                  onDrop={(e) => handleCardDrop(e, dateStr, dayJobs.length)}
+                  onDragOver={(e) => handleCardDragOver(e, dateStr, 0)}
+                  onDrop={(e) => handleCardDrop(e, dateStr, 0)}
                 >
-                  {(dragOverIndex === dayJobs.length || dayJobs.length === 0) && (
-                    showConflicts.length > 0 ? (
-                      <>
-                        <AlertTriangle className="h-3 w-3 text-destructive" />
-                        <span className="text-[9px] text-destructive text-center px-1">{showConflicts[0]?.message}</span>
-                      </>
-                    ) : (
-                      <span className="text-[9px] text-primary font-medium">Drop here</span>
-                    )
+                  {showConflicts.length > 0 && dragOverDate === dateStr ? (
+                    <>
+                      <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
+                      <span className="text-[9px] text-destructive text-center px-1">{showConflicts[0]?.message}</span>
+                    </>
+                  ) : (
+                    <span className="text-[10px] text-primary/60 font-medium">Move here</span>
                   )}
-                </div>
-              )}
-
-              {/* Empty day drop zone when not in edit mode */}
-              {isDragTarget && !editMode && dayJobs.length === 0 && (
-                <div className="rounded-md border-2 border-dashed border-primary/40 bg-primary/5 py-3 flex items-center justify-center">
-                  <span className="text-[10px] text-primary font-medium">Drop here</span>
                 </div>
               )}
             </div>
