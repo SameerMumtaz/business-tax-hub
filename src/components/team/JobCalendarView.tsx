@@ -624,7 +624,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                   {dayJobs.slice(0, 3).map((job) => (
                     <div
                       key={`${job.id}-${dateStr}`}
-                      draggable={job.job_type !== "recurring" && job.status !== "completed"}
+                      draggable={editMode && job.job_type !== "recurring" && job.status !== "completed"}
                       onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, job, dateStr); }}
                       onDragEnd={handleDragEnd}
                       onClick={(e) => { e.stopPropagation(); onJobClick?.(job); }}
