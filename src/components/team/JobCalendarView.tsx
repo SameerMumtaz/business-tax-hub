@@ -595,11 +595,11 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                 </div>
               )}
 
-              {/* "Move here" zone at the very top */}
-              {dragJob && dragJob.id !== dayJobs[0]?.id && (
+              {/* "Move here" zone at the very top — only when actively dragging AND not dragging from this position */}
+              {dragJob && !dayJobs.some((j, i) => i === 0 && j.id === dragJob.id) && (
                 <div
                   className={cn(
-                    "rounded-md border-2 border-dashed flex items-center justify-center cursor-pointer transition-all mb-1",
+                    "rounded-md border-2 border-dashed flex items-center justify-center transition-all mb-1 pointer-events-auto",
                     dragOverDate === dateStr && dragOverIndex === 0
                       ? "h-9 border-primary bg-primary/15 shadow-sm"
                       : "h-7 border-primary/30 bg-primary/5 hover:border-primary hover:bg-primary/10"
@@ -608,7 +608,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                   onDrop={(e) => handleCardDrop(e, dateStr, 0)}
                 >
                   <span className={cn(
-                    "text-[10px] font-medium",
+                    "text-[10px] font-medium pointer-events-none",
                     dragOverDate === dateStr && dragOverIndex === 0 ? "text-primary" : "text-primary/60"
                   )}>
                     ↑ Move here
@@ -714,7 +714,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                         onDrop={(e) => handleCardDrop(e, dateStr, idx + 1)}
                       >
                         <span className={cn(
-                          "text-[10px] font-medium",
+                          "text-[10px] font-medium pointer-events-none",
                           dragOverDate === dateStr && dragOverIndex === idx + 1 ? "text-primary" : "text-primary/60"
                         )}>
                           {isLastCard ? "↓ Move here" : "Move here"}
