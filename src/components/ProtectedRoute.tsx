@@ -126,8 +126,10 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
   if (!accountType && location.pathname !== "/account-type") {
     // Preserve invite query param so AccountTypePage can auto-fill Bookie ID
     const inviteParam = new URLSearchParams(location.search).get("invite");
-    const accountTypeUrl = inviteParam
-      ? `/account-type?invite=${encodeURIComponent(inviteParam)}`
+    const storedInvite = sessionStorage.getItem("bookie_invite_code");
+    const invite = inviteParam || storedInvite;
+    const accountTypeUrl = invite
+      ? `/account-type?invite=${encodeURIComponent(invite)}`
       : "/account-type";
     return <Navigate to={accountTypeUrl} replace />;
   }
