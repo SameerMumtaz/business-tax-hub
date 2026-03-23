@@ -183,6 +183,13 @@ export default function CrewDashboardPage() {
 
   const handleCheckOut = async () => {
     if (!activeCheckin) return;
+
+    // Require before & after photos
+    if (!photosComplete) {
+      toast.error("Please upload both before and after photos before checking out.");
+      return;
+    }
+
     setGpsLoading("checkout");
     try {
       const pos = await getCurrentPosition();
