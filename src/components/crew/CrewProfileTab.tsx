@@ -249,6 +249,7 @@ export default function CrewProfileTab() {
     </Card>
 
     <SetPasswordCard />
+    <DeleteAccountSection variant="business" />
     </>
   );
 }
