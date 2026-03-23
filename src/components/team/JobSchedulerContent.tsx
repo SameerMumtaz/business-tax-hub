@@ -208,7 +208,7 @@ export default function JobSchedulerContent() {
       title: jobTitle, site_id: jobSiteId, start_date: jobStart,
       end_date: jobEnd || null, status: "scheduled", job_type: jobType,
       recurring_interval: jobType === "recurring" ? jobInterval || null : null,
-      recurring_end_date: null, invoice_id: null, description: jobDesc || null,
+      recurring_end_date: jobType === "recurring" && jobRecurringEnd ? jobRecurringEnd : null, invoice_id: null, description: jobDesc || null,
       start_time: jobStartTime || null, estimated_hours: jobEstHours ? Number(jobEstHours) : null,
       client_id: jobClientId && jobClientId !== "none" ? jobClientId : null,
       price: Number(jobPrice) || 0,
