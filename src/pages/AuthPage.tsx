@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Navigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,21 @@ import { toast } from "sonner";
 export default function AuthPage() {
   const { user, loading: authLoading } = useAuth();
   
+  const [searchParams] = useSearchParams();
+  const inviteCode = searchParams.get("invite");
+
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // If invite param is present, default to signup mode
+  useEffect(() => {
+    if (inviteCode) {
+      setIsLogin(false);
+    }
+  }, [inviteCode]);
 
   if (authLoading) {
     return (
@@ -88,6 +98,16 @@ export default function AuthPage() {
           </div>
           <p className="text-muted-foreground text-sm">All-in-One Business & Money Management</p>
         </div>
+
+        {inviteCode && (
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-center space-y-1">
+            <p className="text-sm font-medium text-foreground">You've been invited to join a business!</p>
+            <p className="text-xs text-muted-foreground">
+              Bookie ID: <span className="font-mono font-semibold text-primary">{inviteCode}</span>
+            </p>
+            <p className="text-xs text-muted-foreground">Create your account below to get started.</p>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-3">

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Building2, User, Link2, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -15,6 +15,16 @@ export default function AccountTypePage() {
   const [bookieCode, setBookieCode] = useState("");
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const inviteCode = searchParams.get("invite");
+
+  // Auto-select existing business and pre-fill Bookie ID from invite link
+  useEffect(() => {
+    if (inviteCode) {
+      setSelected("existing_business");
+      setBookieCode(inviteCode.toUpperCase());
+    }
+  }, [inviteCode]);
 
   const handleContinue = async () => {
     if (!selected || !user) return;
