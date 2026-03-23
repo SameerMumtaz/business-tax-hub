@@ -71,6 +71,9 @@ Deno.serve(async (req) => {
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
+    const appUrl =
+      Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovableproject.com") ||
+      "http://localhost:5173";
 
     // Check if already invited (skip for resend)
     if (!resend) {
@@ -117,16 +120,61 @@ Deno.serve(async (req) => {
     }
 
     if (resend) {
-      // Check if user already has an auth account
+      const { data: existingRecord } = await adminClient
+        .from("team_members")
+        .select("id, status, accepted_at, member_user_id")
+        .eq("email", email)
+        .eq("business_user_id", business_user_id)
+        .maybeSingle();
+
       const { data: authUsers } = await adminClient.auth.admin.listUsers();
-      const existingAuthUser = authUsers?.users?.find((u: any) => u.email === email);
+      const existingAuthUser = authUsers?.users?.find(
+        (u: any) => u.email?.toLowerCase() === email.toLowerCase()
+      );
+      const linkedUserStillExists = existingRecord?.member_user_id
+        ? authUsers?.users?.some((u: any) => u.id === existingRecord.member_user_id)
+        : false;
+
+      if (existingRecord?.member_user_id && !linkedUserStillExists) {
+        await adminClient
+          .from("team_members")
+          .update({
+            member_user_id: null,
+            status: "invited",
+            accepted_at: null,
+            invited_at: new Date().toISOString(),
+          })
+          .eq("id", existingRecord.id);
+      }
+
+      if (existingAuthUser && existingRecord?.status !== "active" && !existingRecord?.accepted_at) {
+        const { error: deleteInvitedAuthErr } = await adminClient.auth.admin.deleteUser(existingAuthUser.id);
+        if (!deleteInvitedAuthErr) {
+          await adminClient
+            .from("team_members")
+            .update({
+              member_user_id: null,
+              status: "invited",
+              accepted_at: null,
+              invited_at: new Date().toISOString(),
+            })
+            .eq("id", existingRecord.id);
+
+          return new Response(
+            JSON.stringify({
+              success: true,
+              message: `Invite refreshed. No account was pre-created. Ask them to sign up with this email and use Bookie ID ${bookieId || "(not set)"}.`,
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
 
       if (existingAuthUser) {
-        // User already has an account — send a password reset so they can get in
         const { error: resetErr } = await adminClient.auth.admin.generateLink({
           type: "recovery",
           email,
-          options: { redirectTo: `${Deno.env.get("SUPABASE_URL")?.replace('.supabase.co', '.lovableproject.com') || 'http://localhost:5173'}/reset-password` },
+          options: { redirectTo: `${appUrl}/reset-password` },
         });
         if (resetErr) {
           return new Response(
@@ -138,42 +186,27 @@ Deno.serve(async (req) => {
           JSON.stringify({ success: true, message: "A password reset email has been sent to the team member." }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
-      } else {
-        // No auth account — send an invite email which creates their account
-        const { error: inviteErr } = await adminClient.auth.admin.inviteUserByEmail(email, {
-          redirectTo: `${Deno.env.get("SUPABASE_URL")?.replace('.supabase.co', '.lovableproject.com') || 'http://localhost:5173'}/reset-password`,
-          data: { invited_by_business: businessName, bookie_id: bookieId },
-        });
-        if (inviteErr) {
-          // If user was somehow created between checks, still succeed
-          if (inviteErr.message?.includes("already been registered") || inviteErr.message?.includes("already invited")) {
-            return new Response(
-              JSON.stringify({ success: true, message: "This user already has an account. Please ask them to sign in or reset their password." }),
-              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-          return new Response(
-            JSON.stringify({ error: `Failed to send invite: ${inviteErr.message}` }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        // Update team_members record with the new auth user ID if available
-        const { data: newUsers } = await adminClient.auth.admin.listUsers();
-        const newUser = newUsers?.users?.find((u: any) => u.email === email);
-        if (newUser) {
-          await adminClient
-            .from("team_members")
-            .update({ member_user_id: newUser.id })
-            .eq("email", email)
-            .eq("business_user_id", business_user_id);
-        }
-
-        return new Response(
-          JSON.stringify({ success: true, message: `Invite email sent! The team member will receive an email to set up their account.${bookieId ? ` Your Bookie ID (${bookieId}) was included.` : ""}` }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
       }
+
+      if (existingRecord) {
+        await adminClient
+          .from("team_members")
+          .update({
+            member_user_id: null,
+            status: "invited",
+            accepted_at: null,
+            invited_at: new Date().toISOString(),
+          })
+          .eq("id", existingRecord.id);
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: `Invite refreshed. No account was created. The user can sign up with this email and use Bookie ID ${bookieId || "(not set)"}.`,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Check if user already exists in auth (they may have signed up already)
