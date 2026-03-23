@@ -122,6 +122,18 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Notify business owner(s) that a team member joined
+    if (data && data.length > 0) {
+      for (const tm of data) {
+        await adminClient.from("notifications").insert({
+          user_id: tm.business_user_id,
+          title: "Team member joined",
+          message: `${tm.name || user.email} has accepted the invite and joined as ${tm.role}.`,
+          type: "team_join",
+        });
+      }
+    }
+
     return new Response(
       JSON.stringify({ success: true, activated: data?.length || 0, team_members: data || [] }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
