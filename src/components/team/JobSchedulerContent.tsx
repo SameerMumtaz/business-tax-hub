@@ -544,9 +544,10 @@ export default function JobSchedulerContent() {
 
               // Recurring: "this instance only" — create a one-time copy
               if (recurringMode === "this" && sourceJob) {
+                const rescheduledTag = `[rescheduled:${sourceJob.id}:${instanceDate || ""}]`;
                 const newJob: any = {
                   title: sourceJob.title,
-                  description: sourceJob.description,
+                  description: rescheduledTag + (sourceJob.description ? "\n" + sourceJob.description : ""),
                   site_id: sourceJob.site_id,
                   client_id: sourceJob.client_id,
                   start_date: newDate,
@@ -562,7 +563,7 @@ export default function JobSchedulerContent() {
                   status: sourceJob.status,
                 };
                 await createJob(newJob);
-                toast.success(`One-time copy of "${sourceJob.title}" created for ${parseD(newDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}`);
+                toast.success(`"${sourceJob.title}" rescheduled to ${parseD(newDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}`);
                 return;
               }
 
