@@ -27,7 +27,7 @@ import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 
 export default function JobSchedulerContent() {
   const { user } = useAuth();
-  const { sites, jobs, assignments, loading, createSite, updateSite, deleteSite, createJob, updateJob, deleteJob, assignWorker, removeAssignment, refetch } = useJobs();
+  const { sites, jobs, assignments, loading, createSite, updateSite, deleteSite, createJob, updateJob, updateJobsBatch, deleteJob, assignWorker, removeAssignment, refetch } = useJobs();
   const { data: clients = [] } = useClients();
   const [tab, setTab] = useState("calendar");
 
