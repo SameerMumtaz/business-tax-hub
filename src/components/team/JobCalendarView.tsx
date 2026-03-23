@@ -216,6 +216,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [dragJob, setDragJob] = useState<Job | null>(null);
+  const [editMode, setEditMode] = useState(false);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   const [showConflicts, setShowConflicts] = useState<ConflictInfo[]>([]);
   const [gapSuggestions, setGapSuggestions] = useState<string[]>([]);
