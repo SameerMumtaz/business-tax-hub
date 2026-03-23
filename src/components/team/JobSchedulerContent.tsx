@@ -538,9 +538,18 @@ export default function JobSchedulerContent() {
             teamMembers={teamMembers}
             onJobClick={(j) => openEditJob(j)}
             onJobMove={async (evt: JobMoveEvent) => {
-              const { jobId, newDate, newTime, recurringMode, sourceJob, instanceDate } = evt;
+              const { jobId, newDate, newTime, fromDate, dropIndex, recurringMode, sourceJob, instanceDate } = evt;
               const parseD = (s: string) => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
               const fmtD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+              const toMinutes = (time?: string | null) => {
+                if (!time) return Number.MAX_SAFE_INTEGER;
+                const [h, m] = time.split(":").map(Number);
+                return h * 60 + m;
+              };
+              const toTimeString = (minutes: number) => {
+                const safeMinutes = ((Math.round(minutes) % 1440) + 1440) % 1440;
+                return `${String(Math.floor(safeMinutes / 60)).padStart(2, "0")}:${String(safeMinutes % 60).padStart(2, "0")}`;
+              };
 
               // Recurring: "this instance only" — create a one-time copy
               if (recurringMode === "this" && sourceJob) {
@@ -569,17 +578,56 @@ export default function JobSchedulerContent() {
 
               // Recurring: "all future" — update the recurring job start date
               if (recurringMode === "all" && sourceJob) {
-                let updates: Record<string, any> = { start_date: newDate };
+                const updates: Record<string, any> = { start_date: newDate };
                 if (newTime !== undefined) updates.start_time = newTime;
                 await updateJob(jobId, updates);
                 toast.success(`All future instances of "${sourceJob.title}" shifted`);
                 return;
               }
 
-              // Normal (non-recurring) move
+              // Normal (non-recurring) move / intra-day resequence
               const job = jobs.find((j) => j.id === jobId);
               if (!job) return;
-              let updates: Record<string, any> = { start_date: newDate };
+
+              const isSameDayReorder = !!fromDate && fromDate === newDate && typeof dropIndex === "number";
+              if (isSameDayReorder) {
+                const sameDayJobs = jobs
+                  .filter((j) => j.start_date === newDate && j.status !== "cancelled" && j.id !== jobId)
+                  .sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+
+                const insertAt = Math.max(0, Math.min(dropIndex, sameDayJobs.length));
+                sameDayJobs.splice(insertAt, 0, { ...job, start_date: newDate, start_time: newTime ?? job.start_time });
+
+                const batchUpdates = sameDayJobs.map((dayJob, index) => {
+                  const previous = sameDayJobs[index - 1];
+                  let computedTime: string;
+
+                  if (index === 0) {
+                    const firstKnownTime = sameDayJobs.find((candidate, candidateIndex) => candidateIndex > 0 && candidate.start_time)?.start_time;
+                    computedTime = firstKnownTime ? toTimeString(toMinutes(firstKnownTime) - 60) : (dayJob.start_time ?? "08:00");
+                  } else {
+                    const previousStart = previous.start_time ? toMinutes(previous.start_time) : 8 * 60;
+                    const previousDuration = Math.max(30, Math.round((previous.estimated_hours || 1) * 60));
+                    computedTime = toTimeString(previousStart + previousDuration);
+                  }
+
+                  const updates: Record<string, any> = { start_date: newDate, start_time: computedTime };
+                  if (dayJob.id === jobId && job.end_date && newDate !== job.start_date) {
+                    const diffDays = Math.round((parseD(job.end_date).getTime() - parseD(job.start_date).getTime()) / 86400000);
+                    const newEnd = parseD(newDate);
+                    newEnd.setDate(newEnd.getDate() + diffDays);
+                    updates.end_date = fmtD(newEnd);
+                  }
+                  return { id: dayJob.id, updates };
+                });
+
+                await updateJobsBatch(batchUpdates);
+                const movedJob = batchUpdates.find((entry) => entry.id === jobId);
+                toast.success(`"${job.title}" moved to ${movedJob?.updates.start_time || newTime || "updated slot"}`);
+                return;
+              }
+
+              const updates: Record<string, any> = { start_date: newDate };
               if (newTime !== undefined && newTime !== null) {
                 updates.start_time = newTime;
               }
