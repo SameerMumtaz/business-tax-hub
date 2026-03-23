@@ -537,20 +537,59 @@ export default function JobSchedulerContent() {
             assignments={assignments}
             teamMembers={teamMembers}
             onJobClick={(j) => openEditJob(j)}
-            onJobMove={async (jobId, newDate) => {
-              const job = jobs.find((j) => j.id === jobId);
-              if (!job) return;
+            onJobMove={async (evt: JobMoveEvent) => {
+              const { jobId, newDate, newTime, recurringMode, sourceJob, instanceDate } = evt;
               const parseD = (s: string) => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
               const fmtD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+
+              // Recurring: "this instance only" — create a one-time copy
+              if (recurringMode === "this" && sourceJob) {
+                const newJob: any = {
+                  title: sourceJob.title,
+                  description: sourceJob.description,
+                  site_id: sourceJob.site_id,
+                  client_id: sourceJob.client_id,
+                  start_date: newDate,
+                  start_time: newTime ?? sourceJob.start_time,
+                  estimated_hours: sourceJob.estimated_hours,
+                  price: sourceJob.price,
+                  material_budget: sourceJob.material_budget,
+                  labor_budget_type: sourceJob.labor_budget_type,
+                  labor_budget_amount: sourceJob.labor_budget_amount,
+                  labor_budget_hours: sourceJob.labor_budget_hours,
+                  labor_budget_rate: sourceJob.labor_budget_rate,
+                  job_type: "one_time",
+                  status: sourceJob.status,
+                };
+                await createJob(newJob);
+                toast.success(`One-time copy of "${sourceJob.title}" created for ${parseD(newDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}`);
+                return;
+              }
+
+              // Recurring: "all future" — update the recurring job start date
+              if (recurringMode === "all" && sourceJob) {
+                let updates: Record<string, any> = { start_date: newDate };
+                if (newTime !== undefined) updates.start_time = newTime;
+                await updateJob(jobId, updates);
+                toast.success(`All future instances of "${sourceJob.title}" shifted`);
+                return;
+              }
+
+              // Normal (non-recurring) move
+              const job = jobs.find((j) => j.id === jobId);
+              if (!job) return;
               let updates: Record<string, any> = { start_date: newDate };
-              if (job.end_date) {
+              if (newTime !== undefined && newTime !== null) {
+                updates.start_time = newTime;
+              }
+              if (job.end_date && newDate !== job.start_date) {
                 const diffDays = Math.round((parseD(job.end_date).getTime() - parseD(job.start_date).getTime()) / 86400000);
                 const newEnd = parseD(newDate);
                 newEnd.setDate(newEnd.getDate() + diffDays);
                 updates.end_date = fmtD(newEnd);
               }
               await updateJob(jobId, updates);
-              toast.success(`"${job.title}" moved to ${parseD(newDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}`);
+              toast.success(`"${job.title}" ${newTime ? 'rescheduled' : 'moved'} to ${parseD(newDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}${newTime ? ' at ' + newTime : ''}`);
             }}
           />
         </TabsContent>
