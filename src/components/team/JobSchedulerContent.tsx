@@ -374,14 +374,21 @@ export default function JobSchedulerContent() {
                 </div>
               </div>
               {jobType === "recurring" && (
-                <Select value={jobInterval} onValueChange={setJobInterval}>
-                  <SelectTrigger><SelectValue placeholder="Repeat interval" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="weekly">Weekly</SelectItem>
-                    <SelectItem value="biweekly">Biweekly</SelectItem>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                  </SelectContent>
-                </Select>
+                <>
+                  <Select value={jobInterval} onValueChange={setJobInterval}>
+                    <SelectTrigger><SelectValue placeholder="Repeat interval" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="biweekly">Biweekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Recurring End Date (optional)</label>
+                    <Input type="date" value={jobRecurringEnd} onChange={(e) => setJobRecurringEnd(e.target.value)} />
+                    <p className="text-xs text-muted-foreground mt-0.5">Leave blank to repeat indefinitely</p>
+                  </div>
+                </>
               )}
               <JobBudgetFields
                 price={jobPrice} materialBudget={jobMaterialBudget}
