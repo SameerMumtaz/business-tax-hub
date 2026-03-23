@@ -3,7 +3,7 @@ import { type Job, type JobSite, type JobAssignment } from "@/hooks/useJobs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ChevronLeft, ChevronRight, Clock, MapPin, AlertTriangle, Sparkles, GripVertical, Calendar } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, MapPin, AlertTriangle, Sparkles, GripVertical, Calendar, Lock, Unlock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
@@ -216,6 +216,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [dragJob, setDragJob] = useState<Job | null>(null);
+  const [editMode, setEditMode] = useState(false);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   const [showConflicts, setShowConflicts] = useState<ConflictInfo[]>([]);
   const [gapSuggestions, setGapSuggestions] = useState<string[]>([]);
@@ -266,6 +267,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
   // ── Drag handlers ──
 
   const handleDragStart = (e: React.DragEvent, job: Job, fromDate: string) => {
+    if (!editMode) { e.preventDefault(); return; }
     if (job.job_type === "recurring") {
       toast.error("Recurring jobs can't be dragged — edit the start date instead");
       e.preventDefault();
@@ -443,7 +445,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
               {dayJobs.map((job) => {
                 const site = siteMap.get(job.site_id);
                 const isDragging = dragJob?.id === job.id;
-                const canDrag = job.job_type !== "recurring" && job.status !== "completed" && job.status !== "cancelled";
+                const canDrag = editMode && job.job_type !== "recurring" && job.status !== "completed" && job.status !== "cancelled";
 
                 return (
                   <div
@@ -622,7 +624,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                   {dayJobs.slice(0, 3).map((job) => (
                     <div
                       key={`${job.id}-${dateStr}`}
-                      draggable={job.job_type !== "recurring" && job.status !== "completed"}
+                      draggable={editMode && job.job_type !== "recurring" && job.status !== "completed"}
                       onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, job, dateStr); }}
                       onDragEnd={handleDragEnd}
                       onClick={(e) => { e.stopPropagation(); onJobClick?.(job); }}
@@ -662,6 +664,15 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
           </div>
           <div className="flex items-center gap-1.5">
             <Button variant="ghost" size="sm" className="text-xs h-7" onClick={goToday}>Today</Button>
+            <Button
+              variant={editMode ? "default" : "outline"}
+              size="sm"
+              className="text-xs h-7 gap-1"
+              onClick={() => setEditMode(!editMode)}
+            >
+              {editMode ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+              {editMode ? "Editing" : "Locked"}
+            </Button>
             <div className="flex rounded-md border border-border overflow-hidden">
               <button
                 onClick={() => setViewMode("week")}
@@ -704,10 +715,12 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
               <span className="text-muted-foreground">{label}</span>
             </div>
           ))}
-          <div className="flex items-center gap-1">
-            <GripVertical className="h-3 w-3 text-muted-foreground/60" />
-            <span className="text-muted-foreground">Drag to reschedule</span>
-          </div>
+          {editMode && (
+            <div className="flex items-center gap-1">
+              <GripVertical className="h-3 w-3 text-muted-foreground/60" />
+              <span className="text-muted-foreground">Drag to reschedule</span>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
