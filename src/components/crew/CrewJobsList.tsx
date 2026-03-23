@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { MapPin, Clock, LogIn, AlertTriangle, DollarSign, Navigation, CalendarOff, Camera } from "lucide-react";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
-import { formatDateOnly, parseDateOnlyLocal } from "@/lib/dateOnly";
-import { getNextInstanceDate, isRecurringJobToday } from "@/lib/dateOnly";
+import { formatDateOnly, getNextInstanceDate, isRecurringJobToday } from "@/lib/dateOnly";
 export interface AssignedJob {
   id: string;
   title: string;
