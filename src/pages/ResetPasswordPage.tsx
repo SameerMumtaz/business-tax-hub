@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Receipt } from "lucide-react";
@@ -9,16 +10,27 @@ import { useNavigate } from "react-router-dom";
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [ready, setReady] = useState(false);
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check for recovery or invite token in URL hash
-    const hash = window.location.hash;
-    if (!hash.includes("type=recovery") && !hash.includes("type=invite")) {
-      toast.error("Invalid reset link");
+    // Supabase auto-exchanges tokens from the URL hash via onAuthStateChange.
+    // We just need to wait for a valid session before showing the form.
+    // Give a short delay for the token exchange to complete.
+    const timeout = setTimeout(() => {
+      setReady(true);
+    }, 1500);
+
+    return () => clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
+    if (ready && !user) {
+      toast.error("Invalid or expired reset link. Please request a new one.");
       navigate("/auth");
     }
-  }, [navigate]);
+  }, [ready, user, navigate]);
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +48,16 @@ export default function ResetPasswordPage() {
     }
     setLoading(false);
   };
+
+  if (!ready) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <div className="text-muted-foreground">Verifying link…</div>
+      </div>
+    );
+  }
+
+  if (!user) return null;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">

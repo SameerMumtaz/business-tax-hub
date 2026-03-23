@@ -50,7 +50,12 @@ export default function AuthPage() {
         toast.success("Check your email to confirm your account");
       }
     } catch (err: any) {
-      toast.error(err.message || "Authentication failed");
+      const msg = err.message || "Authentication failed";
+      if (!isLogin && msg.toLowerCase().includes("already registered")) {
+        toast.error("An account with this email already exists. Try signing in or resetting your password.");
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setSubmitting(false);
     }
