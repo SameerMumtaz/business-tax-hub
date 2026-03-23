@@ -175,6 +175,8 @@ export default function PersonalProfilePage() {
           {saving ? "Saving…" : "Save Profile"}
         </Button>
 
+        <SetPasswordCard />
+
         {/* Link to Business via Bookie ID */}
         <LinkToBusinessSection />
 

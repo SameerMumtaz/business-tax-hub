@@ -209,6 +209,8 @@ export default function ProfilePage() {
           </p>
         </div>
 
+        <SetPasswordCard />
+
         <FullAccountExport userId={user?.id} />
 
         <DeleteAccountSection variant="business" />

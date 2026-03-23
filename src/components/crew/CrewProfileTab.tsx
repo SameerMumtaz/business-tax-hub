@@ -245,5 +245,8 @@ export default function CrewProfileTab() {
         </Button>
       </CardContent>
     </Card>
+
+    <SetPasswordCard />
+    </>
   );
 }
