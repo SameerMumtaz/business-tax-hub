@@ -256,6 +256,7 @@ export default function JobSchedulerContent() {
       title: editJobTitle, site_id: editJobSiteId, start_date: editJobStart,
       end_date: editJobEnd || null, job_type: editJobType,
       recurring_interval: editJobType === "recurring" ? editJobInterval || null : null,
+      recurring_end_date: editJobType === "recurring" && editJobRecurringEnd ? editJobRecurringEnd : null,
       description: editJobDesc || null,
       start_time: editJobStartTime || null, estimated_hours: editJobEstHours ? Number(editJobEstHours) : null,
       client_id: editJobClientId && editJobClientId !== "none" ? editJobClientId : null,
