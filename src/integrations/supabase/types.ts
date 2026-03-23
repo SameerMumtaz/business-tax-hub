@@ -1698,6 +1698,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_crew_view_team_member: {
+        Args: {
+          _target_business_user_id: string
+          _target_team_member_id: string
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      can_manager_view_team_member: {
+        Args: { _target_business_user_id: string; _user_id: string }
+        Returns: boolean
+      }
       get_business_ids_for_member: {
         Args: { _user_id: string }
         Returns: string[]
@@ -1706,6 +1718,15 @@ export type Database = {
       get_business_timesheet_ids: {
         Args: { _user_id: string }
         Returns: string[]
+      }
+      get_my_team_memberships: {
+        Args: { _user_id: string }
+        Returns: {
+          business_user_id: string
+          id: string
+          role: Database["public"]["Enums"]["team_role"]
+          status: string
+        }[]
       }
       get_team_role: {
         Args: { _business_id: string; _user_id: string }
