@@ -12,12 +12,47 @@ interface Props {
 export default function CrewCalendarView({ jobs }: Props) {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
 
-  // Build set of dates with jobs
+  // Build set of dates with jobs (including recurring instances)
   const jobDates = new Map<string, AssignedJob[]>();
+
+  const addJob = (dateStr: string, job: AssignedJob) => {
+    if (!jobDates.has(dateStr)) jobDates.set(dateStr, []);
+    jobDates.get(dateStr)!.push(job);
+  };
+
+  const parseLocal = (s: string) => {
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  };
+
+  const toKey = (d: Date) => d.toDateString();
+
+  // Generate up to 1 year of recurring instances
+  const horizon = new Date();
+  horizon.setFullYear(horizon.getFullYear() + 1);
+
   jobs.forEach((job) => {
-    const key = new Date(job.start_date).toDateString();
-    if (!jobDates.has(key)) jobDates.set(key, []);
-    jobDates.get(key)!.push(job);
+    if (job.job_type === "recurring" && job.recurring_interval) {
+      const start = parseLocal(job.start_date);
+      const endDate = job.recurring_end_date ? parseLocal(job.recurring_end_date) : horizon;
+      const intervalDays = job.recurring_interval === "weekly" ? 7
+        : job.recurring_interval === "biweekly" ? 14 : 0;
+
+      const cursor = new Date(start);
+      while (cursor <= endDate) {
+        addJob(toKey(cursor), job);
+        if (job.recurring_interval === "monthly") {
+          cursor.setMonth(cursor.getMonth() + 1);
+        } else if (intervalDays > 0) {
+          cursor.setDate(cursor.getDate() + intervalDays);
+        } else {
+          break;
+        }
+      }
+    } else {
+      const key = toKey(parseLocal(job.start_date));
+      addJob(key, job);
+    }
   });
 
   const modifiers = {
