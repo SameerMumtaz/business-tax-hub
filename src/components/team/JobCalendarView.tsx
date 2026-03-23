@@ -714,7 +714,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                         onDrop={(e) => handleCardDrop(e, dateStr, idx + 1)}
                       >
                         <span className={cn(
-                          "text-[10px] font-medium",
+                          "text-[10px] font-medium pointer-events-none",
                           dragOverDate === dateStr && dragOverIndex === idx + 1 ? "text-primary" : "text-primary/60"
                         )}>
                           {isLastCard ? "↓ Move here" : "Move here"}
