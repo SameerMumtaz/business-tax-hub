@@ -41,7 +41,7 @@ interface PayRateChange {
 
 export default function MembersContent() {
   const { user } = useAuth();
-  const { role: currentRole } = useTeamRole();
+  const { role: currentRole, businessUserId, loading: teamRoleLoading } = useTeamRole();
 
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,57 +87,91 @@ export default function MembersContent() {
   const [deleting, setDeleting] = useState(false);
 
   const fetchMembers = async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from("team_members")
-      .select("*")
-      .eq("business_user_id", user.id)
-      .order("created_at", { ascending: false });
-    const teamMembers = (data || []) as TeamMember[];
-    setMembers(teamMembers);
-    setLoading(false);
+    if (!user || teamRoleLoading) return;
+    if (!businessUserId) {
+      setMembers([]);
+      setLoading(false);
+      return;
+    }
 
-    // Ensure contractor/employee records exist for all active members
-    const activeMembers = teamMembers.filter((m) => m.status === "active");
-    if (activeMembers.length > 0) {
-      const [{ data: contractors }, { data: employees }] = await Promise.all([
-        supabase.from("contractors").select("name").eq("user_id", user.id),
-        supabase.from("employees").select("name").eq("user_id", user.id),
-      ]);
-      const existingNames = new Set([
-        ...(contractors || []).map((c: any) => c.name),
-        ...(employees || []).map((e: any) => e.name),
-      ]);
+    setLoading(true);
 
-      for (const m of activeMembers) {
-        if (!existingNames.has(m.name)) {
-          if (m.worker_type === "W2") {
-            await supabase.from("employees").insert({
-              user_id: user.id, name: m.name, salary: m.pay_rate || 0,
-              federal_withholding: 0, state_withholding: 0, social_security: 0, medicare: 0,
-            });
-          } else {
-            await supabase.from("contractors").insert({
-              user_id: user.id, name: m.name, pay_rate: m.pay_rate || 0, total_paid: 0,
-            });
+    try {
+      const { data, error } = await supabase
+        .from("team_members")
+        .select("*")
+        .eq("business_user_id", businessUserId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      const teamMembers = (data || []) as TeamMember[];
+      setMembers(teamMembers);
+
+      // Ensure contractor/employee records exist for all active members for the business owner only
+      if (user.id === businessUserId) {
+        const activeMembers = teamMembers.filter((m) => m.status === "active");
+        if (activeMembers.length > 0) {
+          const [{ data: contractors }, { data: employees }] = await Promise.all([
+            supabase.from("contractors").select("name").eq("user_id", businessUserId),
+            supabase.from("employees").select("name").eq("user_id", businessUserId),
+          ]);
+
+          const existingNames = new Set([
+            ...(contractors || []).map((c: any) => c.name),
+            ...(employees || []).map((e: any) => e.name),
+          ]);
+
+          for (const m of activeMembers) {
+            if (!existingNames.has(m.name)) {
+              if (m.worker_type === "W2") {
+                await supabase.from("employees").insert({
+                  user_id: businessUserId,
+                  name: m.name,
+                  salary: m.pay_rate || 0,
+                  federal_withholding: 0,
+                  state_withholding: 0,
+                  social_security: 0,
+                  medicare: 0,
+                });
+              } else {
+                await supabase.from("contractors").insert({
+                  user_id: businessUserId,
+                  name: m.name,
+                  pay_rate: m.pay_rate || 0,
+                  total_paid: 0,
+                });
+              }
+            }
           }
         }
       }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load team members");
+      setMembers([]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  useEffect(() => { fetchMembers(); }, [user]);
+  useEffect(() => {
+    fetchMembers();
+  }, [user, businessUserId, teamRoleLoading]);
 
   const handleInvite = async () => {
-    if (!user || !inviteName.trim() || !inviteEmail.trim()) {
-      toast.error("Name and email are required"); return;
+    if (!user || !businessUserId || !inviteName.trim() || !inviteEmail.trim()) {
+      toast.error("Name and email are required");
+      return;
     }
     setSending(true);
     try {
       const res = await supabase.functions.invoke("invite-crew", {
         body: {
-          email: inviteEmail.trim(), name: inviteName.trim(), role: inviteRole,
-          business_user_id: user.id, worker_type: inviteWorkerType,
+          email: inviteEmail.trim(),
+          name: inviteName.trim(),
+          role: inviteRole,
+          business_user_id: businessUserId,
+          worker_type: inviteWorkerType,
           pay_rate: parseFloat(invitePayRate) || 0,
           address: inviteAddress.trim() || null,
           state_employed: inviteState.trim() || null,
@@ -145,46 +179,73 @@ export default function MembersContent() {
         },
       });
       const resData = res.data as any;
-      if (resData?.error) { toast.error(resData.error); return; }
-      toast.success(`Invitation sent to ${inviteEmail}`);
-      setInviteOpen(false); setInviteName(""); setInviteEmail(""); setInviteRole("crew");
-      setInviteWorkerType("1099"); setInvitePayRate(""); setInviteAddress(""); setInviteState("");
+      if (resData?.error) {
+        toast.error(resData.error);
+        return;
+      }
+      toast.success(resData?.message || `Invitation sent to ${inviteEmail}`);
+      setInviteOpen(false);
+      setInviteName("");
+      setInviteEmail("");
+      setInviteRole("crew");
+      setInviteWorkerType("1099");
+      setInvitePayRate("");
+      setInviteAddress("");
+      setInviteState("");
       fetchMembers();
     } catch (err: any) {
       toast.error(err.message || "Failed to send invitation");
-    } finally { setSending(false); }
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleDeactivate = async (id: string) => {
     await supabase.from("team_members").update({ status: "deactivated" }).eq("id", id);
-    toast.success("Member deactivated"); fetchMembers();
-  };
-  const handleReactivate = async (id: string) => {
-    await supabase.from("team_members").update({ status: "active", accepted_at: new Date().toISOString() }).eq("id", id);
-    toast.success("Member reactivated"); fetchMembers();
-  };
-  const handleApprove = async (member: TeamMember) => {
-    await supabase.from("team_members").update({ status: "active", accepted_at: new Date().toISOString() }).eq("id", member.id);
-    // Auto-create contractor/employee record
-    if (!user) return;
-    if (member.worker_type === "W2") {
-      await supabase.from("employees").upsert({
-        user_id: user.id, name: member.name, salary: member.pay_rate || 0,
-        federal_withholding: 0, state_withholding: 0, social_security: 0, medicare: 0,
-      }, { onConflict: "user_id,name" as any, ignoreDuplicates: true });
-    } else {
-      await supabase.from("contractors").upsert({
-        user_id: user.id, name: member.name, pay_rate: member.pay_rate || 0, total_paid: 0,
-      }, { onConflict: "user_id,name" as any, ignoreDuplicates: true });
-    }
-    toast.success(`${member.name} approved!`); fetchMembers();
-  };
-  const handleReject = async (id: string) => {
-    await supabase.from("team_members").delete().eq("id", id);
-    toast.success("Request rejected"); fetchMembers();
+    toast.success("Member deactivated");
+    fetchMembers();
   };
 
-  // --- Edit member + sync contractor/employee ---
+  const handleReactivate = async (id: string) => {
+    await supabase.from("team_members").update({ status: "active", accepted_at: new Date().toISOString() }).eq("id", id);
+    toast.success("Member reactivated");
+    fetchMembers();
+  };
+
+  const handleApprove = async (member: TeamMember) => {
+    await supabase.from("team_members").update({ status: "active", accepted_at: new Date().toISOString() }).eq("id", member.id);
+
+    if (businessUserId && user?.id === businessUserId) {
+      if (member.worker_type === "W2") {
+        await supabase.from("employees").upsert({
+          user_id: businessUserId,
+          name: member.name,
+          salary: member.pay_rate || 0,
+          federal_withholding: 0,
+          state_withholding: 0,
+          social_security: 0,
+          medicare: 0,
+        }, { onConflict: "user_id,name" as any, ignoreDuplicates: true });
+      } else {
+        await supabase.from("contractors").upsert({
+          user_id: businessUserId,
+          name: member.name,
+          pay_rate: member.pay_rate || 0,
+          total_paid: 0,
+        }, { onConflict: "user_id,name" as any, ignoreDuplicates: true });
+      }
+    }
+
+    toast.success(`${member.name} approved!`);
+    fetchMembers();
+  };
+
+  const handleReject = async (id: string) => {
+    await supabase.from("team_members").delete().eq("id", id);
+    toast.success("Request rejected");
+    fetchMembers();
+  };
+
   const openEdit = (member: TeamMember) => {
     setEditMember(member);
     setEditName(member.name);
@@ -196,16 +257,17 @@ export default function MembersContent() {
   };
 
   const handleEditSave = async () => {
-    if (!user || !editMember || !editName.trim() || !editEmail.trim()) {
-      toast.error("Name and email are required"); return;
+    if (!user || !businessUserId || !editMember || !editName.trim() || !editEmail.trim()) {
+      toast.error("Name and email are required");
+      return;
     }
+
     setSavingEdit(true);
     try {
       const oldName = editMember.name;
       const oldWorkerType = editMember.worker_type;
       const newPayRate = parseFloat(editPayRate) || 0;
 
-      // 1. Update team_members record
       const { error } = await supabase.from("team_members").update({
         name: editName.trim(),
         email: editEmail.trim(),
@@ -215,55 +277,43 @@ export default function MembersContent() {
       }).eq("id", editMember.id);
       if (error) throw error;
 
-      // 2. Sync contractor/employee records
-      if (oldWorkerType !== editWorkerType) {
-        // Worker type changed — delete old record, create new one
-        if (oldWorkerType === "1099") {
-          await supabase.from("contractors").delete()
-            .eq("user_id", user.id).eq("name", oldName);
-        } else {
-          await supabase.from("employees").delete()
-            .eq("user_id", user.id).eq("name", oldName);
-        }
-        // Create new record with the new type
-        if (editWorkerType === "W2") {
-          await supabase.from("employees").insert({
-            user_id: user.id,
-            name: editName.trim(),
-            salary: newPayRate,
-            federal_withholding: 0, state_withholding: 0,
-            social_security: 0, medicare: 0,
-          });
-        } else {
-          await supabase.from("contractors").insert({
-            user_id: user.id,
-            name: editName.trim(),
-            pay_rate: newPayRate,
-            total_paid: 0,
-          });
-        }
-      } else {
-        // Same worker type — just update name and pay rate
-        if (editWorkerType === "1099") {
+      if (user.id === businessUserId) {
+        if (oldWorkerType !== editWorkerType) {
+          if (oldWorkerType === "1099") {
+            await supabase.from("contractors").delete().eq("user_id", businessUserId).eq("name", oldName);
+          } else {
+            await supabase.from("employees").delete().eq("user_id", businessUserId).eq("name", oldName);
+          }
+
+          if (editWorkerType === "W2") {
+            await supabase.from("employees").insert({
+              user_id: businessUserId,
+              name: editName.trim(),
+              salary: newPayRate,
+              federal_withholding: 0,
+              state_withholding: 0,
+              social_security: 0,
+              medicare: 0,
+            });
+          } else {
+            await supabase.from("contractors").insert({
+              user_id: businessUserId,
+              name: editName.trim(),
+              pay_rate: newPayRate,
+              total_paid: 0,
+            });
+          }
+        } else if (editWorkerType === "1099") {
           await supabase.from("contractors").update({
             name: editName.trim(),
             pay_rate: newPayRate,
-          }).eq("user_id", user.id).eq("name", oldName);
+          }).eq("user_id", businessUserId).eq("name", oldName);
         } else {
           await supabase.from("employees").update({
             name: editName.trim(),
             salary: newPayRate,
-          }).eq("user_id", user.id).eq("name", oldName);
+          }).eq("user_id", businessUserId).eq("name", oldName);
         }
-      }
-
-      // 3. Sync name to crew member's profile (if they have a linked user)
-      if (editMember.member_user_id) {
-        const nameParts = editName.trim().split(/\s+/);
-        await supabase.from("profiles").update({
-          first_name: nameParts[0] || "",
-          last_name: nameParts.slice(1).join(" ") || "",
-        }).eq("user_id", editMember.member_user_id);
       }
 
       toast.success("Member updated");
@@ -271,32 +321,40 @@ export default function MembersContent() {
       fetchMembers();
     } catch (err: any) {
       toast.error(err.message || "Failed to update member");
-    } finally { setSavingEdit(false); }
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
-  // --- Resend invite ---
   const handleResendInvite = async (member: TeamMember) => {
-    if (!user) return;
+    if (!user || !businessUserId) return;
     setResending(member.id);
     try {
       const res = await supabase.functions.invoke("invite-crew", {
         body: {
-          email: member.email, name: member.name, role: member.role,
-          business_user_id: user.id, worker_type: member.worker_type,
+          email: member.email,
+          name: member.name,
+          role: member.role,
+          business_user_id: businessUserId,
+          worker_type: member.worker_type,
           pay_rate: member.pay_rate,
           resend: true,
           redirect_to: `${window.location.origin}/reset-password`,
         },
       });
       const resData = res.data as any;
-      if (resData?.error) { toast.error(resData.error); return; }
-      toast.success(`Invite resent to ${member.email}`);
+      if (resData?.error) {
+        toast.error(resData.error);
+        return;
+      }
+      toast.success(resData?.message || `Invite resent to ${member.email}`);
     } catch (err: any) {
       toast.error(err.message || "Failed to resend invite");
-    } finally { setResending(null); }
+    } finally {
+      setResending(null);
+    }
   };
 
-  // --- Copy invite link ---
   const handleCopyInviteLink = (member: TeamMember) => {
     const signupUrl = `${window.location.origin}/auth?invite=true&email=${encodeURIComponent(member.email)}`;
     navigator.clipboard.writeText(signupUrl).then(() => {
@@ -315,15 +373,18 @@ export default function MembersContent() {
   };
 
   const handleRateChange = async () => {
-    if (!user || !rateChangeMember || !newRate) {
-      toast.error("New rate is required"); return;
+    if (!user || !businessUserId || !rateChangeMember || !newRate) {
+      toast.error("New rate is required");
+      return;
     }
     const newRateNum = parseFloat(newRate);
     if (isNaN(newRateNum) || newRateNum < 0) {
-      toast.error("Invalid rate"); return;
+      toast.error("Invalid rate");
+      return;
     }
     if (!effectiveDate) {
-      toast.error("Effective date is required"); return;
+      toast.error("Effective date is required");
+      return;
     }
     setSavingRate(true);
     try {
@@ -333,27 +394,22 @@ export default function MembersContent() {
         new_rate: newRateNum,
         effective_date: effectiveDate,
         reason: rateChangeReason.trim() || null,
-        user_id: user.id,
+        user_id: businessUserId,
       });
       if (historyError) throw historyError;
 
       const today = new Date().toISOString().split("T")[0];
       if (effectiveDate <= today) {
-        await supabase.from("team_members")
-          .update({ pay_rate: newRateNum })
-          .eq("id", rateChangeMember.id);
+        await supabase.from("team_members").update({ pay_rate: newRateNum }).eq("id", rateChangeMember.id);
 
-        if (rateChangeMember.worker_type === "1099") {
-          await supabase.from("contractors")
-            .update({ pay_rate: newRateNum })
-            .eq("user_id", user.id)
-            .eq("name", rateChangeMember.name);
-        } else {
-          await supabase.from("employees")
-            .update({ salary: newRateNum })
-            .eq("user_id", user.id)
-            .eq("name", rateChangeMember.name);
+        if (user.id === businessUserId) {
+          if (rateChangeMember.worker_type === "1099") {
+            await supabase.from("contractors").update({ pay_rate: newRateNum }).eq("user_id", businessUserId).eq("name", rateChangeMember.name);
+          } else {
+            await supabase.from("employees").update({ salary: newRateNum }).eq("user_id", businessUserId).eq("name", rateChangeMember.name);
+          }
         }
+
         toast.success(`Pay rate updated to ${formatCurrency(newRateNum)} effective ${effectiveDate}`);
       } else {
         toast.success(`Pay rate change scheduled for ${effectiveDate}. Current rate unchanged until then.`);
@@ -363,7 +419,9 @@ export default function MembersContent() {
       fetchMembers();
     } catch (err: any) {
       toast.error(err.message || "Failed to update rate");
-    } finally { setSavingRate(false); }
+    } finally {
+      setSavingRate(false);
+    }
   };
 
   const openHistory = async (member: TeamMember) => {
@@ -378,21 +436,18 @@ export default function MembersContent() {
   };
 
   const handleDeleteMember = async () => {
-    if (!user || !deleteMember) return;
+    if (!user || !businessUserId || !deleteMember) return;
     setDeleting(true);
     try {
-      // Delete associated contractor/employee record
-      if (deleteMember.worker_type === "1099") {
-        await supabase.from("contractors").delete()
-          .eq("user_id", user.id).eq("name", deleteMember.name);
-      } else {
-        await supabase.from("employees").delete()
-          .eq("user_id", user.id).eq("name", deleteMember.name);
+      if (user.id === businessUserId) {
+        if (deleteMember.worker_type === "1099") {
+          await supabase.from("contractors").delete().eq("user_id", businessUserId).eq("name", deleteMember.name);
+        } else {
+          await supabase.from("employees").delete().eq("user_id", businessUserId).eq("name", deleteMember.name);
+        }
       }
-      // Delete pay rate history
-      await supabase.from("pay_rate_changes").delete()
-        .eq("team_member_id", deleteMember.id);
-      // Delete the team member
+
+      await supabase.from("pay_rate_changes").delete().eq("team_member_id", deleteMember.id);
       const { error } = await supabase.from("team_members").delete().eq("id", deleteMember.id);
       if (error) throw error;
       toast.success(`${deleteMember.name} has been removed`);
@@ -401,7 +456,9 @@ export default function MembersContent() {
       fetchMembers();
     } catch (err: any) {
       toast.error(err.message || "Failed to remove member");
-    } finally { setDeleting(false); }
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const roleBadgeColor = (role: string) => role === "admin" ? "default" : role === "manager" ? "secondary" : "outline";
