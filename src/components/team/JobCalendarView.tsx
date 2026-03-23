@@ -664,6 +664,15 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
           </div>
           <div className="flex items-center gap-1.5">
             <Button variant="ghost" size="sm" className="text-xs h-7" onClick={goToday}>Today</Button>
+            <Button
+              variant={editMode ? "default" : "outline"}
+              size="sm"
+              className="text-xs h-7 gap-1"
+              onClick={() => setEditMode(!editMode)}
+            >
+              {editMode ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+              {editMode ? "Editing" : "Locked"}
+            </Button>
             <div className="flex rounded-md border border-border overflow-hidden">
               <button
                 onClick={() => setViewMode("week")}
