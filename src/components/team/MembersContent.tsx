@@ -622,14 +622,16 @@ export default function MembersContent() {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <label className="text-sm font-medium">Pay Rate</label>
-              <Input
-                type="number" step="0.01" min="0"
-                placeholder={editWorkerType === "1099" ? "Hourly rate ($)" : "Annual salary ($)"}
-                value={editPayRate} onChange={(e) => setEditPayRate(e.target.value)}
-              />
-            </div>
+            {!(currentRole === "manager" && editMember?.role !== "crew") && (
+              <div>
+                <label className="text-sm font-medium">Pay Rate</label>
+                <Input
+                  type="number" step="0.01" min="0"
+                  placeholder={editWorkerType === "1099" ? "Hourly rate ($)" : "Annual salary ($)"}
+                  value={editPayRate} onChange={(e) => setEditPayRate(e.target.value)}
+                />
+              </div>
+            )}
             <Button className="w-full" onClick={handleEditSave} disabled={savingEdit}>
               {savingEdit ? "Saving…" : "Save Changes"}
             </Button>
