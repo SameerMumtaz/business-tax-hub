@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Save, UserCircle } from "lucide-react";
 import { toast } from "sonner";
+import SetPasswordCard from "@/components/SetPasswordCard";
 
 interface PersonalFields {
   first_name: string;
