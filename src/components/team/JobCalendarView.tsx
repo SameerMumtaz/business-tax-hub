@@ -235,6 +235,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
   const [gapSuggestions, setGapSuggestions] = useState<string[]>([]);
   const dragStartDate = useRef<string | null>(null);
   const dragIsRecurringInstance = useRef(false);
+  const wasDragging = useRef(false);
 
   // Recurring drag dialog state
   const [recurringDialogOpen, setRecurringDialogOpen] = useState(false);
@@ -344,6 +345,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
       e.preventDefault();
       return;
     }
+    wasDragging.current = true;
     setDragJob(job);
     dragStartDate.current = fromDate;
     dragIsRecurringInstance.current = job.job_type === "recurring";
@@ -439,7 +441,11 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
     executeDrop(dateStr, index);
   }, [executeDrop]);
 
-  const handleDragEnd = () => clearDragState();
+  const handleDragEnd = () => {
+    clearDragState();
+    // Keep wasDragging true briefly to suppress the click event that fires after dragEnd
+    setTimeout(() => { wasDragging.current = false; }, 100);
+  };
 
   // ── Recurring dialog handlers ──
 
@@ -587,7 +593,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                       draggable={canDrag}
                       onDragStart={(e) => handleDragStart(e, job, dateStr)}
                       onDragEnd={handleDragEnd}
-                      onClick={() => onJobClick?.(job)}
+                      onClick={() => { if (!wasDragging.current) onJobClick?.(job); }}
                       className={cn(
                         "group rounded-md border px-2 py-1.5 cursor-pointer transition-all hover:shadow-sm",
                         STATUS_BG[job.status] || STATUS_BG.scheduled,
@@ -771,7 +777,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                       draggable={editMode && job.status !== "completed" && job.status !== "cancelled"}
                       onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, job, dateStr); }}
                       onDragEnd={handleDragEnd}
-                      onClick={(e) => { e.stopPropagation(); onJobClick?.(job); }}
+                      onClick={(e) => { e.stopPropagation(); if (!wasDragging.current) onJobClick?.(job); }}
                       className={cn(
                         "rounded px-1 py-0 text-[9px] leading-tight truncate border cursor-pointer",
                         STATUS_BG[job.status]
