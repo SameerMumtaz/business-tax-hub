@@ -93,7 +93,7 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
               <div className="flex flex-wrap gap-3 text-sm">
                 <div className="flex items-center gap-1.5 text-muted-foreground">
                   <Clock className="h-3.5 w-3.5" />
-                  <span>{new Date(job.start_date).toLocaleDateString()}</span>
+                  <span>{parseLocalDate(job.start_date).toLocaleDateString()}</span>
                 </div>
                 {job.expectedHours != null && (
                   <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -130,7 +130,7 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
                 {!activeCheckin && !todayJob && (
                   <div className="flex-1 flex items-center gap-2 text-xs text-muted-foreground bg-muted px-3 py-2 rounded-md">
                     <CalendarOff className="h-3.5 w-3.5" />
-                    Check-in available on {new Date(job.start_date).toLocaleDateString()}
+                    Check-in available on {parseLocalDate(job.start_date).toLocaleDateString()}
                   </div>
                 )}
                 <Button
