@@ -265,14 +265,38 @@ export default function CrewDashboardPage() {
                   Rate: ${payRate}/hr
                 </div>
               )}
+
+              {/* Photo requirements */}
+              {activeJobId && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Camera className="h-4 w-4" />
+                    Photo Requirements
+                  </div>
+                  <div className="flex gap-3 text-xs">
+                    <span className={hasBeforePhotos ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}>
+                      {hasBeforePhotos ? "✓" : "✗"} Before photo{hasBeforePhotos ? "" : " required"}
+                    </span>
+                    <span className={hasAfterPhotos ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}>
+                      {hasAfterPhotos ? "✓" : "✗"} After photo{hasAfterPhotos ? "" : " required"}
+                    </span>
+                  </div>
+                  <JobPhotosPanel jobId={activeJobId} compact />
+                </div>
+              )}
+
               <Button
                 variant="destructive"
                 className="w-full"
                 onClick={handleCheckOut}
-                disabled={gpsLoading === "checkout"}
+                disabled={gpsLoading === "checkout" || !photosComplete}
               >
                 <LogOut className="h-4 w-4 mr-2" />
-                {gpsLoading === "checkout" ? "Getting location…" : "Check Out"}
+                {!photosComplete
+                  ? "Upload photos to check out"
+                  : gpsLoading === "checkout"
+                    ? "Getting location…"
+                    : "Check Out"}
               </Button>
             </CardContent>
           </Card>
