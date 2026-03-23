@@ -345,6 +345,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
       e.preventDefault();
       return;
     }
+    wasDragging.current = true;
     setDragJob(job);
     dragStartDate.current = fromDate;
     dragIsRecurringInstance.current = job.job_type === "recurring";
