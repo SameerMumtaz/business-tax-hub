@@ -635,7 +635,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                       className={cn(
                         "group rounded-md border px-2 py-1.5 transition-all select-none",
                         isRescheduled
-                          ? "opacity-40 bg-muted/50 border-dashed border-muted-foreground/30 cursor-default line-through decoration-muted-foreground/40"
+                          ? "opacity-40 bg-muted/50 border-dashed border-muted-foreground/30 cursor-default line-through decoration-muted-foreground/40 pointer-events-none"
                           : cn(
                               "cursor-pointer hover:shadow-sm",
                               STATUS_BG[job.status] || STATUS_BG.scheduled,
