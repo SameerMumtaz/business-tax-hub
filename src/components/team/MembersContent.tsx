@@ -768,7 +768,9 @@ export default function MembersContent() {
                       </Badge>
                     </TableCell>
                     <TableCell className="font-mono text-sm">
-                      {m.worker_type === "W2"
+                      {currentRole === "manager" && m.role !== "crew"
+                        ? "—"
+                        : m.worker_type === "W2"
                         ? `$${(m.pay_rate || 0).toLocaleString()}/yr`
                         : `$${(m.pay_rate || 0).toFixed(2)}/hr`}
                     </TableCell>
