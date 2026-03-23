@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { getTodayDateOnlyKey } from "@/lib/dateOnly";
 import { useTeamRole } from "./useTeamRole";
 import { toast } from "sonner";
 
@@ -18,6 +19,7 @@ export interface CrewCheckin {
   status: string;
   notes: string | null;
   created_at: string;
+  occurrence_date: string | null;
 }
 
 export function useCrewCheckins() {
@@ -37,7 +39,6 @@ export function useCrewCheckins() {
       .select("*")
       .order("check_in_time", { ascending: false });
 
-    // Crew members only see their own
     if (role === "crew" && teamMemberId) {
       query = query.eq("team_member_id", teamMemberId);
     }
@@ -48,13 +49,9 @@ export function useCrewCheckins() {
     } else {
       const items = (data || []) as CrewCheckin[];
       setCheckins(items);
-      // Find active check-in for this crew member
       if (teamMemberId) {
         setActiveCheckin(
-          items.find(
-            (c) =>
-              c.team_member_id === teamMemberId && c.status === "checked_in"
-          ) || null
+          items.find((c) => c.team_member_id === teamMemberId && c.status === "checked_in") || null,
         );
       }
     }
@@ -65,14 +62,13 @@ export function useCrewCheckins() {
     fetchCheckins();
   }, [fetchCheckins]);
 
-  // Realtime subscription
   useEffect(() => {
     const channel = supabase
       .channel("crew_checkins_realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "crew_checkins" },
-        () => fetchCheckins()
+        () => fetchCheckins(),
       )
       .subscribe();
 
@@ -86,7 +82,8 @@ export function useCrewCheckins() {
     jobSiteId: string,
     lat: number,
     lng: number,
-    expectedHours?: number | null
+    expectedHours?: number | null,
+    occurrenceDate?: string,
   ) => {
     if (!teamMemberId) {
       toast.error("Team member not found");
@@ -103,6 +100,7 @@ export function useCrewCheckins() {
         check_in_lng: lng,
         status: "checked_in",
         expected_hours: expectedHours ?? null,
+        occurrence_date: occurrenceDate || getTodayDateOnlyKey(),
       } as any)
       .select()
       .single();
@@ -112,7 +110,6 @@ export function useCrewCheckins() {
       return null;
     }
 
-    // Update job status to in_progress
     if (jobId) {
       await supabase.rpc("update_job_status_on_checkin", {
         _job_id: jobId,
@@ -135,7 +132,6 @@ export function useCrewCheckins() {
       (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
     const roundedHours = Math.round(totalHours * 100) / 100;
 
-    // Check if checkout location is far from job site (geofence validation)
     let flagReason: string | null = null;
     if (checkin.job_site_id) {
       try {
@@ -176,7 +172,6 @@ export function useCrewCheckins() {
       return;
     }
 
-    // Auto-update total_paid on the contractor/employee record
     if (teamMemberId && businessUserId) {
       try {
         const { data: tm } = await supabase
@@ -189,7 +184,6 @@ export function useCrewCheckins() {
           const sessionPay = Math.round(roundedHours * tm.pay_rate * 100) / 100;
 
           if (tm.worker_type === "1099" || tm.worker_type === "contractor") {
-            // Get current total_paid, then increment
             const { data: contractor } = await supabase
               .from("contractors")
               .select("total_paid")
@@ -206,7 +200,6 @@ export function useCrewCheckins() {
                 .eq("name", tm.name);
             }
           } else {
-            // For W2 employees, increment salary as total earned
             const { data: employee } = await supabase
               .from("employees")
               .select("salary")
@@ -229,7 +222,6 @@ export function useCrewCheckins() {
       }
     }
 
-    // Update job status to completed
     if (checkin.job_id) {
       await supabase.rpc("update_job_status_on_checkin", {
         _job_id: checkin.job_id,

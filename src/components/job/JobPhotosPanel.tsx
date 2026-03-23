@@ -15,10 +15,11 @@ const TYPE_LABELS: Record<string, string> = {
 interface Props {
   jobId: string;
   compact?: boolean;
+  occurrenceDate?: string | null;
 }
 
-export default function JobPhotosPanel({ jobId, compact = false }: Props) {
-  const { photos, loading, uploading, uploadPhoto, updateCaption, deletePhoto } = useJobPhotos(jobId);
+export default function JobPhotosPanel({ jobId, compact = false, occurrenceDate = null }: Props) {
+  const { photos, loading, uploading, uploadPhoto, updateCaption, deletePhoto } = useJobPhotos(jobId, occurrenceDate);
   const [selectedType, setSelectedType] = useState<JobPhoto["photo_type"]>("before");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -26,13 +27,13 @@ export default function JobPhotosPanel({ jobId, compact = false }: Props) {
 
   const handleFiles = useCallback((files: FileList | null) => {
     if (!files) return;
-    Array.from(files).forEach(file => {
+    Array.from(files).forEach((file) => {
       if (!file.type.startsWith("image/")) {
         return;
       }
-      uploadPhoto(file, selectedType);
+      uploadPhoto(file, selectedType, undefined, occurrenceDate);
     });
-  }, [selectedType, uploadPhoto]);
+  }, [selectedType, uploadPhoto, occurrenceDate]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -40,10 +41,10 @@ export default function JobPhotosPanel({ jobId, compact = false }: Props) {
     handleFiles(e.dataTransfer.files);
   }, [handleFiles]);
 
-  const beforePhotos = photos.filter(p => p.photo_type === "before");
-  const afterPhotos = photos.filter(p => p.photo_type === "after");
-  const duringPhotos = photos.filter(p => p.photo_type === "during");
-  const completionPhotos = photos.filter(p => p.photo_type === "completion");
+  const beforePhotos = photos.filter((p) => p.photo_type === "before");
+  const afterPhotos = photos.filter((p) => p.photo_type === "after");
+  const duringPhotos = photos.filter((p) => p.photo_type === "during");
+  const completionPhotos = photos.filter((p) => p.photo_type === "completion");
 
   if (loading) {
     return <div className="text-center py-8 text-muted-foreground">Loading photos…</div>;
@@ -51,7 +52,6 @@ export default function JobPhotosPanel({ jobId, compact = false }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Upload Controls */}
       <div className="flex items-center gap-2 flex-wrap">
         <Select value={selectedType} onValueChange={(v) => setSelectedType(v as JobPhoto["photo_type"])}>
           <SelectTrigger className="w-[130px] h-9">
@@ -103,13 +103,15 @@ export default function JobPhotosPanel({ jobId, compact = false }: Props) {
         </Button>
       </div>
 
-      {/* Drop Zone */}
       {!compact && (
         <div
           className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
             dragOver ? "border-primary bg-primary/5" : "border-muted-foreground/20"
           }`}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
         >
@@ -120,7 +122,6 @@ export default function JobPhotosPanel({ jobId, compact = false }: Props) {
         </div>
       )}
 
-      {/* Before / After Grid */}
       {(beforePhotos.length > 0 || afterPhotos.length > 0) && (
         <div>
           <h4 className="text-sm font-semibold mb-2">Before & After</h4>
@@ -132,7 +133,7 @@ export default function JobPhotosPanel({ jobId, compact = false }: Props) {
                   No before photos
                 </div>
               ) : (
-                beforePhotos.map(photo => (
+                beforePhotos.map((photo) => (
                   <PhotoCard key={photo.id} photo={photo} onUpdateCaption={updateCaption} onDelete={deletePhoto} />
                 ))
               )}
@@ -144,7 +145,7 @@ export default function JobPhotosPanel({ jobId, compact = false }: Props) {
                   No after photos
                 </div>
               ) : (
-                afterPhotos.map(photo => (
+                afterPhotos.map((photo) => (
                   <PhotoCard key={photo.id} photo={photo} onUpdateCaption={updateCaption} onDelete={deletePhoto} />
                 ))
               )}
@@ -153,7 +154,6 @@ export default function JobPhotosPanel({ jobId, compact = false }: Props) {
         </div>
       )}
 
-      {/* During & Completion */}
       {(duringPhotos.length > 0 || completionPhotos.length > 0) && (
         <div>
           <h4 className="text-sm font-semibold mb-2">Progress & Completion</h4>
@@ -161,7 +161,7 @@ export default function JobPhotosPanel({ jobId, compact = false }: Props) {
             {duringPhotos.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">During</p>
-                {duringPhotos.map(photo => (
+                {duringPhotos.map((photo) => (
                   <PhotoCard key={photo.id} photo={photo} onUpdateCaption={updateCaption} onDelete={deletePhoto} />
                 ))}
               </div>
@@ -169,7 +169,7 @@ export default function JobPhotosPanel({ jobId, compact = false }: Props) {
             {completionPhotos.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Completion</p>
-                {completionPhotos.map(photo => (
+                {completionPhotos.map((photo) => (
                   <PhotoCard key={photo.id} photo={photo} onUpdateCaption={updateCaption} onDelete={deletePhoto} />
                 ))}
               </div>
@@ -203,7 +203,7 @@ function PhotoCard({
     <div className="rounded-lg border overflow-hidden bg-card">
       <img
         src={photo.photo_url}
-        alt={photo.caption || photo.photo_type}
+        alt={photo.caption || TYPE_LABELS[photo.photo_type] || photo.photo_type}
         className="w-full h-32 object-cover"
         loading="lazy"
       />

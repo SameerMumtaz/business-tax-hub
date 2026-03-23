@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { getTodayDateOnlyKey } from "@/lib/dateOnly";
 import { toast } from "sonner";
 
 const MAX_DIMENSION = 1600;
@@ -8,7 +9,6 @@ const JPEG_QUALITY = 0.8;
 
 function compressImage(file: File): Promise<File> {
   return new Promise((resolve, reject) => {
-    // Skip non-image or already-small files
     if (!file.type.startsWith("image/") || file.size < 500 * 1024) {
       resolve(file);
       return;
@@ -22,7 +22,6 @@ function compressImage(file: File): Promise<File> {
         resolve(file);
         return;
       }
-      // Scale down
       if (width > height && width > MAX_DIMENSION) {
         height = Math.round(height * (MAX_DIMENSION / width));
         width = MAX_DIMENSION;
@@ -34,11 +33,17 @@ function compressImage(file: File): Promise<File> {
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext("2d");
-      if (!ctx) { resolve(file); return; }
+      if (!ctx) {
+        resolve(file);
+        return;
+      }
       ctx.drawImage(img, 0, 0, width, height);
       canvas.toBlob(
         (blob) => {
-          if (!blob) { resolve(file); return; }
+          if (!blob) {
+            resolve(file);
+            return;
+          }
           const compressed = new File([blob], file.name.replace(/\.\w+$/, ".jpg"), {
             type: "image/jpeg",
             lastModified: Date.now(),
@@ -46,10 +51,13 @@ function compressImage(file: File): Promise<File> {
           resolve(compressed);
         },
         "image/jpeg",
-        JPEG_QUALITY
+        JPEG_QUALITY,
       );
     };
-    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(file);
+    };
     img.src = url;
   });
 }
@@ -62,53 +70,66 @@ export interface JobPhoto {
   photo_type: "before" | "after" | "during" | "completion";
   caption: string | null;
   uploaded_at: string;
+  occurrence_date: string | null;
 }
 
-export function useJobPhotos(jobId: string | null) {
+export function useJobPhotos(jobId: string | null, occurrenceDate: string | null = null) {
   const { user } = useAuth();
   const [photos, setPhotos] = useState<JobPhoto[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   const fetchPhotos = useCallback(async () => {
-    if (!jobId) return;
+    if (!jobId) {
+      setPhotos([]);
+      return;
+    }
+
     setLoading(true);
-    const { data, error } = await supabase
+    let query = supabase
       .from("job_photos")
       .select("*")
       .eq("job_id", jobId)
       .order("uploaded_at", { ascending: true });
+
+    if (occurrenceDate) {
+      query = query.eq("occurrence_date", occurrenceDate);
+    }
+
+    const { data, error } = await query;
     if (error) {
       console.error("Error fetching job photos:", error);
     } else {
       setPhotos((data || []) as JobPhoto[]);
     }
     setLoading(false);
-  }, [jobId]);
+  }, [jobId, occurrenceDate]);
 
   useEffect(() => {
     fetchPhotos();
   }, [fetchPhotos]);
 
-  // Realtime subscription so parent components (e.g. checkout gate) update
-  // when photos are uploaded from a child component's separate hook instance.
   useEffect(() => {
     if (!jobId) return;
     const channel = supabase
-      .channel(`job_photos_${jobId}`)
+      .channel(`job_photos_${jobId}_${occurrenceDate || "all"}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "job_photos", filter: `job_id=eq.${jobId}` },
-        () => fetchPhotos()
+        () => fetchPhotos(),
       )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [jobId, fetchPhotos]);
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [jobId, occurrenceDate, fetchPhotos]);
 
   const uploadPhoto = useCallback(async (
     file: File,
     photoType: JobPhoto["photo_type"],
-    caption?: string
+    caption?: string,
+    occurrenceDateOverride?: string | null,
   ) => {
     if (!user || !jobId) return;
     if (file.size > 10 * 1024 * 1024) {
@@ -120,7 +141,8 @@ export function useJobPhotos(jobId: string | null) {
     try {
       const compressed = await compressImage(file);
       const ext = compressed.name.split(".").pop()?.toLowerCase() || "jpg";
-      const path = `${user.id}/${jobId}/${Date.now()}.${ext}`;
+      const targetOccurrenceDate = occurrenceDateOverride || occurrenceDate || getTodayDateOnlyKey();
+      const path = `${user.id}/${jobId}/${targetOccurrenceDate}/${Date.now()}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
         .from("job-photos")
@@ -139,6 +161,7 @@ export function useJobPhotos(jobId: string | null) {
           photo_url: urlData.publicUrl,
           photo_type: photoType,
           caption: caption || null,
+          occurrence_date: targetOccurrenceDate,
         });
       if (insertError) throw insertError;
 
@@ -148,7 +171,7 @@ export function useJobPhotos(jobId: string | null) {
       toast.error(err.message || "Upload failed");
     }
     setUploading(false);
-  }, [user, jobId, fetchPhotos]);
+  }, [user, jobId, occurrenceDate, fetchPhotos]);
 
   const updateCaption = useCallback(async (photoId: string, caption: string) => {
     const { error } = await supabase
@@ -158,12 +181,11 @@ export function useJobPhotos(jobId: string | null) {
     if (error) {
       toast.error("Failed to update caption");
     } else {
-      setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, caption } : p));
+      setPhotos((prev) => prev.map((p) => (p.id === photoId ? { ...p, caption } : p)));
     }
   }, []);
 
   const deletePhoto = useCallback(async (photo: JobPhoto) => {
-    // Extract storage path from URL
     const url = new URL(photo.photo_url);
     const pathMatch = url.pathname.match(/\/object\/public\/job-photos\/(.+)/);
     if (pathMatch) {
@@ -177,15 +199,15 @@ export function useJobPhotos(jobId: string | null) {
       toast.error("Failed to delete photo");
     } else {
       toast.success("Photo deleted");
-      setPhotos(prev => prev.filter(p => p.id !== photo.id));
+      setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
     }
   }, []);
 
   const photoCountByType = {
-    before: photos.filter(p => p.photo_type === "before").length,
-    after: photos.filter(p => p.photo_type === "after").length,
-    during: photos.filter(p => p.photo_type === "during").length,
-    completion: photos.filter(p => p.photo_type === "completion").length,
+    before: photos.filter((p) => p.photo_type === "before").length,
+    after: photos.filter((p) => p.photo_type === "after").length,
+    during: photos.filter((p) => p.photo_type === "during").length,
+    completion: photos.filter((p) => p.photo_type === "completion").length,
     total: photos.length,
   };
 
