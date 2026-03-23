@@ -921,7 +921,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
         <div className="flex flex-col gap-2">
           <Button
             variant="outline"
-            className="justify-start gap-2 h-auto py-3"
+            className="justify-start gap-2 h-auto py-3 whitespace-normal text-left overflow-hidden"
             onClick={() => handleRecurringChoice("this")}
           >
             <Copy className="h-4 w-4 shrink-0" />
