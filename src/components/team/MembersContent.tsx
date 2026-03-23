@@ -622,14 +622,16 @@ export default function MembersContent() {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <label className="text-sm font-medium">Pay Rate</label>
-              <Input
-                type="number" step="0.01" min="0"
-                placeholder={editWorkerType === "1099" ? "Hourly rate ($)" : "Annual salary ($)"}
-                value={editPayRate} onChange={(e) => setEditPayRate(e.target.value)}
-              />
-            </div>
+            {!(currentRole === "manager" && editMember?.role !== "crew") && (
+              <div>
+                <label className="text-sm font-medium">Pay Rate</label>
+                <Input
+                  type="number" step="0.01" min="0"
+                  placeholder={editWorkerType === "1099" ? "Hourly rate ($)" : "Annual salary ($)"}
+                  value={editPayRate} onChange={(e) => setEditPayRate(e.target.value)}
+                />
+              </div>
+            )}
             <Button className="w-full" onClick={handleEditSave} disabled={savingEdit}>
               {savingEdit ? "Saving…" : "Save Changes"}
             </Button>
@@ -768,7 +770,9 @@ export default function MembersContent() {
                       </Badge>
                     </TableCell>
                     <TableCell className="font-mono text-sm">
-                      {m.worker_type === "W2"
+                      {currentRole === "manager" && m.role !== "crew"
+                        ? "—"
+                        : m.worker_type === "W2"
                         ? `$${(m.pay_rate || 0).toLocaleString()}/yr`
                         : `$${(m.pay_rate || 0).toFixed(2)}/hr`}
                     </TableCell>
@@ -787,12 +791,16 @@ export default function MembersContent() {
                           <DropdownMenuItem onClick={() => openEdit(m)}>
                             <Pencil className="h-3.5 w-3.5 mr-2" /> Edit Info
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openRateChange(m)}>
-                            <DollarSign className="h-3.5 w-3.5 mr-2" /> Change Pay Rate
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openHistory(m)}>
-                            <History className="h-3.5 w-3.5 mr-2" /> Rate History
-                          </DropdownMenuItem>
+                          {!(currentRole === "manager" && m.role !== "crew") && (
+                            <>
+                              <DropdownMenuItem onClick={() => openRateChange(m)}>
+                                <DollarSign className="h-3.5 w-3.5 mr-2" /> Change Pay Rate
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => openHistory(m)}>
+                                <History className="h-3.5 w-3.5 mr-2" /> Rate History
+                              </DropdownMenuItem>
+                            </>
+                          )}
                           {m.status === "invited" && (
                             <>
                               <DropdownMenuItem
