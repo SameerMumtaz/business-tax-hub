@@ -66,18 +66,23 @@ Deno.serve(async (req) => {
     if (!resend) {
       const { data: existing } = await adminClient
         .from("team_members")
-        .select("id")
+        .select("id, status")
         .eq("email", email)
         .eq("business_user_id", business_user_id)
         .maybeSingle();
 
       if (existing) {
+        if (existing.status === "active") {
+          return new Response(
+            JSON.stringify({ error: "This team member is already active" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        // If previously invited but not yet active, just return success —
+        // the user can sign up normally and will be auto-linked.
         return new Response(
-          JSON.stringify({ error: "This email has already been invited" }),
-          {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
+          JSON.stringify({ success: true, message: "This email was already invited. They can sign up at the app to join your team." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
     }
