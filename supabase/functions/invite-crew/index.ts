@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
         }
 
         return new Response(
-          JSON.stringify({ success: true, message: "Invite email sent! The team member will receive an email to set up their account." }),
+          JSON.stringify({ success: true, message: `Invite email sent! The team member will receive an email to set up their account.${bookieId ? ` Your Bookie ID (${bookieId}) was included.` : ""}` }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
