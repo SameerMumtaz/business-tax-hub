@@ -513,6 +513,26 @@ export default function JobSchedulerContent() {
                 teamMembers={teamMembers}
                 onAssign={async (wId, wName, wType, hrs) => {
                   await assignWorker(editJob.id, wId, wName, wType, hrs);
+                  // Dispatch notification to assigned crew member
+                  try {
+                    const { data: member } = await supabase
+                      .from("team_members")
+                      .select("member_user_id")
+                      .eq("id", wId)
+                      .not("member_user_id", "is", null)
+                      .single();
+                    if (member?.member_user_id) {
+                      await supabase.from("notifications").insert({
+                        user_id: member.member_user_id,
+                        title: `New Assignment: ${editJob.title}`,
+                        message: `You've been assigned to "${editJob.title}" on ${editJob.start_date}${editJob.start_time ? ' at ' + editJob.start_time : ''}.`,
+                        type: "dispatch",
+                        metadata: { job_id: editJob.id },
+                      });
+                    }
+                  } catch (err) {
+                    console.error("Failed to send assignment notification:", err);
+                  }
                 }}
                 onRemove={async (aId) => {
                   await removeAssignment(aId);
@@ -551,6 +571,36 @@ export default function JobSchedulerContent() {
                 return `${String(Math.floor(safeMinutes / 60)).padStart(2, "0")}:${String(safeMinutes % 60).padStart(2, "0")}`;
               };
 
+              // Helper: send dispatch notifications to assigned crew
+              const notifyAssignedCrew = async (targetJobId: string, jobTitle: string, message: string) => {
+                if (!user) return;
+                const jobAssigns = assignments.filter((a) => a.job_id === targetJobId);
+                const crewMemberIds = jobAssigns
+                  .map((a) => teamMembers.find((tm) => tm.id === a.worker_id))
+                  .filter(Boolean);
+                // Get member_user_ids from team_members table
+                if (crewMemberIds.length === 0) return;
+                try {
+                  const { data: members } = await supabase
+                    .from("team_members")
+                    .select("member_user_id")
+                    .in("id", crewMemberIds.map((m) => m!.id))
+                    .not("member_user_id", "is", null);
+                  if (members && members.length > 0) {
+                    const notifications = members.map((m) => ({
+                      user_id: m.member_user_id!,
+                      title: `Schedule Update: ${jobTitle}`,
+                      message,
+                      type: "dispatch",
+                      metadata: { job_id: targetJobId } as any,
+                    }));
+                    await supabase.from("notifications").insert(notifications);
+                  }
+                } catch (err) {
+                  console.error("Failed to send dispatch notifications:", err);
+                }
+              };
+
               // Recurring: "this instance only" — create a one-time copy
               if (recurringMode === "this" && sourceJob) {
                 const rescheduledTag = `[rescheduled:${sourceJob.id}:${instanceDate || ""}]`;
@@ -572,7 +622,9 @@ export default function JobSchedulerContent() {
                   status: sourceJob.status,
                 };
                 await createJob(newJob);
-                toast.success(`"${sourceJob.title}" rescheduled to ${parseD(newDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}`);
+                const formattedDate = parseD(newDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                toast.success(`"${sourceJob.title}" rescheduled to ${formattedDate}`);
+                await notifyAssignedCrew(sourceJob.id, sourceJob.title, `This job has been rescheduled to ${formattedDate}.`);
                 return;
               }
 
@@ -582,6 +634,7 @@ export default function JobSchedulerContent() {
                 if (newTime !== undefined) updates.start_time = newTime;
                 await updateJob(jobId, updates);
                 toast.success(`All future instances of "${sourceJob.title}" shifted`);
+                await notifyAssignedCrew(jobId, sourceJob.title, `All future instances have been rescheduled starting ${parseD(newDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}.`);
                 return;
               }
 
@@ -624,6 +677,7 @@ export default function JobSchedulerContent() {
                 await updateJobsBatch(batchUpdates);
                 const movedJob = batchUpdates.find((entry) => entry.id === jobId);
                 toast.success(`"${job.title}" moved to ${movedJob?.updates.start_time || newTime || "updated slot"}`);
+                await notifyAssignedCrew(jobId, job.title, `Your job time has been updated to ${movedJob?.updates.start_time || newTime || "a new time slot"}.`);
                 return;
               }
 
@@ -638,7 +692,9 @@ export default function JobSchedulerContent() {
                 updates.end_date = fmtD(newEnd);
               }
               await updateJob(jobId, updates);
-              toast.success(`"${job.title}" ${newTime ? 'rescheduled' : 'moved'} to ${parseD(newDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}${newTime ? ' at ' + newTime : ''}`);
+              const formattedDate = parseD(newDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+              toast.success(`"${job.title}" ${newTime ? 'rescheduled' : 'moved'} to ${formattedDate}${newTime ? ' at ' + newTime : ''}`);
+              await notifyAssignedCrew(jobId, job.title, `This job has been ${newTime ? 'rescheduled' : 'moved'} to ${formattedDate}${newTime ? ' at ' + newTime : ''}.`);
             }}
           />
         </TabsContent>
