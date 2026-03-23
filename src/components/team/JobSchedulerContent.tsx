@@ -649,35 +649,33 @@ export default function JobSchedulerContent() {
                   .sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
 
                 const insertAt = Math.max(0, Math.min(dropIndex, sameDayJobs.length));
-                sameDayJobs.splice(insertAt, 0, { ...job, start_date: newDate, start_time: newTime ?? job.start_time });
+                const previousJob = insertAt > 0 ? sameDayJobs[insertAt - 1] : null;
+                const nextJob = insertAt < sameDayJobs.length ? sameDayJobs[insertAt] : null;
 
-                const batchUpdates = sameDayJobs.map((dayJob, index) => {
-                  const previous = sameDayJobs[index - 1];
-                  let computedTime: string;
+                let computedTime = newTime ?? job.start_time ?? "08:00";
 
-                  if (index === 0) {
-                    const firstKnownTime = sameDayJobs.find((candidate, candidateIndex) => candidateIndex > 0 && candidate.start_time)?.start_time;
-                    computedTime = firstKnownTime ? toTimeString(toMinutes(firstKnownTime) - 60) : (dayJob.start_time ?? "08:00");
-                  } else {
-                    const previousStart = previous.start_time ? toMinutes(previous.start_time) : 8 * 60;
-                    const previousDuration = Math.max(30, Math.round((previous.estimated_hours || 1) * 60));
-                    computedTime = toTimeString(previousStart + previousDuration);
-                  }
+                if (previousJob?.start_time && nextJob?.start_time) {
+                  const previousStart = toMinutes(previousJob.start_time);
+                  const previousDuration = Math.max(30, Math.round((previousJob.estimated_hours || 1) * 60));
+                  const earliestStart = previousStart + previousDuration;
+                  const nextStart = toMinutes(nextJob.start_time);
+                  const movedDuration = Math.max(30, Math.round((job.estimated_hours || 1) * 60));
+                  const latestStart = nextStart - movedDuration;
+                  computedTime = toTimeString(Math.min(Math.max(earliestStart, previousStart), latestStart));
+                } else if (previousJob?.start_time) {
+                  const previousStart = toMinutes(previousJob.start_time);
+                  const previousDuration = Math.max(30, Math.round((previousJob.estimated_hours || 1) * 60));
+                  computedTime = toTimeString(previousStart + previousDuration);
+                } else if (nextJob?.start_time) {
+                  const nextStart = toMinutes(nextJob.start_time);
+                  const movedDuration = Math.max(30, Math.round((job.estimated_hours || 1) * 60));
+                  computedTime = toTimeString(Math.max(0, nextStart - movedDuration));
+                }
 
-                  const updates: Record<string, any> = { start_date: newDate, start_time: computedTime };
-                  if (dayJob.id === jobId && job.end_date && newDate !== job.start_date) {
-                    const diffDays = Math.round((parseD(job.end_date).getTime() - parseD(job.start_date).getTime()) / 86400000);
-                    const newEnd = parseD(newDate);
-                    newEnd.setDate(newEnd.getDate() + diffDays);
-                    updates.end_date = fmtD(newEnd);
-                  }
-                  return { id: dayJob.id, updates };
-                });
-
-                await updateJobsBatch(batchUpdates);
-                const movedJob = batchUpdates.find((entry) => entry.id === jobId);
-                toast.success(`"${job.title}" moved to ${movedJob?.updates.start_time || newTime || "updated slot"}`);
-                await notifyAssignedCrew(jobId, job.title, `Your job time has been updated to ${movedJob?.updates.start_time || newTime || "a new time slot"}.`);
+                const updates: Record<string, any> = { start_date: newDate, start_time: computedTime };
+                await updateJob(jobId, updates);
+                toast.success(`"${job.title}" moved to ${computedTime}`);
+                await notifyAssignedCrew(jobId, job.title, `Your job time has been updated to ${computedTime}.`);
                 return;
               }
 

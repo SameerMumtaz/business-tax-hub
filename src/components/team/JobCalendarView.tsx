@@ -122,25 +122,47 @@ function detectConflicts(
   targetDate: string,
   allJobs: Job[],
   jobsByDate: Map<string, Job[]>,
-  assignments: JobAssignment[]
+  assignments: JobAssignment[],
+  proposedStartTime?: string | null
 ): ConflictInfo[] {
   const conflicts: ConflictInfo[] = [];
   const dayJobs = (jobsByDate.get(targetDate) || []).filter((j) => j.id !== job.id);
 
-  // Check crew overlap
+  const getWindow = (targetJob: Job, startOverride?: string | null) => {
+    const start = startOverride ?? targetJob.start_time;
+    if (!start) return null;
+    const [h, m] = start.split(":").map(Number);
+    const startMinutes = h * 60 + m;
+    const durationMinutes = Math.max(30, Math.round((targetJob.estimated_hours || 1) * 60));
+    return {
+      startMinutes,
+      endMinutes: startMinutes + durationMinutes,
+    };
+  };
+
+  const movedWindow = getWindow(job, proposedStartTime);
+
+  // Check crew overlap only when time windows actually conflict
   const jobCrewIds = new Set(assignments.filter((a) => a.job_id === job.id).map((a) => a.worker_id));
   for (const otherJob of dayJobs) {
     const otherCrewIds = assignments.filter((a) => a.job_id === otherJob.id).map((a) => a.worker_id);
     const overlap = otherCrewIds.filter((id) => jobCrewIds.has(id));
-    if (overlap.length > 0 && job.start_time && otherJob.start_time) {
+    const otherWindow = getWindow(otherJob);
+
+    if (
+      overlap.length > 0 &&
+      movedWindow &&
+      otherWindow &&
+      movedWindow.startMinutes < otherWindow.endMinutes &&
+      movedWindow.endMinutes > otherWindow.startMinutes
+    ) {
       conflicts.push({
         type: "crew_overlap",
-        message: `${overlap.length} crew member${overlap.length > 1 ? "s" : ""} already assigned to "${otherJob.title}" at ${formatTime12(otherJob.start_time)}`,
+        message: `${overlap.length} crew member${overlap.length > 1 ? "s" : ""} already assigned to "${otherJob.title}" from ${formatTime12(otherJob.start_time!)} to ${formatTime12(`${String(Math.floor(otherWindow.endMinutes / 60) % 24).padStart(2, "0")}:${String(otherWindow.endMinutes % 60).padStart(2, "0")}`)}`,
       });
     }
   }
 
-  // Check daily hours overload
   const existingHours = dayJobs.reduce((s, j) => s + (j.estimated_hours || 2), 0);
   const totalAfterDrop = existingHours + (job.estimated_hours || 2);
   if (totalAfterDrop > 12) {
