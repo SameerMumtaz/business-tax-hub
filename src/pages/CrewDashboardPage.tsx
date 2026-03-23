@@ -42,7 +42,7 @@ function LiveElapsed({ since }: { since: string }) {
 export default function CrewDashboardPage() {
   const { user, signOut } = useAuth();
   const { teamMemberId, businessUserId } = useTeamRole();
-  const { activeCheckin, checkIn, checkOut, refetch } = useCrewCheckins();
+  const { checkins, activeCheckin, checkIn, checkOut, refetch } = useCrewCheckins();
   const [assignedJobs, setAssignedJobs] = useState<AssignedJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [gpsLoading, setGpsLoading] = useState<string | null>(null);
@@ -53,7 +53,8 @@ export default function CrewDashboardPage() {
 
   // Photo requirement for checkout
   const activeJobId = activeCheckin?.job_id || null;
-  const { photoCountByType } = useJobPhotos(activeJobId);
+  const activeOccurrenceDate = activeCheckin?.occurrence_date || null;
+  const { photoCountByType } = useJobPhotos(activeJobId, activeOccurrenceDate);
   const hasBeforePhotos = photoCountByType.before > 0;
   const hasAfterPhotos = photoCountByType.after > 0;
   const photosComplete = hasBeforePhotos && hasAfterPhotos;
@@ -176,7 +177,7 @@ export default function CrewDashboardPage() {
           return;
         }
       }
-      await checkIn(job.id, job.site.id, lat, lng, job.expectedHours);
+      await checkIn(job.id, job.site.id, lat, lng, job.expectedHours, instanceDate);
     } catch (err: any) {
       toast.error(err.message || "Failed to get GPS location");
     }
@@ -283,7 +284,7 @@ export default function CrewDashboardPage() {
                       {hasAfterPhotos ? "✓" : "✗"} After photo{hasAfterPhotos ? "" : " required"}
                     </span>
                   </div>
-                  <JobPhotosPanel jobId={activeJobId} compact />
+                  <JobPhotosPanel jobId={activeJobId} occurrenceDate={activeOccurrenceDate} compact />
                 </div>
               )}
 
@@ -331,7 +332,7 @@ export default function CrewDashboardPage() {
               />
             </TabsContent>
             <TabsContent value="calendar" className="mt-4">
-              <CrewCalendarView jobs={assignedJobs} />
+              <CrewCalendarView jobs={assignedJobs} checkins={checkins} />
             </TabsContent>
             <TabsContent value="map" className="mt-4">
               <CrewMapView jobs={assignedJobs} />

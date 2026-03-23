@@ -45,7 +45,6 @@ export interface Job {
   updated_at: string;
 }
 
-
 export interface JobAssignment {
   id: string;
   job_id: string;
@@ -56,26 +55,38 @@ export interface JobAssignment {
   created_at: string;
 }
 
+export interface CrewCheckinOccurrence {
+  id: string;
+  job_id: string | null;
+  occurrence_date: string | null;
+  status: string;
+  check_in_time: string;
+  check_out_time: string | null;
+}
+
 export function useJobs() {
   const { user } = useAuth();
   const [sites, setSites] = useState<JobSite[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [assignments, setAssignments] = useState<JobAssignment[]>([]);
+  const [checkins, setCheckins] = useState<CrewCheckinOccurrence[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
     if (!user) return;
     setLoading(true);
 
-    const [sitesRes, jobsRes, assignRes] = await Promise.all([
+    const [sitesRes, jobsRes, assignRes, checkinsRes] = await Promise.all([
       supabase.from("job_sites").select("*").eq("user_id", user.id).order("name"),
       supabase.from("jobs").select("*").eq("user_id", user.id).order("start_date", { ascending: false }),
       supabase.from("job_assignments").select("*"),
+      supabase.from("crew_checkins").select("id, job_id, occurrence_date, status, check_in_time, check_out_time"),
     ]);
 
     if (sitesRes.data) setSites(sitesRes.data as JobSite[]);
     if (jobsRes.data) setJobs(jobsRes.data as Job[]);
     if (assignRes.data) setAssignments(assignRes.data as JobAssignment[]);
+    if (checkinsRes.data) setCheckins(checkinsRes.data as CrewCheckinOccurrence[]);
     setLoading(false);
   }, [user]);
 
@@ -83,38 +94,59 @@ export function useJobs() {
     fetchAll();
   }, [fetchAll]);
 
-  // Realtime: auto-refresh when jobs change (e.g. crew check-in updates status)
   useEffect(() => {
     if (!user) return;
-    const channel = supabase
+    const jobsChannel = supabase
       .channel("jobs_realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "jobs", filter: `user_id=eq.${user.id}` },
-        () => fetchAll()
+        () => fetchAll(),
       )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+
+    const checkinsChannel = supabase
+      .channel("crew_checkins_business_realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "crew_checkins" },
+        () => fetchAll(),
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(jobsChannel);
+      supabase.removeChannel(checkinsChannel);
+    };
   }, [user, fetchAll]);
 
   const createSite = async (site: Omit<JobSite, "id" | "created_at" | "user_id">) => {
     if (!user) return;
     const { error } = await supabase.from("job_sites").insert({ ...site, user_id: user.id });
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success("Site created");
     fetchAll();
   };
 
   const updateSite = async (id: string, updates: Partial<JobSite>) => {
     const { error } = await supabase.from("job_sites").update(updates).eq("id", id);
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success("Site updated");
     fetchAll();
   };
 
   const deleteSite = async (id: string) => {
     const { error } = await supabase.from("job_sites").delete().eq("id", id);
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success("Site deleted");
     fetchAll();
   };
@@ -122,21 +154,27 @@ export function useJobs() {
   const createJob = async (job: Omit<Job, "id" | "created_at" | "updated_at" | "user_id">) => {
     if (!user) return;
     const { error } = await supabase.from("jobs").insert({ ...job, user_id: user.id });
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success("Job created");
     fetchAll();
   };
 
   const updateJob = async (id: string, updates: Partial<Job>) => {
     const { error } = await supabase.from("jobs").update(updates).eq("id", id);
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     fetchAll();
   };
 
   const updateJobsBatch = async (jobUpdates: Array<{ id: string; updates: Partial<Job> }>) => {
     if (jobUpdates.length === 0) return;
     const results = await Promise.all(
-      jobUpdates.map(({ id, updates }) => supabase.from("jobs").update(updates).eq("id", id))
+      jobUpdates.map(({ id, updates }) => supabase.from("jobs").update(updates).eq("id", id)),
     );
     const firstError = results.find((result) => result.error)?.error;
     if (firstError) {
@@ -149,12 +187,14 @@ export function useJobs() {
   const deleteJob = async (id: string) => {
     await supabase.from("job_assignments").delete().eq("job_id", id);
     const { error } = await supabase.from("jobs").delete().eq("id", id);
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success("Job deleted");
     fetchAll();
   };
 
-  /** Given a date string, return the day_hours key */
   const dayKeyFromDate = (dateStr: string): string => {
     const [y, m, d] = dateStr.split("-").map(Number);
     const dayOfWeek = new Date(y, m - 1, d).getDay();
@@ -162,14 +202,12 @@ export function useJobs() {
     return map[dayOfWeek];
   };
 
-  /** Sync a job assignment to any draft timesheets covering the job's dates */
   const syncAssignmentToTimesheets = async (jobId: string, workerId: string, workerName: string, workerType: string, assignedHours: number) => {
     if (!user || assignedHours <= 0) return;
 
     const job = jobs.find((j) => j.id === jobId);
     if (!job) return;
 
-    // Get worker pay rate from team_members
     const { data: tm } = await supabase
       .from("team_members")
       .select("pay_rate, worker_type")
@@ -178,7 +216,6 @@ export function useJobs() {
     const payRate = tm?.pay_rate || 0;
     const isContractor = (tm?.worker_type || workerType) === "1099";
 
-    // Find all draft timesheets for this user
     const { data: drafts } = await supabase
       .from("timesheets")
       .select("*")
@@ -186,23 +223,23 @@ export function useJobs() {
       .eq("status", "draft");
     if (!drafts || drafts.length === 0) return;
 
-    // Determine job day range
     const jobStart = job.start_date;
     const jobEnd = job.end_date || job.start_date;
 
-    // Count how many days the job spans
     const startD = new Date(Number(jobStart.split("-")[0]), Number(jobStart.split("-")[1]) - 1, Number(jobStart.split("-")[2]));
     const endD = new Date(Number(jobEnd.split("-")[0]), Number(jobEnd.split("-")[1]) - 1, Number(jobEnd.split("-")[2]));
     let jobDayCount = 0;
     const cursor = new Date(startD);
-    while (cursor <= endD) { jobDayCount++; cursor.setDate(cursor.getDate() + 1); }
+    while (cursor <= endD) {
+      jobDayCount++;
+      cursor.setDate(cursor.getDate() + 1);
+    }
     const hoursPerDay = jobDayCount > 0 ? assignedHours / jobDayCount : assignedHours;
 
     for (const ts of drafts) {
       const wsD = new Date(Number(ts.week_start.split("-")[0]), Number(ts.week_start.split("-")[1]) - 1, Number(ts.week_start.split("-")[2]));
       const weD = new Date(Number(ts.week_end.split("-")[0]), Number(ts.week_end.split("-")[1]) - 1, Number(ts.week_end.split("-")[2]));
 
-      // Check if any job day falls within this timesheet week
       const dayHours: Record<string, number> = {
         mon_hours: 0, tue_hours: 0, wed_hours: 0, thu_hours: 0,
         fri_hours: 0, sat_hours: 0, sun_hours: 0,
@@ -219,7 +256,6 @@ export function useJobs() {
       }
       if (!hasOverlap) continue;
 
-      // Check if entry already exists for this worker+job on this timesheet
       const { data: existing } = await supabase
         .from("timesheet_entries")
         .select("id")
@@ -229,7 +265,6 @@ export function useJobs() {
         .maybeSingle();
       if (existing) continue;
 
-      // Compute pay
       const totalHrs = Object.values(dayHours).reduce((s, h) => s + h, 0);
       const overtime = Math.max(0, totalHrs - 40);
       const regular = totalHrs - overtime;
@@ -257,9 +292,11 @@ export function useJobs() {
     const { error } = await supabase.from("job_assignments").insert({
       job_id: jobId, worker_id: workerId, worker_name: workerName, worker_type: workerType, assigned_hours: assignedHours,
     });
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
 
-    // Sync to draft timesheets
     await syncAssignmentToTimesheets(jobId, workerId, workerName, workerType, assignedHours);
 
     toast.success("Worker assigned");
@@ -268,15 +305,28 @@ export function useJobs() {
 
   const removeAssignment = async (id: string) => {
     const { error } = await supabase.from("job_assignments").delete().eq("id", id);
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     fetchAll();
   };
 
   return {
-    sites, jobs, assignments, loading,
-    createSite, updateSite, deleteSite,
-    createJob, updateJob, updateJobsBatch, deleteJob,
-    assignWorker, removeAssignment,
+    sites,
+    jobs,
+    assignments,
+    checkins,
+    loading,
+    createSite,
+    updateSite,
+    deleteSite,
+    createJob,
+    updateJob,
+    updateJobsBatch,
+    deleteJob,
+    assignWorker,
+    removeAssignment,
     refetch: fetchAll,
   };
 }

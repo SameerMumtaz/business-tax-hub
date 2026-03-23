@@ -257,6 +257,7 @@ export type Database = {
           job_site_id: string | null
           last_seen_at: string | null
           notes: string | null
+          occurrence_date: string | null
           status: string
           team_member_id: string
           total_hours: number | null
@@ -276,6 +277,7 @@ export type Database = {
           job_site_id?: string | null
           last_seen_at?: string | null
           notes?: string | null
+          occurrence_date?: string | null
           status?: string
           team_member_id: string
           total_hours?: number | null
@@ -295,6 +297,7 @@ export type Database = {
           job_site_id?: string | null
           last_seen_at?: string | null
           notes?: string | null
+          occurrence_date?: string | null
           status?: string
           team_member_id?: string
           total_hours?: number | null
@@ -725,6 +728,7 @@ export type Database = {
           caption: string | null
           id: string
           job_id: string
+          occurrence_date: string | null
           photo_type: string
           photo_url: string
           uploaded_at: string
@@ -734,6 +738,7 @@ export type Database = {
           caption?: string | null
           id?: string
           job_id: string
+          occurrence_date?: string | null
           photo_type?: string
           photo_url: string
           uploaded_at?: string
@@ -743,6 +748,7 @@ export type Database = {
           caption?: string | null
           id?: string
           job_id?: string
+          occurrence_date?: string | null
           photo_type?: string
           photo_url?: string
           uploaded_at?: string
