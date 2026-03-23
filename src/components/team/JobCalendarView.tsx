@@ -715,10 +715,12 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
               <span className="text-muted-foreground">{label}</span>
             </div>
           ))}
-          <div className="flex items-center gap-1">
-            <GripVertical className="h-3 w-3 text-muted-foreground/60" />
-            <span className="text-muted-foreground">Drag to reschedule</span>
-          </div>
+          {editMode && (
+            <div className="flex items-center gap-1">
+              <GripVertical className="h-3 w-3 text-muted-foreground/60" />
+              <span className="text-muted-foreground">Drag to reschedule</span>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
