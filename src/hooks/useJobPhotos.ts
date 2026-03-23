@@ -90,6 +90,21 @@ export function useJobPhotos(jobId: string | null) {
     fetchPhotos();
   }, [fetchPhotos]);
 
+  // Realtime subscription so parent components (e.g. checkout gate) update
+  // when photos are uploaded from a child component's separate hook instance.
+  useEffect(() => {
+    if (!jobId) return;
+    const channel = supabase
+      .channel(`job_photos_${jobId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "job_photos", filter: `job_id=eq.${jobId}` },
+        () => fetchPhotos()
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [jobId, fetchPhotos]);
+
   const uploadPhoto = useCallback(async (
     file: File,
     photoType: JobPhoto["photo_type"],
