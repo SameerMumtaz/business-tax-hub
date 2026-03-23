@@ -18,6 +18,8 @@ export default function AccountTypePage() {
   const [searchParams] = useSearchParams();
   const inviteCode = searchParams.get("invite");
 
+  const [autoSubmitted, setAutoSubmitted] = useState(false);
+
   // Auto-select existing business and pre-fill Bookie ID from invite link
   useEffect(() => {
     const code = inviteCode || sessionStorage.getItem("bookie_invite_code");
@@ -26,6 +28,15 @@ export default function AccountTypePage() {
       setBookieCode(code.toUpperCase());
     }
   }, [inviteCode]);
+
+  // Auto-submit when invite code is present and user is ready
+  useEffect(() => {
+    const code = inviteCode || sessionStorage.getItem("bookie_invite_code");
+    if (code && user && selected === "existing_business" && bookieCode && !saving && !autoSubmitted) {
+      setAutoSubmitted(true);
+      handleContinue();
+    }
+  }, [selected, bookieCode, user, saving, autoSubmitted]);
 
   const handleContinue = async () => {
     if (!selected || !user) return;
@@ -98,8 +109,32 @@ export default function AccountTypePage() {
     }
 
     if (accountType === "business") {
-      navigate("/profile", { replace: true });
+      // Clear invite code from session storage
+      sessionStorage.removeItem("bookie_invite_code");
+
+      // For existing business (invited users), check their role and route accordingly
+      if (selected === "existing_business") {
+        // Fetch the team role to determine where to send them
+        const { data: membership } = await supabase
+          .from("team_members")
+          .select("role")
+          .eq("member_user_id", user.id)
+          .eq("status", "active")
+          .limit(1)
+          .maybeSingle();
+
+        if (membership?.role === "crew") {
+          navigate("/crew", { replace: true });
+        } else if (membership?.role === "manager") {
+          navigate("/team", { replace: true });
+        } else {
+          navigate("/", { replace: true });
+        }
+      } else {
+        navigate("/profile", { replace: true });
+      }
     } else {
+      sessionStorage.removeItem("bookie_invite_code");
       navigate("/personal", { replace: true });
     }
   };
