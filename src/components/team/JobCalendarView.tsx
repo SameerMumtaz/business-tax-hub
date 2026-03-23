@@ -230,9 +230,20 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
   const [dragJob, setDragJob] = useState<Job | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [showConflicts, setShowConflicts] = useState<ConflictInfo[]>([]);
   const [gapSuggestions, setGapSuggestions] = useState<string[]>([]);
   const dragStartDate = useRef<string | null>(null);
+  const dragIsRecurringInstance = useRef(false);
+
+  // Recurring drag dialog state
+  const [recurringDialogOpen, setRecurringDialogOpen] = useState(false);
+  const [pendingRecurringMove, setPendingRecurringMove] = useState<{
+    job: Job;
+    fromDate: string;
+    toDate: string;
+    newTime?: string | null;
+  } | null>(null);
 
   const siteMap = useMemo(() => new Map(sites.map((s) => [s.id, s])), [sites]);
 
@@ -276,21 +287,66 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
     ? `${weekDays[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${weekDays[weekDays.length - 1].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
     : currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
+  // ── Helper: compute new start_time based on drop index ──
+
+  const computeTimeForIndex = (dateStr: string, dropIndex: number, excludeJobId?: string): string | null => {
+    const dayJobs = sortJobs((jobsByDate.get(dateStr) || []).filter((j) => j.id !== excludeJobId));
+    if (dayJobs.length === 0) return null; // keep existing time
+
+    if (dropIndex <= 0) {
+      // Dropped before first job — place 30min before it
+      const firstTime = dayJobs[0]?.start_time;
+      if (!firstTime) return null;
+      const [h, m] = firstTime.split(":").map(Number);
+      const mins = Math.max(0, h * 60 + m - 30);
+      return `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+    }
+
+    if (dropIndex >= dayJobs.length) {
+      // Dropped after last job — place after last job ends
+      const lastJob = dayJobs[dayJobs.length - 1];
+      const lastTime = lastJob?.start_time;
+      if (!lastTime) return null;
+      const [h, m] = lastTime.split(":").map(Number);
+      const estHours = lastJob.estimated_hours || 1;
+      const mins = h * 60 + m + estHours * 60;
+      return `${String(Math.floor(mins / 60) % 24).padStart(2, "0")}:${String(Math.floor(mins) % 60).padStart(2, "0")}`;
+    }
+
+    // Between two jobs — place in the middle
+    const before = dayJobs[dropIndex - 1];
+    const after = dayJobs[dropIndex];
+    if (before?.start_time && after?.start_time) {
+      const [bh, bm] = before.start_time.split(":").map(Number);
+      const [ah, am] = after.start_time.split(":").map(Number);
+      const bMins = bh * 60 + bm + (before.estimated_hours || 1) * 60;
+      const aMins = ah * 60 + am;
+      const midMins = Math.floor((bMins + aMins) / 2);
+      return `${String(Math.floor(midMins / 60) % 24).padStart(2, "0")}:${String(midMins % 60).padStart(2, "0")}`;
+    }
+    return null;
+  };
+
   // ── Drag handlers ──
+
+  const clearDragState = () => {
+    setDragJob(null);
+    setDragOverDate(null);
+    setDragOverIndex(null);
+    setShowConflicts([]);
+    setGapSuggestions([]);
+    dragIsRecurringInstance.current = false;
+  };
 
   const handleDragStart = (e: React.DragEvent, job: Job, fromDate: string) => {
     if (!editMode) { e.preventDefault(); return; }
-    if (job.job_type === "recurring") {
-      toast.error("Recurring jobs can't be dragged — edit the start date instead");
-      e.preventDefault();
-      return;
-    }
     if (job.status === "completed" || job.status === "cancelled") {
       e.preventDefault();
       return;
     }
     setDragJob(job);
     dragStartDate.current = fromDate;
+    dragIsRecurringInstance.current = job.job_type === "recurring";
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", job.id);
 
@@ -312,45 +368,96 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
 
   const handleDragLeave = useCallback(() => {
     setDragOverDate(null);
+    setDragOverIndex(null);
     setShowConflicts([]);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent, dateStr: string) => {
+  const handleCardDragOver = useCallback((e: React.DragEvent, dateStr: string, index: number) => {
     e.preventDefault();
-    if (!dragJob || dateStr === dragStartDate.current) {
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverDate(dateStr);
+    setDragOverIndex(index);
+  }, []);
+
+  const executeDrop = useCallback((dateStr: string, dropIdx?: number) => {
+    if (!dragJob) return;
+    const sameDay = dateStr === dragStartDate.current;
+    const newTime = typeof dropIdx === "number" ? computeTimeForIndex(dateStr, dropIdx, dragJob.id) : undefined;
+
+    // For intra-day with no position change, skip
+    if (sameDay && newTime === undefined) {
+      clearDragState();
+      return;
+    }
+
+    // Recurring job — show dialog
+    if (dragJob.job_type === "recurring") {
+      setPendingRecurringMove({
+        job: dragJob,
+        fromDate: dragStartDate.current || dateStr,
+        toDate: dateStr,
+        newTime,
+      });
+      setRecurringDialogOpen(true);
       setDragJob(null);
       setDragOverDate(null);
+      setDragOverIndex(null);
       setShowConflicts([]);
       setGapSuggestions([]);
       return;
     }
 
-    const conflicts = detectConflicts(dragJob, dateStr, jobs, jobsByDate, assignments);
-    if (conflicts.some((c) => c.type === "crew_overlap")) {
-      const proceed = window.confirm(
-        `⚠️ Scheduling conflict:\n${conflicts.map((c) => c.message).join("\n")}\n\nMove anyway?`
-      );
-      if (!proceed) {
-        setDragJob(null);
-        setDragOverDate(null);
-        setShowConflicts([]);
-        setGapSuggestions([]);
-        return;
+    // Conflict check
+    if (!sameDay) {
+      const conflicts = detectConflicts(dragJob, dateStr, jobs, jobsByDate, assignments);
+      if (conflicts.some((c) => c.type === "crew_overlap")) {
+        const proceed = window.confirm(
+          `⚠️ Scheduling conflict:\n${conflicts.map((c) => c.message).join("\n")}\n\nMove anyway?`
+        );
+        if (!proceed) { clearDragState(); return; }
       }
     }
 
-    onJobMove?.(dragJob.id, dateStr);
-    setDragJob(null);
-    setDragOverDate(null);
-    setShowConflicts([]);
-    setGapSuggestions([]);
+    onJobMove?.({
+      jobId: dragJob.id,
+      newDate: dateStr,
+      newTime: sameDay ? newTime : (newTime || undefined),
+    });
+    clearDragState();
   }, [dragJob, jobs, jobsByDate, assignments, onJobMove]);
 
-  const handleDragEnd = () => {
-    setDragJob(null);
-    setDragOverDate(null);
-    setShowConflicts([]);
-    setGapSuggestions([]);
+  const handleDrop = useCallback((e: React.DragEvent, dateStr: string) => {
+    e.preventDefault();
+    // If we have a specific drop index from a card zone, use it
+    executeDrop(dateStr, dragOverIndex ?? undefined);
+  }, [executeDrop, dragOverIndex]);
+
+  const handleCardDrop = useCallback((e: React.DragEvent, dateStr: string, index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    executeDrop(dateStr, index);
+  }, [executeDrop]);
+
+  const handleDragEnd = () => clearDragState();
+
+  // ── Recurring dialog handlers ──
+
+  const handleRecurringChoice = (mode: "this" | "all") => {
+    if (!pendingRecurringMove) return;
+    const { job, fromDate, toDate, newTime } = pendingRecurringMove;
+
+    onJobMove?.({
+      jobId: job.id,
+      newDate: toDate,
+      newTime,
+      recurringMode: mode,
+      sourceJob: job,
+      instanceDate: fromDate,
+    });
+
+    setRecurringDialogOpen(false);
+    setPendingRecurringMove(null);
   };
 
   // ── Day column compute ──
