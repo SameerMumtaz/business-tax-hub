@@ -793,6 +793,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
   };
 
   return (
+    <>
     <Card>
       <CardContent className="pt-4 px-2 sm:px-6">
         {/* Header */}
