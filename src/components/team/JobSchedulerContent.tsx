@@ -511,6 +511,7 @@ export default function JobSchedulerContent() {
                 job={editJob}
                 assignments={assignments}
                 teamMembers={teamMembers}
+                allJobs={jobs}
                 onAssign={async (wId, wName, wType, hrs) => {
                   await assignWorker(editJob.id, wId, wName, wType, hrs);
                   // Dispatch notification to assigned crew member
