@@ -608,20 +608,26 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
               {dayJobs.map((job, idx) => {
                 const site = siteMap.get(job.site_id);
                 const isDragging = dragJob?.id === job.id;
-                const canDrag = editMode && job.status !== "completed" && job.status !== "cancelled";
+                const isRescheduled = !!(job as CalendarJob)._rescheduled;
+                const canDrag = editMode && !isRescheduled && job.status !== "completed" && job.status !== "cancelled";
 
                 return (
-                  <div key={`${job.id}-${dateStr}`} className="space-y-0">
+                  <div key={`${job.id}-${dateStr}-${idx}`} className="space-y-0">
                     <div
                       draggable={canDrag}
                       onDragStart={(e) => handleDragStart(e, job, dateStr)}
                       onDragEnd={handleDragEnd}
-                      onClick={() => { if (!wasDragging.current) onJobClick?.(job); }}
+                      onClick={() => { if (!wasDragging.current && !isRescheduled) onJobClick?.(job); }}
                       className={cn(
-                        "group rounded-md border px-2 py-1.5 cursor-pointer transition-all hover:shadow-sm",
-                        STATUS_BG[job.status] || STATUS_BG.scheduled,
+                        "group rounded-md border px-2 py-1.5 transition-all",
+                        isRescheduled
+                          ? "opacity-40 bg-muted/50 border-dashed border-muted-foreground/30 cursor-default line-through decoration-muted-foreground/40"
+                          : cn(
+                              "cursor-pointer hover:shadow-sm",
+                              STATUS_BG[job.status] || STATUS_BG.scheduled,
+                              canDrag && "hover:ring-1 hover:ring-primary/30"
+                            ),
                         isDragging && "opacity-40 scale-95",
-                        canDrag && "hover:ring-1 hover:ring-primary/30"
                       )}
                     >
                       <div className="flex items-start gap-1.5">
