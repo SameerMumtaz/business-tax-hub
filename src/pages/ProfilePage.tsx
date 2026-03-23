@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Building2, Save, Download, Loader2, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import DeleteAccountSection from "@/components/DeleteAccountSection";
+import SetPasswordCard from "@/components/SetPasswordCard";
 
 const BUSINESS_TYPES = ["Sole Proprietor", "LLC", "S-Corp", "C-Corp", "Partnership", "Nonprofit"];
 
@@ -207,6 +208,8 @@ export default function ProfilePage() {
             Full values must be re-entered when generating tax forms.
           </p>
         </div>
+
+        <SetPasswordCard />
 
         <FullAccountExport userId={user?.id} />
 

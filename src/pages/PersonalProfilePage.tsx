@@ -10,6 +10,7 @@ import { US_STATES, FILING_STATUS_LABELS, type FilingStatus } from "@/lib/taxCal
 import { toast } from "sonner";
 import { Save, UserCircle, Link2, Check, X } from "lucide-react";
 import DeleteAccountSection from "@/components/DeleteAccountSection";
+import SetPasswordCard from "@/components/SetPasswordCard";
 
 interface PersonalProfile {
   first_name: string;
@@ -173,6 +174,8 @@ export default function PersonalProfilePage() {
           <Save className="h-4 w-4" />
           {saving ? "Saving…" : "Save Profile"}
         </Button>
+
+        <SetPasswordCard />
 
         {/* Link to Business via Bookie ID */}
         <LinkToBusinessSection />

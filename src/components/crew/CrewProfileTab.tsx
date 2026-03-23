@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Save, UserCircle } from "lucide-react";
 import { toast } from "sonner";
+import SetPasswordCard from "@/components/SetPasswordCard";
 
 interface PersonalFields {
   first_name: string;
@@ -190,6 +191,7 @@ export default function CrewProfileTab() {
   }
 
   return (
+    <>
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
@@ -244,5 +246,8 @@ export default function CrewProfileTab() {
         </Button>
       </CardContent>
     </Card>
+
+    <SetPasswordCard />
+    </>
   );
 }
