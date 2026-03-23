@@ -540,21 +540,17 @@ export default function JobSchedulerContent() {
             onJobMove={async (jobId, newDate) => {
               const job = jobs.find((j) => j.id === jobId);
               if (!job) return;
-              // Calculate date difference to shift end_date proportionally
-              const oldStart = new Date(job.start_date.split("-").map(Number).reduce((_, v, i, a) => i === 0 ? new Date(a[0], a[1] - 1, a[2]) : _, new Date()) as unknown as number);
+              const parseD = (s: string) => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
+              const fmtD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
               let updates: Record<string, any> = { start_date: newDate };
               if (job.end_date) {
-                const [oy, om, od] = job.start_date.split("-").map(Number);
-                const [ey, em, ed] = job.end_date.split("-").map(Number);
-                const diffMs = new Date(ey, em - 1, ed).getTime() - new Date(oy, om - 1, od).getTime();
-                const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-                const [ny, nm, nd] = newDate.split("-").map(Number);
-                const newEnd = new Date(ny, nm - 1, nd);
+                const diffDays = Math.round((parseD(job.end_date).getTime() - parseD(job.start_date).getTime()) / 86400000);
+                const newEnd = parseD(newDate);
                 newEnd.setDate(newEnd.getDate() + diffDays);
-                updates.end_date = `${newEnd.getFullYear()}-${String(newEnd.getMonth() + 1).padStart(2, "0")}-${String(newEnd.getDate()).padStart(2, "0")}`;
+                updates.end_date = fmtD(newEnd);
               }
               await updateJob(jobId, updates);
-              toast.success(`"${job.title}" moved to ${new Date(newDate.split("-").map(Number).reduce((_, v, i, a) => new Date(a[0], a[1] - 1, a[2]) as any, 0)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}`);
+              toast.success(`"${job.title}" moved to ${parseD(newDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}`);
             }}
           />
         </TabsContent>
