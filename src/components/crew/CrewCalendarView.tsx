@@ -29,7 +29,6 @@ export default function CrewCalendarView({ jobs }: Props) {
 
   jobs.forEach((job) => {
     if (job.job_type === "recurring" && job.recurring_interval) {
-      const start = parseLocal(job.start_date);
       const start = parseDateOnlyLocal(job.start_date);
       const endDate = job.recurring_end_date ? parseDateOnlyLocal(job.recurring_end_date) : horizon;
       const intervalDays = job.recurring_interval === "weekly" ? 7
