@@ -21,6 +21,10 @@ export default function AuthPage() {
   const [authMode, setAuthMode] = useState<"password" | "magic_link">(inviteCode ? "magic_link" : "password");
   const [magicLinkSent, setMagicLinkSent] = useState(false);
 
+  const handleMagicLinkSentReset = useCallback(() => {
+    setMagicLinkSent(false);
+  }, []);
+
   // If invite param is present, default to signup mode
   useEffect(() => {
     if (inviteCode) {
@@ -121,10 +125,6 @@ export default function AuthPage() {
       toast.success("Password reset email sent");
     }
   };
-
-  const handleMagicLinkSentReset = useCallback(() => {
-    setMagicLinkSent(false);
-  }, []);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
