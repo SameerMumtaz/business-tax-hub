@@ -151,7 +151,7 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
           <DialogHeader>
             <DialogTitle>Job Photos</DialogTitle>
           </DialogHeader>
-          {photosJobId && <JobPhotosPanel jobId={photosJobId} compact />}
+          {photosJobId && <JobPhotosPanel jobId={photosJobId} occurrenceDate={jobs.find((job) => job.id === photosJobId) ? getNextInstanceDate(jobs.find((job) => job.id === photosJobId)!) : null} compact />}
         </DialogContent>
       </Dialog>
     </div>
