@@ -49,6 +49,13 @@ export default function CrewDashboardPage() {
   const [overtimeExplanation, setOvertimeExplanation] = useState("");
   const [pendingCheckoutCoords, setPendingCheckoutCoords] = useState<{ lat: number; lng: number } | null>(null);
 
+  // Photo requirement for checkout
+  const activeJobId = activeCheckin?.job_id || null;
+  const { photoCountByType } = useJobPhotos(activeJobId);
+  const hasBeforePhotos = photoCountByType.before > 0;
+  const hasAfterPhotos = photoCountByType.after > 0;
+  const photosComplete = hasBeforePhotos && hasAfterPhotos;
+
   // Find the job site for the active check-in to feed into geofence monitor
   const activeJobSite = useMemo(() => {
     if (!activeCheckin) return null;
