@@ -235,6 +235,7 @@ export default function JobSchedulerContent() {
     setEditJobStart(j.start_date);
     setEditJobEnd(j.end_date || "");
     setEditJobInterval(j.recurring_interval || "");
+    setEditJobRecurringEnd(j.recurring_end_date || "");
     setEditJobDesc(j.description || "");
     setEditJobStartTime(j.start_time || "");
     setEditJobEstHours(j.estimated_hours != null ? String(j.estimated_hours) : "");
