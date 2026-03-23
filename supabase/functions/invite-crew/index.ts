@@ -123,6 +123,7 @@ Deno.serve(async (req) => {
         // No auth account — send an invite email which creates their account
         const { error: inviteErr } = await adminClient.auth.admin.inviteUserByEmail(email, {
           redirectTo: `${Deno.env.get("SUPABASE_URL")?.replace('.supabase.co', '.lovableproject.com') || 'http://localhost:5173'}/reset-password`,
+          data: { invited_by_business: businessName, bookie_id: bookieId },
         });
         if (inviteErr) {
           // If user was somehow created between checks, still succeed
