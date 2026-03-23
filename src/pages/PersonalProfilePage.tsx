@@ -176,6 +176,8 @@ export default function PersonalProfilePage() {
 
         {/* Link to Business via Bookie ID */}
         <LinkToBusinessSection />
+
+        <DeleteAccountSection variant="personal" />
       </div>
     </PersonalDashboardLayout>
   );

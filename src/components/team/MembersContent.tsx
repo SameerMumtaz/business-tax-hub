@@ -538,6 +538,9 @@ export default function MembersContent() {
         </Dialog>
       </div>
 
+      {/* Deletion requests panel */}
+      <DeletionRequestsPanel />
+
       {/* Pending join requests banner */}
       {pendingMembers.length > 0 && (
         <Card className="border-primary/30 bg-primary/5">
