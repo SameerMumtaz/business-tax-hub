@@ -674,11 +674,15 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                               )}
                             </div>
                           )}
-                          {job.job_type === "recurring" && (
+                          {isRescheduled ? (
+                            <span className="text-[9px] text-destructive/70 font-medium no-underline" style={{ textDecoration: 'none' }}>
+                              ↗ Rescheduled
+                            </span>
+                          ) : job.job_type === "recurring" ? (
                             <span className="text-[9px] text-muted-foreground/60 italic">
                               ↻ {job.recurring_interval}
                             </span>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     </div>
