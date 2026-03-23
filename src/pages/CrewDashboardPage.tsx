@@ -4,19 +4,21 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTeamRole } from "@/hooks/useTeamRole";
 import { useCrewCheckins } from "@/hooks/useCrewCheckins";
 import { useGeofenceMonitor } from "@/hooks/useGeofenceMonitor";
+import { useJobPhotos } from "@/hooks/useJobPhotos";
 import { getCurrentPosition, isWithinGeofence, haversineDistance } from "@/lib/geofence";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle, Clock, LogOut, List, CalendarDays, MapPin as MapIcon, LogOut as SignOutIcon, UserCircle, AlertTriangle } from "lucide-react";
+import { CheckCircle, Clock, LogOut, List, CalendarDays, MapPin as MapIcon, LogOut as SignOutIcon, UserCircle, AlertTriangle, Camera, ImagePlus } from "lucide-react";
 import { toast } from "sonner";
 import LinkToBusinessCard from "@/components/LinkToBusinessCard";
 import CrewJobsList, { type AssignedJob } from "@/components/crew/CrewJobsList";
 import CrewCalendarView from "@/components/crew/CrewCalendarView";
 import CrewMapView from "@/components/crew/CrewMapView";
 import CrewProfileTab from "@/components/crew/CrewProfileTab";
+import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 
 function LiveElapsed({ since }: { since: string }) {
   const [elapsed, setElapsed] = useState("");
@@ -46,6 +48,13 @@ export default function CrewDashboardPage() {
   const [overtimeDialogOpen, setOvertimeDialogOpen] = useState(false);
   const [overtimeExplanation, setOvertimeExplanation] = useState("");
   const [pendingCheckoutCoords, setPendingCheckoutCoords] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Photo requirement for checkout
+  const activeJobId = activeCheckin?.job_id || null;
+  const { photoCountByType } = useJobPhotos(activeJobId);
+  const hasBeforePhotos = photoCountByType.before > 0;
+  const hasAfterPhotos = photoCountByType.after > 0;
+  const photosComplete = hasBeforePhotos && hasAfterPhotos;
 
   // Find the job site for the active check-in to feed into geofence monitor
   const activeJobSite = useMemo(() => {
@@ -174,6 +183,13 @@ export default function CrewDashboardPage() {
 
   const handleCheckOut = async () => {
     if (!activeCheckin) return;
+
+    // Require before & after photos
+    if (!photosComplete) {
+      toast.error("Please upload both before and after photos before checking out.");
+      return;
+    }
+
     setGpsLoading("checkout");
     try {
       const pos = await getCurrentPosition();
@@ -249,14 +265,38 @@ export default function CrewDashboardPage() {
                   Rate: ${payRate}/hr
                 </div>
               )}
+
+              {/* Photo requirements */}
+              {activeJobId && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Camera className="h-4 w-4" />
+                    Photo Requirements
+                  </div>
+                  <div className="flex gap-3 text-xs">
+                    <span className={hasBeforePhotos ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}>
+                      {hasBeforePhotos ? "✓" : "✗"} Before photo{hasBeforePhotos ? "" : " required"}
+                    </span>
+                    <span className={hasAfterPhotos ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}>
+                      {hasAfterPhotos ? "✓" : "✗"} After photo{hasAfterPhotos ? "" : " required"}
+                    </span>
+                  </div>
+                  <JobPhotosPanel jobId={activeJobId} compact />
+                </div>
+              )}
+
               <Button
                 variant="destructive"
                 className="w-full"
                 onClick={handleCheckOut}
-                disabled={gpsLoading === "checkout"}
+                disabled={gpsLoading === "checkout" || !photosComplete}
               >
                 <LogOut className="h-4 w-4 mr-2" />
-                {gpsLoading === "checkout" ? "Getting location…" : "Check Out"}
+                {!photosComplete
+                  ? "Upload photos to check out"
+                  : gpsLoading === "checkout"
+                    ? "Getting location…"
+                    : "Check Out"}
               </Button>
             </CardContent>
           </Card>
