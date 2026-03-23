@@ -633,7 +633,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                       onDragEnd={handleDragEnd}
                       onClick={() => { if (!wasDragging.current && !isRescheduled) onJobClick?.(job); }}
                       className={cn(
-                        "group rounded-md border px-2 py-1.5 transition-all",
+                        "group rounded-md border px-2 py-1.5 transition-all select-none",
                         isRescheduled
                           ? "opacity-40 bg-muted/50 border-dashed border-muted-foreground/30 cursor-default line-through decoration-muted-foreground/40"
                           : cn(
@@ -644,7 +644,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                         isDragging && "opacity-30 scale-95",
                       )}
                     >
-                      <div className="flex items-start gap-1.5">
+                      <div className="flex items-start gap-1.5 pointer-events-none">
                         {canDrag && (
                           <GripVertical className="h-3.5 w-3.5 mt-0.5 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 cursor-grab" />
                         )}
