@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
         // If previously invited but not yet active, just return success —
         // the user can sign up normally and will be auto-linked.
         return new Response(
-          JSON.stringify({ success: true, message: "This email was already invited. They can sign up at the app to join your team." }),
+          JSON.stringify({ success: true, message: `This email was already invited. They can sign up at the app and use Bookie ID ${bookieId || "(not set)"} to join your team.` }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
