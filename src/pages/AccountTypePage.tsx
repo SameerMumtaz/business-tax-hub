@@ -1,17 +1,18 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Building2, User, ArrowRight, Link2 } from "lucide-react";
+import { Building2, User, Link2, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
+type AccountOption = "new_business" | "existing_business" | "individual";
+
 export default function AccountTypePage() {
-  const [selected, setSelected] = useState<"business" | "individual" | null>(null);
+  const [selected, setSelected] = useState<AccountOption | null>(null);
   const [saving, setSaving] = useState(false);
   const [bookieCode, setBookieCode] = useState("");
-  const [showBookieInput, setShowBookieInput] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -19,8 +20,10 @@ export default function AccountTypePage() {
     if (!selected || !user) return;
     setSaving(true);
 
-    // If linking with a Bookie ID, validate it first
-    if (showBookieInput && bookieCode.trim()) {
+    const accountType = selected === "individual" ? "individual" : "business";
+
+    // If linking with a Bookie ID (existing business)
+    if (selected === "existing_business" && bookieCode.trim()) {
       const code = bookieCode.trim().toUpperCase();
       const { data: bizProfile, error: lookupError } = await (supabase as any)
         .from("profiles")
@@ -34,7 +37,6 @@ export default function AccountTypePage() {
         return;
       }
 
-      // Check if already a team member
       const { data: existing } = await supabase
         .from("team_members")
         .select("id")
@@ -43,7 +45,6 @@ export default function AccountTypePage() {
         .maybeSingle();
 
       if (!existing) {
-        // Create team member record linked to the business
         const { error: insertError } = await supabase
           .from("team_members")
           .insert({
@@ -61,7 +62,6 @@ export default function AccountTypePage() {
           return;
         }
       } else {
-        // Update existing record
         await supabase
           .from("team_members")
           .update({ member_user_id: user.id, status: "active", accepted_at: new Date().toISOString() })
@@ -69,11 +69,15 @@ export default function AccountTypePage() {
       }
 
       toast.success(`Linked to ${(bizProfile as any).business_name || "business"}!`);
+    } else if (selected === "existing_business" && !bookieCode.trim()) {
+      toast.error("Please enter a Bookie ID to join an existing business.");
+      setSaving(false);
+      return;
     }
 
     const { error } = await supabase
       .from("profiles")
-      .update({ account_type: selected } as any)
+      .update({ account_type: accountType } as any)
       .eq("user_id", user.id);
     setSaving(false);
 
@@ -82,43 +86,49 @@ export default function AccountTypePage() {
       return;
     }
 
-    if (selected === "business") {
+    if (accountType === "business") {
       navigate("/profile", { replace: true });
     } else {
       navigate("/personal", { replace: true });
     }
   };
 
-  const options = [
+  const options: { key: AccountOption; icon: typeof Building2; title: string; description: string }[] = [
     {
-      key: "business" as const,
+      key: "new_business",
       icon: Building2,
-      title: "Business",
-      description: "Manage your business end-to-end — invoicing, expenses, team, jobs, and taxes.",
+      title: "New Business",
+      description: "Start fresh — set up invoicing, expenses, team management, jobs, and taxes.",
     },
     {
-      key: "individual" as const,
+      key: "existing_business",
+      icon: Link2,
+      title: "Existing Business",
+      description: "Join a team with a Bookie ID from your employer or business admin.",
+    },
+    {
+      key: "individual",
       icon: User,
-      title: "Individual",
+      title: "Personal",
       description: "Budget, track spending, manage income, and stay on top of your personal finances.",
     },
   ];
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <div className="w-full max-w-xl space-y-8">
+      <div className="w-full max-w-2xl space-y-8">
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold tracking-tight">Welcome to Bookie</h1>
           <p className="text-muted-foreground">How will you be using Bookie?</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {options.map((opt) => {
             const isSelected = selected === opt.key;
             return (
               <button
                 key={opt.key}
-                onClick={() => { setSelected(opt.key); if (opt.key === "business") setShowBookieInput(false); }}
+                onClick={() => setSelected(opt.key)}
                 className={`relative flex flex-col items-center gap-4 p-6 rounded-xl border-2 transition-all text-center cursor-pointer ${
                   isSelected
                     ? "border-primary bg-accent shadow-md"
@@ -148,41 +158,23 @@ export default function AccountTypePage() {
           })}
         </div>
 
-        {/* Bookie ID link option */}
-        {selected === "individual" && (
-          <div className="space-y-3">
-            {!showBookieInput ? (
-              <button
-                onClick={() => setShowBookieInput(true)}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors mx-auto"
-              >
-                <Link2 className="h-4 w-4" />
-                Have a Bookie ID? Link to a business
-              </button>
-            ) : (
-              <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Link2 className="h-4 w-4 text-primary" />
-                  Link to a Business
-                </div>
-                <Input
-                  placeholder="Enter Bookie ID (e.g. BK-A3X9)"
-                  value={bookieCode}
-                  onChange={(e) => setBookieCode(e.target.value.toUpperCase())}
-                  maxLength={7}
-                  className="font-mono tracking-wider"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Ask your employer or team admin for their Bookie ID
-                </p>
-                <button
-                  onClick={() => { setShowBookieInput(false); setBookieCode(""); }}
-                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
+        {/* Bookie ID input for existing business */}
+        {selected === "existing_business" && (
+          <div className="rounded-lg border border-border bg-card p-4 space-y-3 max-w-md mx-auto">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Link2 className="h-4 w-4 text-primary" />
+              Link to a Business
+            </div>
+            <Input
+              placeholder="Enter Bookie ID (e.g. BK-A3X9)"
+              value={bookieCode}
+              onChange={(e) => setBookieCode(e.target.value.toUpperCase())}
+              maxLength={7}
+              className="font-mono tracking-wider"
+            />
+            <p className="text-xs text-muted-foreground">
+              Ask your employer or team admin for their Bookie ID — it was included in your invite email.
+            </p>
           </div>
         )}
 
