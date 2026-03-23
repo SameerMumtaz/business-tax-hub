@@ -27,7 +27,7 @@ import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 
 export default function JobSchedulerContent() {
   const { user } = useAuth();
-  const { sites, jobs, assignments, loading, createSite, updateSite, deleteSite, createJob, updateJob, updateJobsBatch, deleteJob, assignWorker, removeAssignment, refetch } = useJobs();
+  const { sites, jobs, assignments, checkins, loading, createSite, updateSite, deleteSite, createJob, updateJob, updateJobsBatch, deleteJob, assignWorker, removeAssignment, refetch } = useJobs();
   const { data: clients = [] } = useClients();
   const [tab, setTab] = useState("calendar");
 
@@ -556,6 +556,7 @@ export default function JobSchedulerContent() {
             jobs={jobs}
             sites={sites}
             assignments={assignments}
+            checkins={checkins}
             teamMembers={teamMembers}
             onJobClick={(j) => openEditJob(j)}
             onJobMove={async (evt: JobMoveEvent) => {
@@ -756,6 +757,9 @@ export default function JobSchedulerContent() {
                         <TableCell><Badge variant="outline">{j.job_type}</Badge></TableCell>
                         <TableCell>{j.start_date}</TableCell>
                         <TableCell>
+{j.job_type === "recurring" ? (
+                          <Badge variant="secondary">scheduled</Badge>
+                        ) : (
                           <Select value={j.status} onValueChange={(v) => updateJob(j.id, { status: v })}>
                             <SelectTrigger className="h-7 w-28 text-xs"><SelectValue /></SelectTrigger>
                             <SelectContent>
@@ -765,6 +769,7 @@ export default function JobSchedulerContent() {
                               <SelectItem value="cancelled">Cancelled</SelectItem>
                             </SelectContent>
                           </Select>
+                        )}
                         </TableCell>
                         <TableCell>
                           <Button

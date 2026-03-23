@@ -42,7 +42,7 @@ function LiveElapsed({ since }: { since: string }) {
 export default function CrewDashboardPage() {
   const { user, signOut } = useAuth();
   const { teamMemberId, businessUserId } = useTeamRole();
-  const { activeCheckin, checkIn, checkOut, refetch } = useCrewCheckins();
+  const { checkins, activeCheckin, checkIn, checkOut, refetch } = useCrewCheckins();
   const [assignedJobs, setAssignedJobs] = useState<AssignedJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [gpsLoading, setGpsLoading] = useState<string | null>(null);
@@ -332,7 +332,7 @@ export default function CrewDashboardPage() {
               />
             </TabsContent>
             <TabsContent value="calendar" className="mt-4">
-              <CrewCalendarView jobs={assignedJobs} />
+              <CrewCalendarView jobs={assignedJobs} checkins={checkins} />
             </TabsContent>
             <TabsContent value="map" className="mt-4">
               <CrewMapView jobs={assignedJobs} />
