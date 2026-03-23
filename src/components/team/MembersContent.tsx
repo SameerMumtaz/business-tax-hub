@@ -184,7 +184,22 @@ export default function MembersContent() {
         toast.error(resData.error);
         return;
       }
-      toast.success(resData?.message || `Invitation sent to ${inviteEmail}`);
+      const signupLink = resData?.signupLink;
+      if (signupLink) {
+        toast.success(resData?.message || `Invitation sent to ${inviteEmail}`, {
+          duration: 10000,
+          description: `Signup link: ${signupLink}`,
+          action: {
+            label: "Copy Link",
+            onClick: () => {
+              navigator.clipboard.writeText(signupLink);
+              toast.success("Link copied!");
+            },
+          },
+        });
+      } else {
+        toast.success(resData?.message || `Invitation sent to ${inviteEmail}`);
+      }
       setInviteOpen(false);
       setInviteName("");
       setInviteEmail("");

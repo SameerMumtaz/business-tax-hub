@@ -124,7 +124,14 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
 
   // No account type chosen yet → send to selection (unless team member)
   if (!accountType && location.pathname !== "/account-type") {
-    return <Navigate to="/account-type" replace />;
+    // Preserve invite query param so AccountTypePage can auto-fill Bookie ID
+    const inviteParam = new URLSearchParams(location.search).get("invite");
+    const storedInvite = sessionStorage.getItem("bookie_invite_code");
+    const invite = inviteParam || storedInvite;
+    const accountTypeUrl = invite
+      ? `/account-type?invite=${encodeURIComponent(invite)}`
+      : "/account-type";
+    return <Navigate to={accountTypeUrl} replace />;
   }
 
   // Business users need profile completion (admin only)

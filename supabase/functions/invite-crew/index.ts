@@ -160,11 +160,11 @@ Deno.serve(async (req) => {
             })
             .eq("id", existingRecord.id);
 
-          return new Response(
-            JSON.stringify({
-              success: true,
-              message: `Invite refreshed. No account was pre-created. Ask them to sign up with this email and use Bookie ID ${bookieId || "(not set)"}.`,
-            }),
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: `Invite refreshed. No account was pre-created. Ask them to sign up with this email and use Bookie ID ${bookieId || "(not set)"}.`,
+        }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
@@ -200,10 +200,16 @@ Deno.serve(async (req) => {
           .eq("id", existingRecord.id);
       }
 
+      const signupLink = bookieId
+        ? `${appUrl}/auth?invite=${encodeURIComponent(bookieId)}`
+        : `${appUrl}/auth`;
+
       return new Response(
         JSON.stringify({
           success: true,
-          message: `Invite refreshed. No account was created. The user can sign up with this email and use Bookie ID ${bookieId || "(not set)"}.`,
+          message: `Invite refreshed. The user can sign up at: ${signupLink}`,
+          signupLink,
+          bookieId: bookieId || null,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -274,7 +280,9 @@ Deno.serve(async (req) => {
         success: true,
         message: existingUser
           ? "User added to team"
-          : `Team member record created. They can sign up at the app and use Bookie ID ${bookieId || "(not set)"} to link to your business.`,
+          : `Team member invited! Share this signup link: ${bookieId ? `${appUrl}/auth?invite=${encodeURIComponent(bookieId)}` : appUrl}${bookieId ? ` (Bookie ID: ${bookieId})` : ""}`,
+        signupLink: bookieId ? `${appUrl}/auth?invite=${encodeURIComponent(bookieId)}` : appUrl,
+        bookieId: bookieId || null,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
