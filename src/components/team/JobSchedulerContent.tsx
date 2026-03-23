@@ -513,6 +513,26 @@ export default function JobSchedulerContent() {
                 teamMembers={teamMembers}
                 onAssign={async (wId, wName, wType, hrs) => {
                   await assignWorker(editJob.id, wId, wName, wType, hrs);
+                  // Dispatch notification to assigned crew member
+                  try {
+                    const { data: member } = await supabase
+                      .from("team_members")
+                      .select("member_user_id")
+                      .eq("id", wId)
+                      .not("member_user_id", "is", null)
+                      .single();
+                    if (member?.member_user_id) {
+                      await supabase.from("notifications").insert({
+                        user_id: member.member_user_id,
+                        title: `New Assignment: ${editJob.title}`,
+                        message: `You've been assigned to "${editJob.title}" on ${editJob.start_date}${editJob.start_time ? ' at ' + editJob.start_time : ''}.`,
+                        type: "dispatch",
+                        metadata: { job_id: editJob.id },
+                      });
+                    }
+                  } catch (err) {
+                    console.error("Failed to send assignment notification:", err);
+                  }
                 }}
                 onRemove={async (aId) => {
                   await removeAssignment(aId);
