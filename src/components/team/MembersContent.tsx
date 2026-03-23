@@ -15,6 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { UserPlus, Shield, Users, DollarSign, History, MoreHorizontal, Pencil, RefreshCw, Copy, Trash2, CheckCircle, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/format";
+import DeletionRequestsPanel from "@/components/DeletionRequestsPanel";
 
 interface TeamMember {
   id: string;
@@ -536,6 +537,9 @@ export default function MembersContent() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Deletion requests panel */}
+      <DeletionRequestsPanel />
 
       {/* Pending join requests banner */}
       {pendingMembers.length > 0 && (
