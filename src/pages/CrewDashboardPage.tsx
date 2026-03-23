@@ -18,6 +18,7 @@ import CrewJobsList, { type AssignedJob } from "@/components/crew/CrewJobsList";
 import CrewCalendarView from "@/components/crew/CrewCalendarView";
 import CrewMapView from "@/components/crew/CrewMapView";
 import CrewProfileTab from "@/components/crew/CrewProfileTab";
+import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 
 function LiveElapsed({ since }: { since: string }) {
   const [elapsed, setElapsed] = useState("");
