@@ -83,17 +83,36 @@ Deno.serve(async (req) => {
 
       if (existing) {
         if (existing.status === "active") {
-          return new Response(
-            JSON.stringify({ error: "This team member is already active" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          // Check if the auth user still exists — if deleted, allow re-invite
+          const { data: authUsers } = await adminClient.auth.admin.listUsers();
+          const authUserExists = existing.member_user_id && authUsers?.users?.some((u: any) => u.id === existing.member_user_id);
+          if (authUserExists) {
+            return new Response(
+              JSON.stringify({ error: "This team member is already active" }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          // Auth user was deleted — remove stale record so we can re-invite
+          await adminClient.from("team_members").delete().eq("id", existing.id);
+        } else {
+          // Check if auth user was deleted for invited records too
+          if (existing.member_user_id) {
+            const { data: authUsers } = await adminClient.auth.admin.listUsers();
+            const authUserExists = authUsers?.users?.some((u: any) => u.id === existing.member_user_id);
+            if (!authUserExists) {
+              // Stale record — delete and allow re-invite
+              await adminClient.from("team_members").delete().eq("id", existing.id);
+            } else {
+              return new Response(
+                JSON.stringify({ success: true, message: `This email was already invited. They can sign up at the app and use Bookie ID ${bookieId || "(not set)"} to join your team.` }),
+                { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
+          } else {
+            // No member_user_id — stale orphan record, delete and allow re-invite
+            await adminClient.from("team_members").delete().eq("id", existing.id);
+          }
         }
-        // If previously invited but not yet active, just return success —
-        // the user can sign up normally and will be auto-linked.
-        return new Response(
-          JSON.stringify({ success: true, message: `This email was already invited. They can sign up at the app and use Bookie ID ${bookieId || "(not set)"} to join your team.` }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
       }
     }
 
