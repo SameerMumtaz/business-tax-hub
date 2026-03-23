@@ -180,13 +180,33 @@ function findGapSuggestions(
 
 /* ── Build recurring job instances for a date range ── */
 
-function buildJobsByDate(jobs: Job[], rangeStart: Date, rangeEnd: Date): Map<string, Job[]> {
-  const map = new Map<string, Job[]>();
-  const add = (key: string, job: Job) => {
+/** Set of "parentJobId:dateStr" keys for recurring instances that have been rescheduled */
+function buildRescheduledSet(jobs: Job[]): Set<string> {
+  const set = new Set<string>();
+  for (const job of jobs) {
+    const match = job.description?.match(/\[rescheduled:([^:]+):([^\]]+)\]/);
+    if (match) {
+      set.add(`${match[1]}:${match[2]}`);
+    }
+  }
+  return set;
+}
+
+interface CalendarJob extends Job {
+  /** If true, this recurring instance was rescheduled to another date */
+  _rescheduled?: boolean;
+  /** The specific date this job instance appears on (for recurring) */
+  _instanceDate?: string;
+}
+
+function buildJobsByDate(jobs: Job[], rangeStart: Date, rangeEnd: Date): Map<string, CalendarJob[]> {
+  const map = new Map<string, CalendarJob[]>();
+  const add = (key: string, job: CalendarJob) => {
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(job);
   };
 
+  const rescheduledSet = buildRescheduledSet(jobs);
   const horizon = addDays(rangeEnd, 365);
 
   for (const job of jobs) {
@@ -201,18 +221,21 @@ function buildJobsByDate(jobs: Job[], rangeStart: Date, rangeEnd: Date): Map<str
       const cursor = new Date(start);
       while (cursor <= endDate && cursor <= rangeEnd) {
         if (cursor >= rangeStart) {
-          add(toDateStr(cursor), job);
+          const dateStr = toDateStr(cursor);
+          const isRescheduled = rescheduledSet.has(`${job.id}:${dateStr}`);
+          add(dateStr, { ...job, _rescheduled: isRescheduled, _instanceDate: dateStr });
         }
         if (job.recurring_interval === "monthly") cursor.setMonth(cursor.getMonth() + 1);
         else if (intervalDays > 0) cursor.setDate(cursor.getDate() + intervalDays);
         else break;
       }
     } else {
+      // Skip showing one-time rescheduled copies on the ORIGINAL date (they appear on their new date)
       const end = job.end_date ? parseLocalDate(job.end_date) : start;
       const cursor = new Date(start);
       while (cursor <= end) {
         if (cursor >= rangeStart && cursor <= rangeEnd) {
-          add(toDateStr(cursor), job);
+          add(toDateStr(cursor), { ...job, _instanceDate: toDateStr(cursor) });
         }
         cursor.setDate(cursor.getDate() + 1);
       }
@@ -585,20 +608,26 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
               {dayJobs.map((job, idx) => {
                 const site = siteMap.get(job.site_id);
                 const isDragging = dragJob?.id === job.id;
-                const canDrag = editMode && job.status !== "completed" && job.status !== "cancelled";
+                const isRescheduled = !!(job as CalendarJob)._rescheduled;
+                const canDrag = editMode && !isRescheduled && job.status !== "completed" && job.status !== "cancelled";
 
                 return (
-                  <div key={`${job.id}-${dateStr}`} className="space-y-0">
+                  <div key={`${job.id}-${dateStr}-${idx}`} className="space-y-0">
                     <div
                       draggable={canDrag}
                       onDragStart={(e) => handleDragStart(e, job, dateStr)}
                       onDragEnd={handleDragEnd}
-                      onClick={() => { if (!wasDragging.current) onJobClick?.(job); }}
+                      onClick={() => { if (!wasDragging.current && !isRescheduled) onJobClick?.(job); }}
                       className={cn(
-                        "group rounded-md border px-2 py-1.5 cursor-pointer transition-all hover:shadow-sm",
-                        STATUS_BG[job.status] || STATUS_BG.scheduled,
+                        "group rounded-md border px-2 py-1.5 transition-all",
+                        isRescheduled
+                          ? "opacity-40 bg-muted/50 border-dashed border-muted-foreground/30 cursor-default line-through decoration-muted-foreground/40"
+                          : cn(
+                              "cursor-pointer hover:shadow-sm",
+                              STATUS_BG[job.status] || STATUS_BG.scheduled,
+                              canDrag && "hover:ring-1 hover:ring-primary/30"
+                            ),
                         isDragging && "opacity-40 scale-95",
-                        canDrag && "hover:ring-1 hover:ring-primary/30"
                       )}
                     >
                       <div className="flex items-start gap-1.5">
@@ -645,11 +674,15 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                               )}
                             </div>
                           )}
-                          {job.job_type === "recurring" && (
+                          {isRescheduled ? (
+                            <span className="text-[9px] text-destructive/70 font-medium no-underline" style={{ textDecoration: 'none' }}>
+                              ↗ Rescheduled
+                            </span>
+                          ) : job.job_type === "recurring" ? (
                             <span className="text-[9px] text-muted-foreground/60 italic">
                               ↻ {job.recurring_interval}
                             </span>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     </div>
