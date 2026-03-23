@@ -441,7 +441,11 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
     executeDrop(dateStr, index);
   }, [executeDrop]);
 
-  const handleDragEnd = () => clearDragState();
+  const handleDragEnd = () => {
+    clearDragState();
+    // Keep wasDragging true briefly to suppress the click event that fires after dragEnd
+    setTimeout(() => { wasDragging.current = false; }, 100);
+  };
 
   // ── Recurring dialog handlers ──
 
