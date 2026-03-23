@@ -39,6 +39,16 @@ Deno.serve(async (req) => {
 
     const { email, name, role, business_user_id, worker_type, pay_rate, address, state_employed, resend } = await req.json();
 
+    // Fetch business profile to get Bookie ID for the invite email
+    const bizAdminClient = createClient(supabaseUrl, serviceRoleKey);
+    const { data: bizProfile } = await bizAdminClient
+      .from("profiles")
+      .select("bookie_id, business_name")
+      .eq("user_id", business_user_id)
+      .single();
+    const bookieId = bizProfile?.bookie_id || "";
+    const businessName = bizProfile?.business_name || "your team";
+
     if (user.id !== business_user_id) {
       const adminClient = createClient(supabaseUrl, serviceRoleKey);
       const { data: membership } = await adminClient
@@ -81,7 +91,7 @@ Deno.serve(async (req) => {
         // If previously invited but not yet active, just return success —
         // the user can sign up normally and will be auto-linked.
         return new Response(
-          JSON.stringify({ success: true, message: "This email was already invited. They can sign up at the app to join your team." }),
+          JSON.stringify({ success: true, message: `This email was already invited. They can sign up at the app and use Bookie ID ${bookieId || "(not set)"} to join your team.` }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -113,6 +123,7 @@ Deno.serve(async (req) => {
         // No auth account — send an invite email which creates their account
         const { error: inviteErr } = await adminClient.auth.admin.inviteUserByEmail(email, {
           redirectTo: `${Deno.env.get("SUPABASE_URL")?.replace('.supabase.co', '.lovableproject.com') || 'http://localhost:5173'}/reset-password`,
+          data: { invited_by_business: businessName, bookie_id: bookieId },
         });
         if (inviteErr) {
           // If user was somehow created between checks, still succeed
@@ -140,7 +151,7 @@ Deno.serve(async (req) => {
         }
 
         return new Response(
-          JSON.stringify({ success: true, message: "Invite email sent! The team member will receive an email to set up their account." }),
+          JSON.stringify({ success: true, message: `Invite email sent! The team member will receive an email to set up their account.${bookieId ? ` Your Bookie ID (${bookieId}) was included.` : ""}` }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -211,7 +222,7 @@ Deno.serve(async (req) => {
         success: true,
         message: existingUser
           ? "User added to team"
-          : "Team member record created. They can sign up at the app and will be automatically linked.",
+          : `Team member record created. They can sign up at the app and use Bookie ID ${bookieId || "(not set)"} to link to your business.`,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
