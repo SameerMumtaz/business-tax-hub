@@ -103,12 +103,13 @@ export function useJobPhotos(jobId: string | null) {
 
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const compressed = await compressImage(file);
+      const ext = compressed.name.split(".").pop()?.toLowerCase() || "jpg";
       const path = `${user.id}/${jobId}/${Date.now()}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
         .from("job-photos")
-        .upload(path, file, { cacheControl: "3600", upsert: false });
+        .upload(path, compressed, { cacheControl: "3600", upsert: false });
       if (uploadError) throw uploadError;
 
       const { data: urlData } = supabase.storage
