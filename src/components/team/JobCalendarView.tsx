@@ -450,6 +450,8 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
       jobId: dragJob.id,
       newDate: dateStr,
       newTime: sameDay ? newTime : (newTime || undefined),
+      fromDate: dragStartDate.current || undefined,
+      dropIndex: typeof dropIdx === "number" ? dropIdx : undefined,
     });
     clearDragState();
   }, [dragJob, jobs, jobsByDate, assignments, onJobMove]);

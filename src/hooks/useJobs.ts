@@ -261,7 +261,7 @@ export function useJobs() {
   return {
     sites, jobs, assignments, loading,
     createSite, updateSite, deleteSite,
-    createJob, updateJob, deleteJob,
+    createJob, updateJob, updateJobsBatch, deleteJob,
     assignWorker, removeAssignment,
     refetch: fetchAll,
   };
