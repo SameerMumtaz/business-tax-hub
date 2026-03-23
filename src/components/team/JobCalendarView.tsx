@@ -911,7 +911,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
 
     {/* Recurring move dialog */}
     <Dialog open={recurringDialogOpen} onOpenChange={setRecurringDialogOpen}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-w-[calc(100vw-2rem)]">
         <DialogHeader>
           <DialogTitle>Move Recurring Job</DialogTitle>
           <DialogDescription>
