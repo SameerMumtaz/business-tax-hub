@@ -1,4 +1,4 @@
-import { ReactNode, createContext, useContext, useState } from "react";
+import { ReactNode, createContext, useContext, useState, lazy, Suspense } from "react";
 import AppSidebar from "./AppSidebar";
 import ManagerSidebar from "./ManagerSidebar";
 import CrewSidebar from "./CrewSidebar";
@@ -7,6 +7,7 @@ import { PanelLeftClose, PanelLeft, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
+import NotificationBell from "./NotificationBell";
 
 type SidebarContextType = { collapsed: boolean; toggle: () => void };
 const SidebarContext = createContext<SidebarContextType>({ collapsed: false, toggle: () => {} });
@@ -37,6 +38,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               </SheetContent>
             </Sheet>
             <span className="text-sm font-semibold tracking-tight">Bookie</span>
+            <div className="ml-auto">
+              <NotificationBell />
+            </div>
           </div>
           <main className="flex-1 overflow-auto">
             <div className="p-4 max-w-6xl mx-auto">{children}</div>
@@ -67,6 +71,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             >
               {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
             </Button>
+            <div className="ml-auto mr-2">
+              <NotificationBell />
+            </div>
           </div>
           <div className="p-4 md:p-8 max-w-6xl mx-auto">{children}</div>
         </main>
