@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTeamRole } from "@/hooks/useTeamRole";
 import { useCrewCheckins } from "@/hooks/useCrewCheckins";
 import { useGeofenceMonitor } from "@/hooks/useGeofenceMonitor";
+import { useJobPhotos } from "@/hooks/useJobPhotos";
 import { getCurrentPosition, isWithinGeofence, haversineDistance } from "@/lib/geofence";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
