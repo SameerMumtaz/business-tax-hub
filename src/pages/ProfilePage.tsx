@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Building2, Save, Download, Loader2, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
+import DeleteAccountSection from "@/components/DeleteAccountSection";
 
 const BUSINESS_TYPES = ["Sole Proprietor", "LLC", "S-Corp", "C-Corp", "Partnership", "Nonprofit"];
 
