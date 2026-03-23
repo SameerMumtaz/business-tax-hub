@@ -512,7 +512,11 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
     ? ["S", "M", "T", "W", "T", "F", "S"]
     : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-  /* ── Week View (Kanban columns) ── */
+  /* ── Week View (Kanban columns with proportional time blocks) ── */
+
+  // Each "unit" = 1 hour = this many pixels
+  const HOUR_PX = 48;
+  const MIN_BLOCK_PX = 36; // minimum height even for tiny jobs
 
   const renderWeekView = () => (
     <div className={cn("grid gap-1.5", isMobile ? "grid-cols-2" : "grid-cols-7")}>
@@ -530,7 +534,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
           <div
             key={dateStr}
             className={cn(
-              "rounded-lg border transition-all flex flex-col min-h-[200px]",
+              "rounded-lg border transition-all flex flex-col",
               isToday && "ring-2 ring-primary/50",
               isDragTarget && showConflicts.length > 0 && "ring-2 ring-red-500/60 bg-red-500/5",
               isDragTarget && showConflicts.length === 0 && "ring-2 ring-primary/60 bg-primary/5",
@@ -587,15 +591,15 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
               )}
             </div>
 
-            {/* Job cards with intra-day drop zones */}
+            {/* Job blocks with proportional heights */}
             <div className="flex-1 p-1 overflow-y-auto space-y-0">
               {dayJobs.length === 0 && !dragJob && (
-                <div className="h-full flex items-center justify-center">
+                <div className="h-full flex items-center justify-center min-h-[120px]">
                   <span className="text-[10px] text-muted-foreground/50">No jobs</span>
                 </div>
               )}
 
-              {/* "Move here" zone at the very top — only when actively dragging AND not dragging from this position */}
+              {/* "Move here" zone at the very top */}
               {dragJob && !dayJobs.some((j, i) => i === 0 && j.id === dragJob.id) && (
                 <div
                   className={cn(
@@ -625,6 +629,21 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                 const nextJob = dayJobs[idx + 1];
                 const showDropAfter = dragJob && dragJob.id !== job.id && (!nextJob || dragJob.id !== nextJob.id);
 
+                // Proportional height based on estimated_hours
+                const estHours = job.estimated_hours || 1;
+                const blockHeight = Math.max(MIN_BLOCK_PX, Math.round(estHours * HOUR_PX));
+
+                // Compute gap between this job and next for free-window visualization
+                let gapMinutes = 0;
+                if (!isLastCard && job.start_time && nextJob?.start_time) {
+                  const [h1, m1] = job.start_time.split(":").map(Number);
+                  const [h2, m2] = nextJob.start_time.split(":").map(Number);
+                  const jobEndMin = h1 * 60 + m1 + (estHours * 60);
+                  const nextStartMin = h2 * 60 + m2;
+                  gapMinutes = Math.max(0, nextStartMin - jobEndMin);
+                }
+                const gapHeight = gapMinutes > 0 ? Math.max(0, Math.round((gapMinutes / 60) * HOUR_PX)) : 0;
+
                 return (
                   <div key={`${job.id}-${dateStr}-${idx}`}>
                     <div
@@ -632,8 +651,9 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                       onDragStart={(e) => handleDragStart(e, job, dateStr)}
                       onDragEnd={handleDragEnd}
                       onClick={() => { if (!wasDragging.current && !isRescheduled) onJobClick?.(job); }}
+                      style={{ minHeight: `${blockHeight}px` }}
                       className={cn(
-                        "group rounded-md border px-2 py-1.5 transition-all select-none",
+                        "group rounded-md border px-2 py-1.5 transition-all select-none flex flex-col",
                         isRescheduled
                           ? "opacity-40 bg-muted/50 border-dashed border-muted-foreground/30 cursor-default line-through decoration-muted-foreground/40 pointer-events-none"
                           : cn(
@@ -644,11 +664,13 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                         isDragging && "opacity-30 scale-95",
                       )}
                     >
-                      <div className="flex items-start gap-1.5 pointer-events-none">
-                        {canDrag && (
-                          <GripVertical className="h-3.5 w-3.5 mt-0.5 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 cursor-grab" />
-                        )}
-                        <div className="min-w-0 flex-1">
+                      {/* Left accent bar */}
+                      <div className="flex gap-1.5 flex-1 pointer-events-none">
+                        <div className={cn("w-1 rounded-full shrink-0 self-stretch", STATUS_ACCENT[job.status] || STATUS_ACCENT.scheduled)} />
+                        <div className="min-w-0 flex-1 flex flex-col">
+                          {canDrag && (
+                            <GripVertical className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 self-end cursor-grab" />
+                          )}
                           <div className={cn("text-xs font-semibold truncate", STATUS_TEXT[job.status])}>
                             {job.title}
                           </div>
@@ -664,13 +686,13 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                                 {job.estimated_hours}h
                               </span>
                             )}
-                            {site && (
-                              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 truncate">
-                                <MapPin className="h-2.5 w-2.5 shrink-0" />
-                                <span className="truncate">{site.name}</span>
-                              </span>
-                            )}
                           </div>
+                          {site && (
+                            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 truncate mt-0.5">
+                              <MapPin className="h-2.5 w-2.5 shrink-0" />
+                              <span className="truncate">{site.name}</span>
+                            </span>
+                          )}
                           {assignments.filter((a) => a.job_id === job.id).length > 0 && (
                             <div className="flex flex-wrap gap-0.5 mt-1">
                               {assignments
@@ -689,17 +711,29 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                             </div>
                           )}
                           {isRescheduled ? (
-                            <span className="text-[9px] text-destructive/70 font-medium no-underline" style={{ textDecoration: 'none' }}>
+                            <span className="text-[9px] text-destructive/70 font-medium no-underline mt-auto" style={{ textDecoration: 'none' }}>
                               ↗ Rescheduled
                             </span>
                           ) : job.job_type === "recurring" ? (
-                            <span className="text-[9px] text-muted-foreground/60 italic">
+                            <span className="text-[9px] text-muted-foreground/60 italic mt-auto">
                               ↻ {job.recurring_interval}
                             </span>
                           ) : null}
                         </div>
                       </div>
                     </div>
+
+                    {/* Free window gap indicator */}
+                    {gapHeight > 8 && !dragJob && (
+                      <div
+                        className="mx-1 border-l-2 border-dashed border-muted-foreground/15 flex items-center pl-2"
+                        style={{ height: `${Math.min(gapHeight, 80)}px` }}
+                      >
+                        <span className="text-[9px] text-muted-foreground/40 font-mono">
+                          {gapMinutes >= 60 ? `${(gapMinutes / 60).toFixed(1)}h free` : `${gapMinutes}m free`}
+                        </span>
+                      </div>
+                    )}
 
                     {/* "Move here" zone BELOW this card */}
                     {showDropAfter && (
