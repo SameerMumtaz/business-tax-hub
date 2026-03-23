@@ -777,7 +777,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
                       draggable={editMode && job.status !== "completed" && job.status !== "cancelled"}
                       onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, job, dateStr); }}
                       onDragEnd={handleDragEnd}
-                      onClick={(e) => { e.stopPropagation(); onJobClick?.(job); }}
+                      onClick={(e) => { e.stopPropagation(); if (!wasDragging.current) onJobClick?.(job); }}
                       className={cn(
                         "rounded px-1 py-0 text-[9px] leading-tight truncate border cursor-pointer",
                         STATUS_BG[job.status]
