@@ -96,7 +96,7 @@ export default function CrewDashboardPage() {
 
       const { data: jobs } = await supabase
         .from("jobs")
-        .select("id, title, description, start_date, end_date, status, site_id")
+        .select("id, title, description, start_date, end_date, status, site_id, job_type, recurring_interval, recurring_end_date, estimated_hours")
         .in("id", jobIds)
         .in("status", ["scheduled", "in_progress"]);
 

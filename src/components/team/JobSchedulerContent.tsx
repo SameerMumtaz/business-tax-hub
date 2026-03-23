@@ -62,6 +62,7 @@ export default function JobSchedulerContent() {
   const [jobStart, setJobStart] = useState("");
   const [jobEnd, setJobEnd] = useState("");
   const [jobInterval, setJobInterval] = useState("");
+  const [jobRecurringEnd, setJobRecurringEnd] = useState("");
   const [jobDesc, setJobDesc] = useState("");
   const [jobStartTime, setJobStartTime] = useState("");
   const [jobEstHours, setJobEstHours] = useState("");
@@ -82,6 +83,7 @@ export default function JobSchedulerContent() {
   const [editJobStart, setEditJobStart] = useState("");
   const [editJobEnd, setEditJobEnd] = useState("");
   const [editJobInterval, setEditJobInterval] = useState("");
+  const [editJobRecurringEnd, setEditJobRecurringEnd] = useState("");
   const [editJobDesc, setEditJobDesc] = useState("");
   const [editJobStartTime, setEditJobStartTime] = useState("");
   const [editJobEstHours, setEditJobEstHours] = useState("");
@@ -206,7 +208,7 @@ export default function JobSchedulerContent() {
       title: jobTitle, site_id: jobSiteId, start_date: jobStart,
       end_date: jobEnd || null, status: "scheduled", job_type: jobType,
       recurring_interval: jobType === "recurring" ? jobInterval || null : null,
-      recurring_end_date: null, invoice_id: null, description: jobDesc || null,
+      recurring_end_date: jobType === "recurring" && jobRecurringEnd ? jobRecurringEnd : null, invoice_id: null, description: jobDesc || null,
       start_time: jobStartTime || null, estimated_hours: jobEstHours ? Number(jobEstHours) : null,
       client_id: jobClientId && jobClientId !== "none" ? jobClientId : null,
       price: Number(jobPrice) || 0,
@@ -233,6 +235,7 @@ export default function JobSchedulerContent() {
     setEditJobStart(j.start_date);
     setEditJobEnd(j.end_date || "");
     setEditJobInterval(j.recurring_interval || "");
+    setEditJobRecurringEnd(j.recurring_end_date || "");
     setEditJobDesc(j.description || "");
     setEditJobStartTime(j.start_time || "");
     setEditJobEstHours(j.estimated_hours != null ? String(j.estimated_hours) : "");
@@ -253,6 +256,7 @@ export default function JobSchedulerContent() {
       title: editJobTitle, site_id: editJobSiteId, start_date: editJobStart,
       end_date: editJobEnd || null, job_type: editJobType,
       recurring_interval: editJobType === "recurring" ? editJobInterval || null : null,
+      recurring_end_date: editJobType === "recurring" && editJobRecurringEnd ? editJobRecurringEnd : null,
       description: editJobDesc || null,
       start_time: editJobStartTime || null, estimated_hours: editJobEstHours ? Number(editJobEstHours) : null,
       client_id: editJobClientId && editJobClientId !== "none" ? editJobClientId : null,
@@ -370,14 +374,21 @@ export default function JobSchedulerContent() {
                 </div>
               </div>
               {jobType === "recurring" && (
-                <Select value={jobInterval} onValueChange={setJobInterval}>
-                  <SelectTrigger><SelectValue placeholder="Repeat interval" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="weekly">Weekly</SelectItem>
-                    <SelectItem value="biweekly">Biweekly</SelectItem>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                  </SelectContent>
-                </Select>
+                <>
+                  <Select value={jobInterval} onValueChange={setJobInterval}>
+                    <SelectTrigger><SelectValue placeholder="Repeat interval" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="biweekly">Biweekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Recurring End Date (optional)</label>
+                    <Input type="date" value={jobRecurringEnd} onChange={(e) => setJobRecurringEnd(e.target.value)} />
+                    <p className="text-xs text-muted-foreground mt-0.5">Leave blank to repeat indefinitely</p>
+                  </div>
+                </>
               )}
               <JobBudgetFields
                 price={jobPrice} materialBudget={jobMaterialBudget}
@@ -471,14 +482,21 @@ export default function JobSchedulerContent() {
               </div>
             </div>
             {editJobType === "recurring" && (
-              <Select value={editJobInterval} onValueChange={setEditJobInterval}>
-                <SelectTrigger><SelectValue placeholder="Repeat interval" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="biweekly">Biweekly</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                </SelectContent>
-              </Select>
+              <>
+                <Select value={editJobInterval} onValueChange={setEditJobInterval}>
+                  <SelectTrigger><SelectValue placeholder="Repeat interval" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="biweekly">Biweekly</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div>
+                  <label className="text-xs text-muted-foreground">Recurring End Date (optional)</label>
+                  <Input type="date" value={editJobRecurringEnd} onChange={(e) => setEditJobRecurringEnd(e.target.value)} />
+                  <p className="text-xs text-muted-foreground mt-0.5">Leave blank to repeat indefinitely</p>
+                </div>
+              </>
             )}
             <JobBudgetFields
               price={editJobPrice} materialBudget={editJobMaterialBudget}

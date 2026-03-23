@@ -12,6 +12,9 @@ export interface AssignedJob {
   start_date: string;
   end_date: string | null;
   status: string;
+  job_type?: string;
+  recurring_interval?: string | null;
+  recurring_end_date?: string | null;
   site: {
     id: string;
     name: string;
