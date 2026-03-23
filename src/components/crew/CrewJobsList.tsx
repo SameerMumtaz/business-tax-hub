@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { MapPin, Clock, LogIn, AlertTriangle, DollarSign, Navigation, CalendarOff, Camera } from "lucide-react";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 import { formatDateOnly, parseDateOnlyLocal } from "@/lib/dateOnly";
+import { getNextInstanceDate, isRecurringJobToday } from "@/lib/dateOnly";
 export interface AssignedJob {
   id: string;
   title: string;
@@ -58,19 +59,12 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
     return null;
   };
 
-  const isJobToday = (job: AssignedJob) => {
-    const now = Date.now();
-    const startMs = parseDateOnlyLocal(job.start_date).setHours(0,0,0,0);
-    const endDate = job.end_date ? parseDateOnlyLocal(job.end_date) : parseDateOnlyLocal(job.start_date);
-    const endMs = endDate.setHours(23,59,59,999);
-    return now >= startMs && now <= endMs;
-  };
-
   return (
     <div className="space-y-3">
       {jobs.map((job) => {
         const directionsUrl = getDirectionsUrl(job.site.latitude, job.site.longitude, job.site.address);
-        const todayJob = isJobToday(job);
+        const todayJob = isRecurringJobToday(job);
+        const displayDate = getNextInstanceDate(job);
         return (
           <Card key={job.id}>
             <CardContent className="pt-5 space-y-3">
@@ -89,7 +83,7 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
               <div className="flex flex-wrap gap-3 text-sm">
                 <div className="flex items-center gap-1.5 text-muted-foreground">
                   <Clock className="h-3.5 w-3.5" />
-                  <span>{formatDateOnly(job.start_date)}</span>
+                  <span>{formatDateOnly(displayDate)}{job.job_type === "recurring" && job.recurring_interval ? ` (${job.recurring_interval})` : ""}</span>
                 </div>
                 {job.expectedHours != null && (
                   <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -126,7 +120,7 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
                 {!activeCheckin && !todayJob && (
                   <div className="flex-1 flex items-center gap-2 text-xs text-muted-foreground bg-muted px-3 py-2 rounded-md">
                     <CalendarOff className="h-3.5 w-3.5" />
-                    Check-in available on {formatDateOnly(job.start_date)}
+                    Check-in available on {formatDateOnly(displayDate)}
                   </div>
                 )}
                 <Button
