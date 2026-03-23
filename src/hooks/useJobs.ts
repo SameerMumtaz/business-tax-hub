@@ -83,6 +83,20 @@ export function useJobs() {
     fetchAll();
   }, [fetchAll]);
 
+  // Realtime: auto-refresh when jobs change (e.g. crew check-in updates status)
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel("jobs_realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "jobs", filter: `user_id=eq.${user.id}` },
+        () => fetchAll()
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user, fetchAll]);
+
   const createSite = async (site: Omit<JobSite, "id" | "created_at" | "user_id">) => {
     if (!user) return;
     const { error } = await supabase.from("job_sites").insert({ ...site, user_id: user.id });

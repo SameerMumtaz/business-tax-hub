@@ -112,6 +112,14 @@ export function useCrewCheckins() {
       return null;
     }
 
+    // Update job status to in_progress
+    if (jobId) {
+      await supabase.rpc("update_job_status_on_checkin", {
+        _job_id: jobId,
+        _new_status: "in_progress",
+      });
+    }
+
     toast.success("Checked in successfully!");
     setActiveCheckin(data as CrewCheckin);
     return data;
@@ -219,6 +227,14 @@ export function useCrewCheckins() {
       } catch (err) {
         console.error("Failed to update total_paid:", err);
       }
+    }
+
+    // Update job status to completed
+    if (checkin.job_id) {
+      await supabase.rpc("update_job_status_on_checkin", {
+        _job_id: checkin.job_id,
+        _new_status: "completed",
+      });
     }
 
     if (flagReason) {
