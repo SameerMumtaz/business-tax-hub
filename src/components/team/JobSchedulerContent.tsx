@@ -83,6 +83,7 @@ export default function JobSchedulerContent() {
   const [editJobStart, setEditJobStart] = useState("");
   const [editJobEnd, setEditJobEnd] = useState("");
   const [editJobInterval, setEditJobInterval] = useState("");
+  const [editJobRecurringEnd, setEditJobRecurringEnd] = useState("");
   const [editJobDesc, setEditJobDesc] = useState("");
   const [editJobStartTime, setEditJobStartTime] = useState("");
   const [editJobEstHours, setEditJobEstHours] = useState("");

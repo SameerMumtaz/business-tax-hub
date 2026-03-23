@@ -107,20 +107,56 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
   const today = new Date();
   const todayStr = toDateStr(today.getFullYear(), today.getMonth(), today.getDate());
 
-  // Build date -> jobs map
+  // Build date -> jobs map (including recurring instances)
   const jobsByDate = new Map<string, Job[]>();
+
+  const addJobToDate = (dateStr: string, job: Job) => {
+    if (!jobsByDate.has(dateStr)) jobsByDate.set(dateStr, []);
+    jobsByDate.get(dateStr)!.push(job);
+  };
+
+  // Show up to 1 year of recurring instances
+  const recurringHorizon = new Date(year, month + 12, 0);
+
   for (const job of jobs) {
     if (job.status === "cancelled") continue;
+
     const start = parseLocalDate(job.start_date);
-    const end = job.end_date ? parseLocalDate(job.end_date) : start;
-    const cursor = new Date(start);
-    while (cursor <= end) {
-      if (cursor.getMonth() === month && cursor.getFullYear() === year) {
-        const key = toDateStr(cursor.getFullYear(), cursor.getMonth(), cursor.getDate());
-        if (!jobsByDate.has(key)) jobsByDate.set(key, []);
-        jobsByDate.get(key)!.push(job);
+
+    if (job.job_type === "recurring" && job.recurring_interval) {
+      // Generate recurring instances
+      const endDate = job.recurring_end_date
+        ? parseLocalDate(job.recurring_end_date)
+        : recurringHorizon;
+      const intervalDays = job.recurring_interval === "weekly" ? 7
+        : job.recurring_interval === "biweekly" ? 14
+        : 0; // monthly handled separately
+
+      const cursor = new Date(start);
+      while (cursor <= endDate) {
+        if (cursor.getMonth() === month && cursor.getFullYear() === year) {
+          const key = toDateStr(cursor.getFullYear(), cursor.getMonth(), cursor.getDate());
+          addJobToDate(key, job);
+        }
+        if (job.recurring_interval === "monthly") {
+          cursor.setMonth(cursor.getMonth() + 1);
+        } else if (intervalDays > 0) {
+          cursor.setDate(cursor.getDate() + intervalDays);
+        } else {
+          break;
+        }
       }
-      cursor.setDate(cursor.getDate() + 1);
+    } else {
+      // Non-recurring: span from start to end
+      const end = job.end_date ? parseLocalDate(job.end_date) : start;
+      const cursor = new Date(start);
+      while (cursor <= end) {
+        if (cursor.getMonth() === month && cursor.getFullYear() === year) {
+          const key = toDateStr(cursor.getFullYear(), cursor.getMonth(), cursor.getDate());
+          addJobToDate(key, job);
+        }
+        cursor.setDate(cursor.getDate() + 1);
+      }
     }
   }
 
