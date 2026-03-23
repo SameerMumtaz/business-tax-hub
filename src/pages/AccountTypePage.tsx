@@ -20,9 +20,10 @@ export default function AccountTypePage() {
 
   // Auto-select existing business and pre-fill Bookie ID from invite link
   useEffect(() => {
-    if (inviteCode) {
+    const code = inviteCode || sessionStorage.getItem("bookie_invite_code");
+    if (code) {
       setSelected("existing_business");
-      setBookieCode(inviteCode.toUpperCase());
+      setBookieCode(code.toUpperCase());
     }
   }, [inviteCode]);
 

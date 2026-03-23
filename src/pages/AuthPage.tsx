@@ -23,6 +23,8 @@ export default function AuthPage() {
   useEffect(() => {
     if (inviteCode) {
       setIsLogin(false);
+      // Persist invite code through email verification redirect
+      sessionStorage.setItem("bookie_invite_code", inviteCode);
     }
   }, [inviteCode]);
 
