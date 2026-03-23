@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { US_STATES, FILING_STATUS_LABELS, type FilingStatus } from "@/lib/taxCalc";
 import { toast } from "sonner";
 import { Save, UserCircle, Link2, Check, X } from "lucide-react";
+import DeleteAccountSection from "@/components/DeleteAccountSection";
 
 interface PersonalProfile {
   first_name: string;
