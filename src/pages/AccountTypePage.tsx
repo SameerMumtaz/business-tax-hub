@@ -18,6 +18,8 @@ export default function AccountTypePage() {
   const [searchParams] = useSearchParams();
   const inviteCode = searchParams.get("invite");
 
+  const [autoSubmitted, setAutoSubmitted] = useState(false);
+
   // Auto-select existing business and pre-fill Bookie ID from invite link
   useEffect(() => {
     const code = inviteCode || sessionStorage.getItem("bookie_invite_code");
@@ -26,6 +28,15 @@ export default function AccountTypePage() {
       setBookieCode(code.toUpperCase());
     }
   }, [inviteCode]);
+
+  // Auto-submit when invite code is present and user is ready
+  useEffect(() => {
+    const code = inviteCode || sessionStorage.getItem("bookie_invite_code");
+    if (code && user && selected === "existing_business" && bookieCode && !saving && !autoSubmitted) {
+      setAutoSubmitted(true);
+      handleContinue();
+    }
+  }, [selected, bookieCode, user, saving, autoSubmitted]);
 
   const handleContinue = async () => {
     if (!selected || !user) return;

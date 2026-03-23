@@ -251,6 +251,16 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Notify the business owner that an invite was sent
+    if (user.id !== business_user_id) {
+      await adminClient.from("notifications").insert({
+        user_id: business_user_id,
+        title: "Team invite sent",
+        message: `${name} (${email}) was invited as ${role} by a manager.`,
+        type: "team_invite",
+      });
+    }
+
     // Auto-create a contractor or employee record for the business owner
     if (worker_type === "W2") {
       await adminClient.from("employees").insert({
