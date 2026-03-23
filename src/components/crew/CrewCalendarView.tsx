@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, DollarSign, MapPin } from "lucide-react";
 import type { AssignedJob } from "./CrewJobsList";
-import { dateOnlyKeyFromLocalDate, formatDateOnlyLong, getJobDateKeysInRange } from "@/lib/dateOnly";
+import { addDaysToDateOnly, dateOnlyKeyFromLocalDate, formatDateOnlyLong, getJobDateKeysInRange, getTodayDateOnlyKey } from "@/lib/dateOnly";
 
 interface Props {
   jobs: AssignedJob[];
@@ -23,8 +23,11 @@ export default function CrewCalendarView({ jobs }: Props) {
 
   const toKey = (d: Date) => dateOnlyKeyFromLocalDate(d);
   const selectedDateKey = selectedDate ? toKey(selectedDate) : undefined;
-  const rangeStart = selectedDateKey ?? toKey(new Date());
-  const rangeEnd = `${rangeStart.slice(0, 4)}-12-31`;
+  const rangeStart = jobs.reduce((earliest, job) => (job.start_date < earliest ? job.start_date : earliest), getTodayDateOnlyKey());
+  const rangeEnd = jobs.reduce((latest, job) => {
+    const candidate = job.recurring_end_date ?? job.end_date ?? addDaysToDateOnly(job.start_date, 366);
+    return candidate > latest ? candidate : latest;
+  }, addDaysToDateOnly(getTodayDateOnlyKey(), 366));
 
   jobs.forEach((job) => {
     const keys = getJobDateKeysInRange(job, job.start_date, rangeEnd);
