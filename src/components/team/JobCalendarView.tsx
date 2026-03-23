@@ -868,5 +868,47 @@ export default function JobCalendarView({ jobs, sites, assignments = [], teamMem
         </div>
       </CardContent>
     </Card>
+
+    {/* Recurring move dialog */}
+    <Dialog open={recurringDialogOpen} onOpenChange={setRecurringDialogOpen}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Move Recurring Job</DialogTitle>
+          <DialogDescription>
+            "{pendingRecurringMove?.job.title}" is a {pendingRecurringMove?.job.recurring_interval} recurring job. How would you like to apply this change?
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
+          <Button
+            variant="outline"
+            className="justify-start gap-2 h-auto py-3"
+            onClick={() => handleRecurringChoice("this")}
+          >
+            <Copy className="h-4 w-4 shrink-0" />
+            <div className="text-left">
+              <div className="font-medium text-sm">This instance only</div>
+              <div className="text-xs text-muted-foreground">Creates a one-time copy for the new date. The recurring schedule stays unchanged.</div>
+            </div>
+          </Button>
+          <Button
+            variant="outline"
+            className="justify-start gap-2 h-auto py-3"
+            onClick={() => handleRecurringChoice("all")}
+          >
+            <RefreshCw className="h-4 w-4 shrink-0" />
+            <div className="text-left">
+              <div className="font-medium text-sm">All future instances</div>
+              <div className="text-xs text-muted-foreground">Updates the recurring job's start date. All future occurrences will shift.</div>
+            </div>
+          </Button>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => { setRecurringDialogOpen(false); setPendingRecurringMove(null); }}>
+            Cancel
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
