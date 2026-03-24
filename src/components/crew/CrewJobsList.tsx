@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { MapPin, Clock, LogIn, AlertTriangle, DollarSign, Navigation, CalendarOff, Camera } from "lucide-react";
+import { Camera, Upload, Trash2, ImagePlus, Loader2, MapPin, Clock, LogIn, AlertTriangle, DollarSign, Navigation, CalendarOff, CheckCircle } from "lucide-react";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 import { formatDateOnly, getNextInstanceDate, isRecurringJobToday } from "@/lib/dateOnly";
 export interface AssignedJob {
