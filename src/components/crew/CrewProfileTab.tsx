@@ -10,6 +10,7 @@ import { Save, UserCircle } from "lucide-react";
 import { toast } from "sonner";
 import SetPasswordCard from "@/components/SetPasswordCard";
 import DeleteAccountSection from "@/components/DeleteAccountSection";
+import LinkToBusinessCard from "@/components/LinkToBusinessCard";
 
 interface PersonalFields {
   first_name: string;
@@ -248,6 +249,7 @@ export default function CrewProfileTab() {
       </CardContent>
     </Card>
 
+    <LinkToBusinessCard />
     <SetPasswordCard />
     <DeleteAccountSection variant="business" />
     </>

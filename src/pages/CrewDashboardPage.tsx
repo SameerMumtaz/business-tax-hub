@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { CheckCircle, Clock, LogOut, List, CalendarDays, MapPin as MapIcon, LogOut as SignOutIcon, UserCircle, AlertTriangle, Camera, Briefcase, DollarSign, Timer } from "lucide-react";
 import { toast } from "sonner";
-import LinkToBusinessCard from "@/components/LinkToBusinessCard";
+
 import CrewJobsList, { type AssignedJob } from "@/components/crew/CrewJobsList";
 import CrewCalendarView from "@/components/crew/CrewCalendarView";
 import CrewMapView from "@/components/crew/CrewMapView";
@@ -284,7 +284,7 @@ export default function CrewDashboardPage() {
           </Button>
         </div>
 
-        <LinkToBusinessCard />
+        
 
         {/* Quick Stats */}
         {!loading && (
