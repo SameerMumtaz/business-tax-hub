@@ -263,43 +263,13 @@ export default function CrewMapContent() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader><CardTitle>All Check-ins</CardTitle></CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Crew Member</TableHead>
-                <TableHead>Site</TableHead>
-                <TableHead>Check In</TableHead>
-                <TableHead>Check Out</TableHead>
-                <TableHead>Hours</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {checkins.slice(0, 50).map((c) => {
-                const member = memberMap.get(c.team_member_id);
-                const site = c.job_site_id ? siteMap.get(c.job_site_id) : null;
-                return (
-                  <TableRow key={c.id}>
-                    <TableCell className="font-medium">{member?.name || "Unknown"}</TableCell>
-                    <TableCell>{site?.name || "—"}</TableCell>
-                    <TableCell className="text-sm">{new Date(c.check_in_time).toLocaleString()}</TableCell>
-                    <TableCell className="text-sm">{c.check_out_time ? new Date(c.check_out_time).toLocaleString() : "—"}</TableCell>
-                    <TableCell>{c.total_hours > 0 ? `${c.total_hours.toFixed(1)}h` : "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant={c.status === "checked_in" ? "default" : "secondary"}>
-                        {c.status === "checked_in" ? "On-Site" : "Completed"}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <AllCheckinsTable
+        checkins={checkins}
+        members={members}
+        sites={sites}
+        jobs={jobs}
+        photos={photos}
+      />
     </div>
   );
 }
