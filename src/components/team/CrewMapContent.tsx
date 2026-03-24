@@ -108,16 +108,22 @@ export default function CrewMapContent() {
   const [members, setMembers] = useState<TeamMemberInfo[]>([]);
   const [sites, setSites] = useState<SiteInfo[]>([]);
   const [filterSite, setFilterSite] = useState<string>("all");
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
 
   useEffect(() => {
     if (!user) return;
     const fetchData = async () => {
-      const [memRes, sitesRes] = await Promise.all([
+      const [memRes, sitesRes, jobsRes, assignRes] = await Promise.all([
         supabase.from("team_members").select("id, name, email, role").eq("business_user_id", user.id),
         supabase.from("job_sites").select("id, name, latitude, longitude, address").eq("user_id", user.id),
+        supabase.from("jobs").select("id, title, start_date, end_date, start_time, estimated_hours, job_type, status, recurring_interval, recurring_end_date").eq("user_id", user.id).neq("status", "cancelled"),
+        supabase.from("job_assignments").select("job_id, worker_id, worker_name"),
       ]);
       if (memRes.data) setMembers(memRes.data as TeamMemberInfo[]);
       if (sitesRes.data) setSites(sitesRes.data as SiteInfo[]);
+      if (jobsRes.data) setJobs(jobsRes.data);
+      if (assignRes.data) setAssignments(assignRes.data);
     };
     fetchData();
   }, [user]);
