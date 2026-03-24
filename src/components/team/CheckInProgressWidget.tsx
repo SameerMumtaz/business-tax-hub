@@ -99,8 +99,9 @@ export default function CheckInProgressWidget({ jobs, assignments, checkins }: P
     let totalExpectedToday = 0; // Total workers expected today
     let completedJobs = 0;
     let inProgressJobs = 0;
-    let notStartedPastDue = 0;
+    let notStartedPastDue = 0; // count of past-due WORKERS, not jobs
     let upcomingJobs = 0;
+    let pastDueJobCount = 0;
     
     const jobDetails: {
       id: string;
@@ -134,7 +135,8 @@ export default function CheckInProgressWidget({ jobs, assignments, checkins }: P
         expectedCheckins += job.assignedWorkers;
       } else if (jobHasStarted && jobCheckins.length === 0) {
         jobStatus = "missed";
-        notStartedPastDue++;
+        notStartedPastDue += job.assignedWorkers;
+        pastDueJobCount++;
         expectedCheckins += job.assignedWorkers;
       } else if (!jobHasStarted) {
         jobStatus = "upcoming";
@@ -164,6 +166,7 @@ export default function CheckInProgressWidget({ jobs, assignments, checkins }: P
       completedJobs,
       inProgressJobs,
       notStartedPastDue,
+      pastDueJobCount,
       upcomingJobs,
       jobDetails,
     };
@@ -221,7 +224,7 @@ export default function CheckInProgressWidget({ jobs, assignments, checkins }: P
           {analysis.notStartedPastDue > 0 && (
             <Badge variant="secondary" className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 gap-1">
               <AlertTriangle className="h-3 w-3" />
-              {analysis.notStartedPastDue} past due
+              {analysis.notStartedPastDue} past due check-in{analysis.notStartedPastDue !== 1 ? "s" : ""}
             </Badge>
           )}
           {analysis.upcomingJobs > 0 && (
