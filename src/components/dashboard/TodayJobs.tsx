@@ -68,7 +68,6 @@ export default function TodayJobs() {
           const start = j.start_date?.slice(0, 10);
           if (!start) return false;
 
-          // Recurring jobs: check if today is an instance
           if (j.job_type === "recurring" && j.recurring_interval) {
             const instances = getJobDateKeysInRange(j as any, todayStr, todayStr);
             return instances.includes(todayStr);
@@ -78,8 +77,21 @@ export default function TodayJobs() {
           if (end) return start <= todayStr && end >= todayStr;
           return start === todayStr;
         })
-        .sort((a, b) => (a.start_time || "00:00").localeCompare(b.start_time || "00:00")),
-    [jobs, todayStr]
+        .sort((a, b) => {
+          const statusA = activeJobIds.has(a.id) ? "in_progress" : completedJobIds.has(a.id) ? "completed" : a.status;
+          const statusB = activeJobIds.has(b.id) ? "in_progress" : completedJobIds.has(b.id) ? "completed" : b.status;
+          const isCompA = statusA === "completed" ? 1 : 0;
+          const isCompB = statusB === "completed" ? 1 : 0;
+          if (isCompA !== isCompB) return isCompA - isCompB;
+          // Among non-completed: in_progress first, then nearest start time
+          if (!isCompA) {
+            const isActiveA = statusA === "in_progress" ? 0 : 1;
+            const isActiveB = statusB === "in_progress" ? 0 : 1;
+            if (isActiveA !== isActiveB) return isActiveA - isActiveB;
+          }
+          return (a.start_time || "00:00").localeCompare(b.start_time || "00:00");
+        }),
+    [jobs, todayStr, activeJobIds, completedJobIds]
   );
 
   const getEffectiveStatus = (job: typeof todayJobs[0]): string => {
