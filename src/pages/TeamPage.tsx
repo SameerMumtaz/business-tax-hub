@@ -18,7 +18,7 @@ export default function TeamPage() {
 
   useEffect(() => {
     const p = new URLSearchParams(location.search);
-    const t = p.get("tab") || "members";
+    const t = p.get("tab") || "supervisor";
     setTab(t);
   }, [location.search]);
 
