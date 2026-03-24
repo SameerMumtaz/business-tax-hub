@@ -90,17 +90,24 @@ export default function CrewAssignmentPanel({
     return conflicts;
   }, [job, assignments, allJobs, teamMembers]);
 
-  const totalAssignedHours = jobAssignments.reduce((s, a) => s + (a.assigned_hours || 0), 0);
+  // W-2 (salaried) workers don't count toward labor budget
+  const isW2 = (workerType: string) => workerType === "W2";
+
+  const totalAssignedHours = jobAssignments
+    .filter(a => !isW2(a.worker_type))
+    .reduce((s, a) => s + (a.assigned_hours || 0), 0);
   const laborBudgetHrs = job.labor_budget_type === "hours"
     ? job.labor_budget_hours
     : (job.labor_budget_amount > 0 ? job.labor_budget_amount : 0);
   const isHoursMode = job.labor_budget_type === "hours";
 
-  const assignedDollars = jobAssignments.reduce((s, a) => {
-    const member = teamMembers.find((m) => m.id === a.worker_id);
-    const rate = member?.pay_rate || 0;
-    return s + (a.assigned_hours || 0) * rate;
-  }, 0);
+  const assignedDollars = jobAssignments
+    .filter(a => !isW2(a.worker_type))
+    .reduce((s, a) => {
+      const member = teamMembers.find((m) => m.id === a.worker_id);
+      const rate = member?.pay_rate || 0;
+      return s + (a.assigned_hours || 0) * rate;
+    }, 0);
 
   const budgetDollars = isHoursMode
     ? job.labor_budget_hours * job.labor_budget_rate
@@ -169,18 +176,20 @@ export default function CrewAssignmentPanel({
           {jobAssignments.map((a) => {
             const member = teamMembers.find((m) => m.id === a.worker_id);
             const rate = member?.pay_rate || 0;
-            const cost = (a.assigned_hours || 0) * rate;
+            const w2 = isW2(a.worker_type);
+            const cost = w2 ? 0 : (a.assigned_hours || 0) * rate;
             return (
               <div key={a.id} className="flex items-center justify-between rounded-md border px-2.5 py-1.5 text-sm">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="font-medium truncate">{a.worker_name}</span>
                   <Badge variant="outline" className="text-[10px] shrink-0">{a.worker_type}</Badge>
+                  {w2 && <Badge variant="secondary" className="text-[10px] shrink-0">Salaried</Badge>}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="text-xs text-muted-foreground font-mono flex items-center gap-1">
                     <Clock className="h-3 w-3" />
                     {a.assigned_hours}h
-                    {rate > 0 && ` · $${cost.toFixed(0)}`}
+                    {!w2 && rate > 0 && ` · $${cost.toFixed(0)}`}
                   </span>
                   <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onRemove(a.id)}>
                     <X className="h-3 w-3" />
@@ -207,10 +216,11 @@ export default function CrewAssignmentPanel({
               ) : (
                 availableWorkers.map((m) => {
                   const conflicts = workerConflicts.get(m.id);
+                  const w2 = isW2(m.worker_type);
                   return (
                     <SelectItem key={m.id} value={m.id}>
                       <span className={cn(conflicts && "text-destructive")}>
-                        {m.name} ({m.worker_type}){m.pay_rate ? ` · $${m.pay_rate}/hr` : ""}
+                        {m.name} ({m.worker_type}){!w2 && m.pay_rate ? ` · $${m.pay_rate}/hr` : ""}{w2 ? " · Salaried" : ""}
                         {conflicts ? ` ⚠ ${conflicts.length} conflict${conflicts.length > 1 ? "s" : ""}` : ""}
                       </span>
                     </SelectItem>
@@ -253,6 +263,7 @@ export default function CrewAssignmentPanel({
           {/* Over-budget warning */}
           {selectedWorker && hours && hasBudget && !hasConflict && (() => {
             const worker = teamMembers.find((m) => m.id === selectedWorker);
+            if (worker && isW2(worker.worker_type)) return null; // W-2 doesn't affect budget
             const newHrs = totalAssignedHours + Number(hours);
             const newCost = assignedDollars + Number(hours) * (worker?.pay_rate || 0);
             const wouldExceed = isHoursMode ? newHrs > laborBudgetHrs : newCost > budgetDollars;
