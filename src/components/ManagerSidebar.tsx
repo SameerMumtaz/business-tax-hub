@@ -28,6 +28,7 @@ export default function ManagerSidebar() {
 
   const isActive = (to: string) => {
     if (to.includes("?")) return currentFull === to || currentFull.startsWith(to + "&");
+    if (to === "/team") return location.pathname === "/team" && !location.search;
     return location.pathname === to && !location.search;
   };
 
