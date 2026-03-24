@@ -6,11 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MapPin, Download, Users, Clock } from "lucide-react";
 import CheckInProgressWidget from "./CheckInProgressWidget";
 import TodayScheduledVsActual from "./TodayScheduledVsActual";
 import TodayJobs from "@/components/dashboard/TodayJobs";
+import AllCheckinsTable from "./AllCheckinsTable";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -35,7 +35,8 @@ const siteIcon = new L.Icon({
 });
 
 interface TeamMemberInfo { id: string; name: string; email: string; role: string; }
-interface SiteInfo { id: string; name: string; latitude: number | null; longitude: number | null; address: string | null; }
+interface SiteInfo { id: string; name: string; latitude: number | null; longitude: number | null; address: string | null; geofence_radius: number | null; }
+interface PhotoInfo { id: string; job_id: string; photo_url: string; photo_type: string; occurrence_date: string | null; }
 
 function LiveElapsed({ since }: { since: string }) {
   const [elapsed, setElapsed] = useState("");
