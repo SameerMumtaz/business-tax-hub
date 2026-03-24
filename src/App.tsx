@@ -42,6 +42,7 @@ import PublicQuotePage from "./pages/PublicQuotePage";
 import PublicInvoicePage from "./pages/PublicInvoicePage";
 import PublicBookingPage from "./pages/PublicBookingPage";
 import BookingSettingsPage from "./pages/BookingSettingsPage";
+import ServicesPage from "./pages/ServicesPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -82,6 +83,7 @@ const App = () => (
             <Route path="/jobs" element={<ProtectedRoute><JobSchedulerPage /></ProtectedRoute>} />
             <Route path="/timesheets" element={<ProtectedRoute><TimesheetsPage /></ProtectedRoute>} />
             <Route path="/team" element={<ProtectedRoute><TeamPage /></ProtectedRoute>} />
+            <Route path="/services" element={<ProtectedRoute><ServicesPage /></ProtectedRoute>} />
             <Route path="/crew-map" element={<ProtectedRoute><CrewMapPage /></ProtectedRoute>} />
 
             {/* Crew routes */}
