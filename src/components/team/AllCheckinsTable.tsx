@@ -148,7 +148,40 @@ export default function AllCheckinsTable({ checkins, members, sites, jobs, photo
     <>
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle>All Check-ins</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <CalendarDays className="h-5 w-5" />
+              Check-Ins
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Select value={dateRange} onValueChange={(v) => { setDateRange(v as DateRange); setPage(0); }}>
+                <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="week">This Week</SelectItem>
+                  <SelectItem value="month">This Month</SelectItem>
+                  <SelectItem value="custom">Custom Range</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {dateRange === "custom" && (
+            <div className="flex items-center gap-2 pt-1">
+              <Input
+                type="date"
+                value={customFrom}
+                onChange={(e) => { setCustomFrom(e.target.value); setPage(0); }}
+                className="h-9 w-[150px]"
+              />
+              <span className="text-xs text-muted-foreground">to</span>
+              <Input
+                type="date"
+                value={customTo}
+                onChange={(e) => { setCustomTo(e.target.value); setPage(0); }}
+                className="h-9 w-[150px]"
+              />
+            </div>
+          )}
           <div className="flex flex-wrap gap-2 pt-2">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
