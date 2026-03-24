@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { MapPin, Clock, LogIn, AlertTriangle, DollarSign, Navigation, CalendarOff, Camera } from "lucide-react";
+import { Camera, Upload, Trash2, ImagePlus, Loader2, MapPin, Clock, LogIn, AlertTriangle, DollarSign, Navigation, CalendarOff, CheckCircle } from "lucide-react";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 import { formatDateOnly, getNextInstanceDate, isRecurringJobToday } from "@/lib/dateOnly";
 export interface AssignedJob {
@@ -76,7 +76,7 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
                     {job.site.address && ` — ${job.site.address}`}
                   </div>
                 </div>
-                <Badge variant="secondary">{job.status}</Badge>
+                <Badge variant={job.status === "completed" ? "default" : "secondary"} className={job.status === "completed" ? "bg-emerald-600 text-white" : ""}>{job.status}</Badge>
               </div>
 
               <div className="flex flex-wrap gap-3 text-sm">
@@ -106,7 +106,13 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
               )}
 
               <div className="flex gap-2">
-                {!activeCheckin && todayJob && (
+                {job.status === "completed" && job.job_type !== "recurring" && (
+                  <div className="flex-1 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 rounded-md">
+                    <CheckCircle className="h-3.5 w-3.5" />
+                    Job completed
+                  </div>
+                )}
+                {!(job.status === "completed" && job.job_type !== "recurring") && !activeCheckin && todayJob && (
                   <Button
                     className="flex-1"
                     onClick={() => onCheckIn(job)}
@@ -116,7 +122,7 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
                     {gpsLoading === job.id ? "Getting location…" : "Check In"}
                   </Button>
                 )}
-                {!activeCheckin && !todayJob && (
+                {!(job.status === "completed" && job.job_type !== "recurring") && !activeCheckin && !todayJob && (
                   <div className="flex-1 flex items-center gap-2 text-xs text-muted-foreground bg-muted px-3 py-2 rounded-md">
                     <CalendarOff className="h-3.5 w-3.5" />
                     Check-in available on {formatDateOnly(displayDate)}
