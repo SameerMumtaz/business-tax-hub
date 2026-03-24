@@ -306,6 +306,8 @@ export default function ScheduledVsActualWidget({ jobs, assignments, checkins, m
                     {/* Mini daily breakdown */}
                     <div className="grid grid-cols-7 gap-1">
                       {dayLabels.map((label, i) => {
+                        const dayDateStr = formatDateStr(weekDays[i]);
+                        const isFuture = dayDateStr > todayStr;
                         const sched = worker.scheduledByDay[i];
                         const actual = worker.actualByDay[i];
                         const dayVar = actual - sched;
@@ -314,7 +316,9 @@ export default function ScheduledVsActualWidget({ jobs, assignments, checkins, m
                         return (
                           <div key={label} className="text-center">
                             <div className="text-[10px] text-muted-foreground mb-0.5">{label}</div>
-                            {hasData ? (
+                            {isFuture ? (
+                              <div className="text-[10px] text-muted-foreground/40">—</div>
+                            ) : hasData ? (
                               <div className={cn(
                                 "text-xs font-mono rounded px-1 py-0.5",
                                 dayVar > 0.25 && "bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400",
