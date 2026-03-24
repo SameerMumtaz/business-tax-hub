@@ -178,6 +178,8 @@ interface CalendarJob extends Job {
   _rescheduled?: boolean;
   _instanceDate?: string;
   _displayStatus?: string;
+  _isMultiDayContinuation?: boolean;
+  _multiDayInfo?: { dayIndex: number; totalDays: number };
 }
 
 function getOccurrenceStatus(job: Job, dateStr: string, checkins: CrewCheckinOccurrence[]) {
@@ -220,13 +222,22 @@ function buildJobsByDate(jobs: Job[], checkins: CrewCheckinOccurrence[], rangeSt
       }
     } else {
       const end = job.end_date ? parseLocalDate(job.end_date) : start;
+      const totalDays = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
       const cursor = new Date(start);
+      let dayIndex = 0;
       while (cursor <= end) {
         if (cursor >= rangeStart && cursor <= rangeEnd) {
           const dateStr = toDateStr(cursor);
-          add(dateStr, { ...job, _instanceDate: dateStr, _displayStatus: job.status });
+          add(dateStr, {
+            ...job,
+            _instanceDate: dateStr,
+            _displayStatus: job.status,
+            _isMultiDayContinuation: dayIndex > 0,
+            _multiDayInfo: totalDays > 1 ? { dayIndex, totalDays } : undefined,
+          });
         }
         cursor.setDate(cursor.getDate() + 1);
+        dayIndex++;
       }
     }
   }
