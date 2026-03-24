@@ -5,6 +5,7 @@ import { useTeamRole } from "@/hooks/useTeamRole";
 import { useCrewCheckins } from "@/hooks/useCrewCheckins";
 import { useGeofenceMonitor } from "@/hooks/useGeofenceMonitor";
 import { useJobPhotos } from "@/hooks/useJobPhotos";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { getCurrentPosition, isWithinGeofence, haversineDistance } from "@/lib/geofence";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,15 +68,17 @@ function ElapsedProgress({ since, expectedHours }: { since: string; expectedHour
 }
 
 /* ── Greeting helper ────────────────────────────────── */
-function getGreeting(): string {
+function useGreeting(): string {
+  const { t } = useLanguage();
   const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 17) return "Good afternoon";
-  return "Good evening";
+  if (h < 12) return t("greeting.morning");
+  if (h < 17) return t("greeting.afternoon");
+  return t("greeting.evening");
 }
 
 /* ── Quick Stats Strip ──────────────────────────────── */
 function QuickStats({ checkins, payRate, jobs }: { checkins: any[]; payRate: number | null; jobs: AssignedJob[] }) {
+  const { t } = useLanguage();
   const today = getTodayDateOnlyKey();
   const dayOfWeek = parseDateOnlyLocal(today).getDay();
   const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
@@ -91,9 +94,9 @@ function QuickStats({ checkins, payRate, jobs }: { checkins: any[]; payRate: num
   const todayJobCount = jobs.filter((j) => getNextInstanceDate(j) === today && j.status !== "completed").length;
 
   const stats = [
-    { label: "Today", value: `${todayJobCount} job${todayJobCount !== 1 ? "s" : ""}`, icon: Briefcase },
-    { label: "This Week", value: `${weekHours.toFixed(1)}h`, icon: Clock },
-    ...(payRate ? [{ label: "Earned", value: `$${weekEarnings.toFixed(0)}`, icon: DollarSign }] : []),
+    { label: t("stats.today"), value: `${todayJobCount} ${todayJobCount !== 1 ? t("jobs.jobPlural") : t("jobs.job")}`, icon: Briefcase },
+    { label: t("stats.thisWeek"), value: `${weekHours.toFixed(1)}h`, icon: Clock },
+    ...(payRate ? [{ label: t("stats.earned"), value: `$${weekEarnings.toFixed(0)}`, icon: DollarSign }] : []),
   ];
 
   return (
@@ -115,6 +118,8 @@ function QuickStats({ checkins, payRate, jobs }: { checkins: any[]; payRate: num
 export default function CrewDashboardPage() {
   const { user, signOut } = useAuth();
   const { teamMemberId, businessUserId } = useTeamRole();
+  const { t } = useLanguage();
+  const greeting = useGreeting();
   const { checkins, activeCheckin, checkIn, checkOut, refetch } = useCrewCheckins();
   const [assignedJobs, setAssignedJobs] = useState<AssignedJob[]>([]);
   const [loading, setLoading] = useState(true);
