@@ -224,7 +224,7 @@ export default function CheckInProgressWidget({ jobs, assignments, checkins }: P
           {analysis.notStartedPastDue > 0 && (
             <Badge variant="secondary" className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 gap-1">
               <AlertTriangle className="h-3 w-3" />
-              {analysis.notStartedPastDue} past due
+              {analysis.notStartedPastDue} past due check-in{analysis.notStartedPastDue !== 1 ? "s" : ""}
             </Badge>
           )}
           {analysis.upcomingJobs > 0 && (
