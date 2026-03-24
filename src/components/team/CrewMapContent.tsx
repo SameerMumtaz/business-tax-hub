@@ -114,20 +114,23 @@ export default function CrewMapContent() {
   const [filterSite, setFilterSite] = useState<string>("all");
   const [jobs, setJobs] = useState<any[]>([]);
   const [assignments, setAssignments] = useState<any[]>([]);
+  const [photos, setPhotos] = useState<PhotoInfo[]>([]);
 
   useEffect(() => {
     if (!user) return;
     const fetchData = async () => {
-      const [memRes, sitesRes, jobsRes, assignRes] = await Promise.all([
+      const [memRes, sitesRes, jobsRes, assignRes, photosRes] = await Promise.all([
         supabase.from("team_members").select("id, name, email, role").eq("business_user_id", user.id),
-        supabase.from("job_sites").select("id, name, latitude, longitude, address").eq("user_id", user.id),
+        supabase.from("job_sites").select("id, name, latitude, longitude, address, geofence_radius").eq("user_id", user.id),
         supabase.from("jobs").select("id, title, start_date, end_date, start_time, estimated_hours, job_type, status, recurring_interval, recurring_end_date").eq("user_id", user.id).neq("status", "cancelled"),
         supabase.from("job_assignments").select("job_id, worker_id, worker_name, worker_type, hours_per_day, assigned_days"),
+        supabase.from("job_photos").select("id, job_id, photo_url, photo_type, occurrence_date"),
       ]);
       if (memRes.data) setMembers(memRes.data as TeamMemberInfo[]);
       if (sitesRes.data) setSites(sitesRes.data as SiteInfo[]);
       if (jobsRes.data) setJobs(jobsRes.data);
       if (assignRes.data) setAssignments(assignRes.data);
+      if (photosRes.data) setPhotos(photosRes.data as PhotoInfo[]);
     };
     fetchData();
   }, [user]);
