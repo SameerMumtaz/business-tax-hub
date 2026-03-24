@@ -1056,7 +1056,7 @@ export default function TimesheetsContent() {
                             })}
                             <TableCell className="text-right font-bold font-mono">{totalHours}</TableCell>
                             <TableCell className="text-right font-mono text-xs">
-                              {tsEntries.reduce((s, e) => s + e.overtime_hours, 0) || "–"}
+                              {otAwareOT > 0 ? otAwareOT.toFixed(1) : "–"}
                             </TableCell>
                             <TableCell className="text-right font-bold font-mono">{formatCurrency(totalPay)}</TableCell>
                             {isDraft && <TableCell />}
