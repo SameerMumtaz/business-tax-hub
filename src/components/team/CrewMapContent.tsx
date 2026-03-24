@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MapPin, Download, Users, Clock } from "lucide-react";
+import CheckInProgressWidget from "./CheckInProgressWidget";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
