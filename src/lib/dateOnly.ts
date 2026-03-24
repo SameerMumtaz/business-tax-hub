@@ -124,7 +124,8 @@ export function getJobDateKeysInRange(
 
 /**
  * For a recurring job, find the nearest instance date (today or next upcoming).
- * For one-time jobs, returns the start_date as-is.
+ * For one-time multi-day jobs, returns today if within the date range.
+ * For one-time single-day jobs, returns the start_date.
  */
 export function getNextInstanceDate(job: {
   start_date: string;
@@ -133,11 +134,18 @@ export function getNextInstanceDate(job: {
   recurring_interval?: string | null;
   recurring_end_date?: string | null;
 }): string {
+  const todayKey = getTodayDateOnlyKey();
+
+  // One-time jobs: if multi-day and today is within range, return today
   if (job.job_type !== "recurring" || !job.recurring_interval) {
+    const end = job.end_date ?? job.start_date;
+    if (compareDateOnly(todayKey, job.start_date) >= 0 && compareDateOnly(todayKey, end) <= 0) {
+      return todayKey;
+    }
     return job.start_date;
   }
 
-  const todayKey = getTodayDateOnlyKey();
+  // Recurring jobs: find nearest instance date
   const horizon = job.recurring_end_date ?? addDaysToDateOnly(todayKey, 366);
   let cursor = job.start_date;
 
