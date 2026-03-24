@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import { useJobs } from "@/hooks/useJobs";
-import { MapPin, Calendar, Clock, AlertTriangle } from "lucide-react";
+import { useCrewCheckins } from "@/hooks/useCrewCheckins";
+import { MapPin, Calendar, Clock, AlertTriangle, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getTodayDateOnlyKey, getJobDateKeysInRange } from "@/lib/dateOnly";
 
 const STATUS_COLORS: Record<string, string> = {
   scheduled: "bg-chart-info",
@@ -19,8 +21,9 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function TodayJobs() {
   const { jobs, sites } = useJobs();
+  const { checkins } = useCrewCheckins();
 
-  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const todayStr = useMemo(() => getTodayDateOnlyKey(), []);
   const currentMinutes = useMemo(() => {
     const now = new Date();
     return now.getHours() * 60 + now.getMinutes();
@@ -32,13 +35,46 @@ export default function TodayJobs() {
     return m;
   }, [sites]);
 
+  // Build a set of job IDs that have active check-ins today
+  const activeJobIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of checkins) {
+      if (!c.job_id) continue;
+      const checkinDate = c.occurrence_date || new Date(c.check_in_time).toISOString().split("T")[0];
+      if (checkinDate === todayStr && !c.check_out_time) {
+        set.add(c.job_id);
+      }
+    }
+    return set;
+  }, [checkins, todayStr]);
+
+  const completedJobIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of checkins) {
+      if (!c.job_id) continue;
+      const checkinDate = c.occurrence_date || new Date(c.check_in_time).toISOString().split("T")[0];
+      if (checkinDate === todayStr && c.check_out_time) {
+        set.add(c.job_id);
+      }
+    }
+    return set;
+  }, [checkins, todayStr]);
+
   const todayJobs = useMemo(
     () =>
       jobs
         .filter((j) => {
+          if (j.status === "cancelled") return false;
           const start = j.start_date?.slice(0, 10);
-          const end = j.end_date?.slice(0, 10);
           if (!start) return false;
+
+          // Recurring jobs: check if today is an instance
+          if (j.job_type === "recurring" && j.recurring_interval) {
+            const instances = getJobDateKeysInRange(j as any, todayStr, todayStr);
+            return instances.includes(todayStr);
+          }
+
+          const end = j.end_date?.slice(0, 10);
           if (end) return start <= todayStr && end >= todayStr;
           return start === todayStr;
         })
@@ -46,8 +82,16 @@ export default function TodayJobs() {
     [jobs, todayStr]
   );
 
+  const getEffectiveStatus = (job: typeof todayJobs[0]): string => {
+    // For recurring jobs, DB status stays "scheduled" — derive from checkins
+    if (activeJobIds.has(job.id)) return "in_progress";
+    if (completedJobIds.has(job.id) && !activeJobIds.has(job.id)) return "completed";
+    return job.status;
+  };
+
   const isPastDue = (job: typeof todayJobs[0]) => {
-    if (job.status !== "scheduled") return false;
+    const effectiveStatus = getEffectiveStatus(job);
+    if (effectiveStatus !== "scheduled") return false;
     if (!job.start_time) return false;
     const [h, m] = job.start_time.split(":").map(Number);
     return currentMinutes > h * 60 + (m || 0);
@@ -70,24 +114,39 @@ export default function TodayJobs() {
           <p className="text-sm text-muted-foreground text-center py-6">No jobs scheduled today</p>
         )}
         {todayJobs.map((j) => {
+          const effectiveStatus = getEffectiveStatus(j);
           const pastDue = isPastDue(j);
+          const isInProgress = effectiveStatus === "in_progress";
+          const isCompleted = effectiveStatus === "completed";
           return (
             <div
               key={j.id}
               className={cn(
                 "flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition-colors",
-                pastDue && "border-destructive/40 bg-destructive/5"
+                pastDue && "border-destructive/40 bg-destructive/5",
+                isInProgress && "border-blue-400/40 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-500/30",
+                isCompleted && "border-emerald-400/40 bg-emerald-50 dark:bg-emerald-900/10 dark:border-emerald-500/30",
               )}
             >
               <div className={cn(
                 "w-2 h-2 rounded-full shrink-0",
-                pastDue ? "bg-destructive animate-pulse" : (STATUS_COLORS[j.status] || "bg-muted-foreground")
+                pastDue ? "bg-destructive animate-pulse" :
+                isInProgress ? "bg-blue-500 animate-pulse" :
+                isCompleted ? "bg-emerald-500" :
+                (STATUS_COLORS[effectiveStatus] || "bg-muted-foreground")
               )} />
               <div className="flex-1 min-w-0">
-                <p className={cn("font-medium truncate", pastDue && "text-destructive")}>
+                <p className={cn(
+                  "font-medium truncate",
+                  pastDue && "text-destructive",
+                  isInProgress && "text-blue-700 dark:text-blue-400",
+                )}>
                   {j.title}
                   {pastDue && (
                     <AlertTriangle className="h-3 w-3 inline ml-1.5 -mt-0.5 text-destructive" />
+                  )}
+                  {isInProgress && (
+                    <Play className="h-3 w-3 inline ml-1.5 -mt-0.5 text-blue-500" />
                   )}
                 </p>
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -99,7 +158,9 @@ export default function TodayJobs() {
                 {j.start_time && (
                   <p className={cn(
                     "text-xs flex items-center gap-1 justify-end",
-                    pastDue ? "text-destructive font-medium" : "text-muted-foreground"
+                    pastDue ? "text-destructive font-medium" :
+                    isInProgress ? "text-blue-600 dark:text-blue-400 font-medium" :
+                    "text-muted-foreground"
                   )}>
                     <Clock className="h-3 w-3" />
                     {j.start_time}
@@ -109,9 +170,13 @@ export default function TodayJobs() {
                   "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
                   pastDue
                     ? "bg-destructive/15 text-destructive"
-                    : `${STATUS_COLORS[j.status]}/20 ${STATUS_COLORS[j.status].replace("bg-", "text-")}`
+                    : isInProgress
+                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                    : isCompleted
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                    : `${STATUS_COLORS[effectiveStatus]}/20 ${STATUS_COLORS[effectiveStatus]?.replace("bg-", "text-") || "text-muted-foreground"}`
                 )}>
-                  {pastDue ? "Past Due" : (STATUS_LABELS[j.status] || j.status)}
+                  {pastDue ? "Past Due" : (STATUS_LABELS[effectiveStatus] || effectiveStatus)}
                 </span>
               </div>
             </div>
