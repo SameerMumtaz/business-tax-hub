@@ -127,6 +127,8 @@ export default function ScheduledVsActualWidget({ jobs, assignments, checkins, m
         data.jobCount++;
 
         for (const dateStr of jobDatesInWeek) {
+          // Skip future days — don't penalize for days that haven't happened yet
+          if (dateStr > todayStr) continue;
           // Check assigned_days filter
           if (assign.assigned_days && assign.assigned_days.length > 0 && !assign.assigned_days.includes(dateStr)) continue;
 
