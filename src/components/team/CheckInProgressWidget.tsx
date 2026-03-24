@@ -4,7 +4,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Clock, CheckCircle, Play, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getTodayDateOnlyKey, getJobInstanceDates } from "@/lib/dateOnly";
+import { getTodayDateOnlyKey, getJobDateKeysInRange } from "@/lib/dateOnly";
 
 interface Job {
   id: string;
@@ -69,7 +69,7 @@ export default function CheckInProgressWidget({ jobs, assignments, checkins }: P
       
       let isToday = false;
       if (job.job_type === "recurring" && job.recurring_interval) {
-        const instances = getJobInstanceDates(job, todayKey, todayKey);
+        const instances = getJobDateKeysInRange(job, todayKey, todayKey);
         isToday = instances.includes(todayKey);
       } else {
         const end = job.end_date ?? job.start_date;
