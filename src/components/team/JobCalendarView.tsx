@@ -348,36 +348,78 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     return a.start_time.localeCompare(b.start_time);
   });
 
-  const computeTimeForIndex = (dateStr: string, dropIndex: number, excludeJobId?: string): string | null => {
+  const BUFFER_MINUTES = 20;
+  const DEFAULT_START = "08:00";
+
+  const roundTo5Min = (totalMinutes: number): number => Math.round(totalMinutes / 5) * 5;
+
+  const minsToTimeStr = (mins: number): string => {
+    const clamped = Math.max(0, Math.min(mins, 23 * 60 + 59));
+    return `${String(Math.floor(clamped / 60)).padStart(2, "0")}:${String(clamped % 60).padStart(2, "0")}`;
+  };
+
+  const getJobEndMinutes = (job: CalendarJob): number => {
+    if (!job.start_time) return 0;
+    const [h, m] = job.start_time.split(":").map(Number);
+    return h * 60 + m + Math.round((job.estimated_hours || 1) * 60);
+  };
+
+  const getJobStartMinutes = (job: CalendarJob): number => {
+    if (!job.start_time) return 0;
+    const [h, m] = job.start_time.split(":").map(Number);
+    return h * 60 + m;
+  };
+
+  const computeTimeForIndex = (dateStr: string, dropIndex: number, excludeJobId?: string, movedJobDurationHours?: number): string | null => {
     const dayJobs = sortJobs((jobsByDate.get(dateStr) || []).filter((j) => j.id !== excludeJobId));
-    if (dayJobs.length === 0) return null;
+    const movedDurationMins = Math.round((movedJobDurationHours || 1) * 60);
+
+    // Empty day → default 8:00 AM
+    if (dayJobs.length === 0) return DEFAULT_START;
+
+    // Drop ABOVE all jobs
     if (dropIndex <= 0) {
-      const firstTime = dayJobs[0]?.start_time;
-      if (!firstTime) return null;
-      const [h, m] = firstTime.split(":").map(Number);
-      const mins = Math.max(0, h * 60 + m - 30);
-      return `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+      const firstJob = dayJobs[0];
+      if (!firstJob?.start_time) return DEFAULT_START;
+      const nextStart = getJobStartMinutes(firstJob);
+      const newStart = roundTo5Min(nextStart - movedDurationMins - BUFFER_MINUTES);
+      return minsToTimeStr(Math.max(0, newStart));
     }
+
+    // Drop BELOW all jobs
     if (dropIndex >= dayJobs.length) {
       const lastJob = dayJobs[dayJobs.length - 1];
-      const lastTime = lastJob?.start_time;
-      if (!lastTime) return null;
-      const [h, m] = lastTime.split(":").map(Number);
-      const estHours = lastJob.estimated_hours || 1;
-      const mins = h * 60 + m + estHours * 60;
-      return `${String(Math.floor(mins / 60) % 24).padStart(2, "0")}:${String(Math.floor(mins) % 60).padStart(2, "0")}`;
+      if (!lastJob?.start_time) return DEFAULT_START;
+      const prevEnd = getJobEndMinutes(lastJob);
+      const newStart = roundTo5Min(prevEnd + BUFFER_MINUTES);
+      return minsToTimeStr(Math.min(newStart, 23 * 60 + 59));
     }
-    const before = dayJobs[dropIndex - 1];
-    const after = dayJobs[dropIndex];
-    if (before?.start_time && after?.start_time) {
-      const [bh, bm] = before.start_time.split(":").map(Number);
-      const [ah, am] = after.start_time.split(":").map(Number);
-      const bMins = bh * 60 + bm + (before.estimated_hours || 1) * 60;
-      const aMins = ah * 60 + am;
-      const midMins = Math.floor((bMins + aMins) / 2);
-      return `${String(Math.floor(midMins / 60) % 24).padStart(2, "0")}:${String(midMins % 60).padStart(2, "0")}`;
-    }
-    return null;
+
+    // Drop BETWEEN two jobs
+    const prevJob = dayJobs[dropIndex - 1];
+    if (!prevJob?.start_time) return DEFAULT_START;
+    const prevEnd = getJobEndMinutes(prevJob);
+    const newStart = roundTo5Min(prevEnd + BUFFER_MINUTES);
+    return minsToTimeStr(newStart);
+  };
+
+  /** Check if a computed end time exceeds typical workday (18:00) */
+  const wouldOverflowWorkday = (startTime: string | null, durationHours: number): boolean => {
+    if (!startTime) return false;
+    const [h, m] = startTime.split(":").map(Number);
+    const endMins = h * 60 + m + Math.round(durationHours * 60);
+    return endMins > 18 * 60; // 6:00 PM
+  };
+
+  /** Check if moved job would overlap with the next job in sequence */
+  const wouldOverlapNext = (dateStr: string, dropIndex: number, startTime: string | null, durationHours: number, excludeJobId?: string): boolean => {
+    if (!startTime) return false;
+    const dayJobs = sortJobs((jobsByDate.get(dateStr) || []).filter((j) => j.id !== excludeJobId));
+    const nextJob = dayJobs[dropIndex];
+    if (!nextJob?.start_time) return false;
+    const [sh, sm] = startTime.split(":").map(Number);
+    const endMins = sh * 60 + sm + Math.round(durationHours * 60);
+    return endMins > getJobStartMinutes(nextJob);
   };
 
   const clearDragState = () => {
@@ -425,7 +467,8 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
   const executeDrop = useCallback((dateStr: string, dropIdx?: number) => {
     if (!dragJob) return;
     const sameDay = dateStr === dragStartDate.current;
-    const newTime = typeof dropIdx === "number" ? computeTimeForIndex(dateStr, dropIdx, dragJob.id) : undefined;
+    const movedDuration = dragJob.estimated_hours || 1;
+    const newTime = typeof dropIdx === "number" ? computeTimeForIndex(dateStr, dropIdx, dragJob.id, movedDuration) : undefined;
     if (sameDay && newTime === undefined) { clearDragState(); return; }
     if (dragJob.job_type === "recurring") {
       setPendingRecurringMove({ job: dragJob, fromDate: dragStartDate.current || dateStr, toDate: dateStr, newTime });
@@ -438,7 +481,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
       return;
     }
     if (!sameDay) {
-      const conflicts = detectConflicts(dragJob, dateStr, jobs, jobsByDate, assignments);
+      const conflicts = detectConflicts(dragJob, dateStr, jobs, jobsByDate, assignments, newTime);
       if (conflicts.some((c) => c.type === "crew_overlap")) {
         const proceed = window.confirm(`⚠️ Scheduling conflict:\n${conflicts.map((c) => c.message).join("\n")}\n\nMove anyway?`);
         if (!proceed) { clearDragState(); return; }
@@ -491,7 +534,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
               </div>
               <div className="flex-1 p-1 overflow-y-auto space-y-0">
                 {dayJobs.length === 0 && !dragJob && <div className="h-full flex items-center justify-center min-h-[120px]"><span className="text-[10px] text-muted-foreground/50">No jobs</span></div>}
-                {dragJob && !dayJobs.some((j, i) => i === 0 && j.id === dragJob.id) && <div className={cn("rounded-md border-2 border-dashed flex items-center justify-center transition-all mb-1 pointer-events-auto", dragOverDate === dateStr && dragOverIndex === 0 ? "h-9 border-primary bg-primary/15 shadow-sm" : "h-7 border-primary/30 bg-primary/5 hover:border-primary hover:bg-primary/10")} onDragOver={(e) => handleCardDragOver(e, dateStr, 0)} onDrop={(e) => handleCardDrop(e, dateStr, 0)}><span className={cn("text-[10px] font-medium pointer-events-none", dragOverDate === dateStr && dragOverIndex === 0 ? "text-primary" : "text-primary/60")}>↑ Move here</span></div>}
+                {dragJob && !dayJobs.some((j, i) => i === 0 && j.id === dragJob.id) && (() => { const movedDur = dragJob.estimated_hours || 1; const previewTime = computeTimeForIndex(dateStr, 0, dragJob.id, movedDur); const isOverflow = previewTime ? wouldOverflowWorkday(previewTime, movedDur) : false; const isActive = dragOverDate === dateStr && dragOverIndex === 0; return <div className={cn("rounded-md border-2 border-dashed flex items-center justify-center transition-all mb-1 pointer-events-auto", isActive ? "h-9 border-primary bg-primary/15 shadow-sm" : "h-7 border-primary/30 bg-primary/5 hover:border-primary hover:bg-primary/10", isOverflow && isActive && "border-amber-500 bg-amber-500/10")} onDragOver={(e) => handleCardDragOver(e, dateStr, 0)} onDrop={(e) => handleCardDrop(e, dateStr, 0)}><span className={cn("text-[10px] font-medium pointer-events-none", isActive ? (isOverflow ? "text-amber-600 dark:text-amber-400" : "text-primary") : "text-primary/60")}>↑ Move here{isActive && previewTime ? ` · ${formatTime12(previewTime)}` : ""}{isActive && isOverflow ? " ⚠" : ""}</span></div>; })()}
                 {dayJobs.map((job, idx) => {
                   const site = siteMap.get(job.site_id);
                   const displayStatus = job._displayStatus || job.status;
@@ -512,9 +555,9 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
                     gapMinutes = Math.max(0, nextStartMin - jobEndMin);
                   }
                   const gapHeight = gapMinutes > 0 ? Math.max(0, Math.round((gapMinutes / 60) * HOUR_PX)) : 0;
-                  return <div key={`${job.id}-${dateStr}-${idx}`}><div draggable={canDrag} onDragStart={(e) => handleDragStart(e, job, dateStr)} onDragEnd={handleDragEnd} onClick={() => { if (!wasDragging.current && !isRescheduled) onJobClick?.(job); }} style={{ minHeight: `${blockHeight}px` }} className={cn("group rounded-md border px-2 py-1.5 transition-all select-none flex flex-col", isRescheduled ? "opacity-40 bg-muted/50 border-dashed border-muted-foreground/30 cursor-default line-through decoration-muted-foreground/40 pointer-events-none" : cn("cursor-pointer hover:shadow-sm", STATUS_BG[displayStatus] || STATUS_BG.scheduled, canDrag && "hover:ring-1 hover:ring-primary/30", job._isMultiDayContinuation && "opacity-70 border-dashed"), isDragging && "opacity-30 scale-95")}><div className="flex gap-1.5 flex-1 pointer-events-none"><div className={cn("w-1 rounded-full shrink-0 self-stretch", STATUS_ACCENT[displayStatus] || STATUS_ACCENT.scheduled)} /><div className="min-w-0 flex-1 flex flex-col">{canDrag && <GripVertical className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 self-end cursor-grab" />}<div className={cn("text-xs font-semibold truncate", STATUS_TEXT[displayStatus])}>{job.title}</div><div className="flex flex-wrap items-center gap-x-2 gap-y-0 mt-0.5">{job.start_time && !job._isMultiDayContinuation && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><Clock className="h-2.5 w-2.5" />{formatTime12(job.start_time)}</span>}{job.estimated_hours && !job._isMultiDayContinuation && <span className="text-[10px] text-muted-foreground font-mono">{job.estimated_hours}h</span>}</div>{site && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 truncate mt-0.5"><MapPin className="h-2.5 w-2.5 shrink-0" /><span className="truncate">{site.name}</span></span>}{!job._isMultiDayContinuation && assignments.filter((a) => a.job_id === job.id).length > 0 && <div className="flex flex-wrap gap-0.5 mt-1">{assignments.filter((a) => a.job_id === job.id).slice(0, 3).map((a) => <span key={a.id} className="text-[9px] bg-background/80 border border-border/50 rounded px-1 py-0 text-muted-foreground">{a.worker_name.split(" ")[0]}</span>)}{assignments.filter((a) => a.job_id === job.id).length > 3 && <span className="text-[9px] text-muted-foreground">+{assignments.filter((a) => a.job_id === job.id).length - 3}</span>}</div>}{isRescheduled ? <span className="text-[9px] text-destructive/70 font-medium no-underline mt-auto" style={{ textDecoration: "none" }}>↗ Rescheduled</span> : job._multiDayInfo ? <span className="text-[9px] text-muted-foreground/60 italic mt-auto">Day {job._multiDayInfo.dayIndex + 1}/{job._multiDayInfo.totalDays}</span> : job.job_type === "recurring" ? <span className="text-[9px] text-muted-foreground/60 italic mt-auto">↻ {job.recurring_interval}</span> : null}</div></div></div>{gapHeight > 8 && !dragJob && <div className="mx-1 border-l-2 border-dashed border-muted-foreground/15 flex items-center pl-2" style={{ height: `${Math.min(gapHeight, 80)}px` }}><span className="text-[9px] text-muted-foreground/40 font-mono">{gapMinutes >= 60 ? `${(gapMinutes / 60).toFixed(1)}h free` : `${gapMinutes}m free`}</span></div>}{showDropAfter && <div className={cn("rounded-md border-2 border-dashed flex items-center justify-center cursor-pointer transition-all my-1", dragOverDate === dateStr && dragOverIndex === idx + 1 ? "h-9 border-primary bg-primary/15 shadow-sm" : "h-7 border-primary/30 bg-primary/5 hover:border-primary hover:bg-primary/10")} onDragOver={(e) => handleCardDragOver(e, dateStr, idx + 1)} onDrop={(e) => handleCardDrop(e, dateStr, idx + 1)}><span className={cn("text-[10px] font-medium pointer-events-none", dragOverDate === dateStr && dragOverIndex === idx + 1 ? "text-primary" : "text-primary/60")}>{isLastCard ? "↓ Move here" : "Move here"}</span></div>}</div>;
+                  return <div key={`${job.id}-${dateStr}-${idx}`}><div draggable={canDrag} onDragStart={(e) => handleDragStart(e, job, dateStr)} onDragEnd={handleDragEnd} onClick={() => { if (!wasDragging.current && !isRescheduled) onJobClick?.(job); }} style={{ minHeight: `${blockHeight}px` }} className={cn("group rounded-md border px-2 py-1.5 transition-all select-none flex flex-col", isRescheduled ? "opacity-40 bg-muted/50 border-dashed border-muted-foreground/30 cursor-default line-through decoration-muted-foreground/40 pointer-events-none" : cn("cursor-pointer hover:shadow-sm", STATUS_BG[displayStatus] || STATUS_BG.scheduled, canDrag && "hover:ring-1 hover:ring-primary/30", job._isMultiDayContinuation && "opacity-70 border-dashed"), isDragging && "opacity-30 scale-95")}><div className="flex gap-1.5 flex-1 pointer-events-none"><div className={cn("w-1 rounded-full shrink-0 self-stretch", STATUS_ACCENT[displayStatus] || STATUS_ACCENT.scheduled)} /><div className="min-w-0 flex-1 flex flex-col">{canDrag && <GripVertical className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 self-end cursor-grab" />}<div className={cn("text-xs font-semibold truncate", STATUS_TEXT[displayStatus])}>{job.title}</div><div className="flex flex-wrap items-center gap-x-2 gap-y-0 mt-0.5">{job.start_time && !job._isMultiDayContinuation && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><Clock className="h-2.5 w-2.5" />{formatTime12(job.start_time)}</span>}{job.estimated_hours && !job._isMultiDayContinuation && <span className="text-[10px] text-muted-foreground font-mono">{job.estimated_hours}h</span>}</div>{site && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 truncate mt-0.5"><MapPin className="h-2.5 w-2.5 shrink-0" /><span className="truncate">{site.name}</span></span>}{!job._isMultiDayContinuation && assignments.filter((a) => a.job_id === job.id).length > 0 && <div className="flex flex-wrap gap-0.5 mt-1">{assignments.filter((a) => a.job_id === job.id).slice(0, 3).map((a) => <span key={a.id} className="text-[9px] bg-background/80 border border-border/50 rounded px-1 py-0 text-muted-foreground">{a.worker_name.split(" ")[0]}</span>)}{assignments.filter((a) => a.job_id === job.id).length > 3 && <span className="text-[9px] text-muted-foreground">+{assignments.filter((a) => a.job_id === job.id).length - 3}</span>}</div>}{isRescheduled ? <span className="text-[9px] text-destructive/70 font-medium no-underline mt-auto" style={{ textDecoration: "none" }}>↗ Rescheduled</span> : job._multiDayInfo ? <span className="text-[9px] text-muted-foreground/60 italic mt-auto">Day {job._multiDayInfo.dayIndex + 1}/{job._multiDayInfo.totalDays}</span> : job.job_type === "recurring" ? <span className="text-[9px] text-muted-foreground/60 italic mt-auto">↻ {job.recurring_interval}</span> : null}</div></div></div>{gapHeight > 8 && !dragJob && <div className="mx-1 border-l-2 border-dashed border-muted-foreground/15 flex items-center pl-2" style={{ height: `${Math.min(gapHeight, 80)}px` }}><span className="text-[9px] text-muted-foreground/40 font-mono">{gapMinutes >= 60 ? `${(gapMinutes / 60).toFixed(1)}h free` : `${gapMinutes}m free`}</span></div>}{showDropAfter && (() => { const dropIdx = idx + 1; const movedDur = dragJob.estimated_hours || 1; const previewTime = computeTimeForIndex(dateStr, dropIdx, dragJob.id, movedDur); const isOverflow = previewTime ? wouldOverflowWorkday(previewTime, movedDur) : false; const hasOverlap = previewTime ? wouldOverlapNext(dateStr, dropIdx, previewTime, movedDur, dragJob.id) : false; const isActive = dragOverDate === dateStr && dragOverIndex === dropIdx; return <div className={cn("rounded-md border-2 border-dashed flex items-center justify-center cursor-pointer transition-all my-1", isActive ? "h-9 border-primary bg-primary/15 shadow-sm" : "h-7 border-primary/30 bg-primary/5 hover:border-primary hover:bg-primary/10", isActive && isOverflow && "border-amber-500 bg-amber-500/10", isActive && hasOverlap && "border-destructive bg-destructive/10")} onDragOver={(e) => handleCardDragOver(e, dateStr, dropIdx)} onDrop={(e) => handleCardDrop(e, dateStr, dropIdx)}><span className={cn("text-[10px] font-medium pointer-events-none", isActive ? (hasOverlap ? "text-destructive" : isOverflow ? "text-amber-600 dark:text-amber-400" : "text-primary") : "text-primary/60")}>{isLastCard ? "↓" : "→"} Move here{isActive && previewTime ? ` · ${formatTime12(previewTime)}` : ""}{isActive && hasOverlap ? " ⚠ overlap" : isActive && isOverflow ? " ⚠ late" : ""}</span></div>; })()}</div>;
                 })}
-                {dragJob && dayJobs.length === 0 && <div className={cn("rounded-md border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-all py-4", dragOverDate === dateStr ? "border-primary bg-primary/15 shadow-sm" : "border-primary/30 bg-primary/5 hover:border-primary hover:bg-primary/10")} onDragOver={(e) => handleCardDragOver(e, dateStr, 0)} onDrop={(e) => handleCardDrop(e, dateStr, 0)}>{showConflicts.length > 0 && dragOverDate === dateStr ? <><AlertTriangle className="h-3.5 w-3.5 text-destructive" /><span className="text-[9px] text-destructive text-center px-1">{showConflicts[0]?.message}</span></> : <span className="text-[10px] text-primary/60 font-medium">Move here</span>}</div>}
+                {dragJob && dayJobs.length === 0 && <div className={cn("rounded-md border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-all py-4", dragOverDate === dateStr ? "border-primary bg-primary/15 shadow-sm" : "border-primary/30 bg-primary/5 hover:border-primary hover:bg-primary/10")} onDragOver={(e) => handleCardDragOver(e, dateStr, 0)} onDrop={(e) => handleCardDrop(e, dateStr, 0)}>{showConflicts.length > 0 && dragOverDate === dateStr ? <><AlertTriangle className="h-3.5 w-3.5 text-destructive" /><span className="text-[9px] text-destructive text-center px-1">{showConflicts[0]?.message}</span></> : <span className="text-[10px] text-primary/60 font-medium">Move here · {formatTime12(DEFAULT_START)}</span>}</div>}
               </div>
             </div>
           );
