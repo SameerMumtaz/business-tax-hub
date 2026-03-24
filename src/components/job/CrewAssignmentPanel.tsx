@@ -263,6 +263,7 @@ export default function CrewAssignmentPanel({
           {/* Over-budget warning */}
           {selectedWorker && hours && hasBudget && !hasConflict && (() => {
             const worker = teamMembers.find((m) => m.id === selectedWorker);
+            if (worker && isW2(worker.worker_type)) return null; // W-2 doesn't affect budget
             const newHrs = totalAssignedHours + Number(hours);
             const newCost = assignedDollars + Number(hours) * (worker?.pay_rate || 0);
             const wouldExceed = isHoursMode ? newHrs > laborBudgetHrs : newCost > budgetDollars;
