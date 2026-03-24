@@ -745,8 +745,7 @@ export default function TimesheetsContent() {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="min-w-[140px]">Worker</TableHead>
-                            <TableHead className="min-w-[120px]">Job</TableHead>
+                            <TableHead className="min-w-[160px]">Worker / Job</TableHead>
                             <TableHead className="text-right">Rate</TableHead>
                             {getDayLabelsWithDates(ts.week_start).map((d, i) => (
                               <TableHead key={DAYS[i]} className="text-center w-16 text-xs">{d}</TableHead>
@@ -758,123 +757,245 @@ export default function TimesheetsContent() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {tsEntries.map((entry) => {
-                            const scheduled = getScheduledHours(entry, ts);
-                            return (
-                              <TableRow key={entry.id}>
-                                <TableCell>
-                                  <div>
-                                    <span className="font-medium">{entry.worker_name}</span>
-                                    <Badge variant="outline" className="ml-2 text-[10px]">{entry.worker_type}</Badge>
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  {isDraft ? (
-                                    <Select value={entry.job_id || "none"} onValueChange={(v) => handleJobChange(entry.id, v === "none" ? "" : v)}>
-                                      <SelectTrigger className="h-7 text-xs w-28"><SelectValue placeholder="None" /></SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="none">None</SelectItem>
-                                        {jobs.map((j) => (
-                                          <SelectItem key={j.id} value={j.id}>{j.title}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  ) : (
-                                    <span className="text-sm text-muted-foreground">
-                                      {entry.job_id ? jobs.find((j) => j.id === entry.job_id)?.title || "—" : "—"}
-                                    </span>
-                                  )}
-                                </TableCell>
-                                <TableCell className="text-right font-mono text-xs">${entry.pay_rate.toFixed(2)}</TableCell>
-                                {DAYS.map((day) => {
-                                  const key = `${day}_hours` as keyof TimesheetEntry;
-                                  const val = entry[key] as number;
-                                  const scheduledVal = scheduled ? (scheduled[`${day}_hours`] || 0) : null;
-                                  const isEditing = editingCell?.entryId === entry.id && editingCell?.day === day;
-                                  const hasVariance = scheduledVal !== null && val !== scheduledVal && (val > 0 || scheduledVal > 0);
-                                  const variance = scheduledVal !== null ? val - scheduledVal : 0;
+                          {(() => {
+                            // Group entries by worker
+                            const workerGroups = new Map<string, TimesheetEntry[]>();
+                            const workerOrder: string[] = [];
+                            tsEntries.forEach((e) => {
+                              if (!workerGroups.has(e.worker_id)) {
+                                workerGroups.set(e.worker_id, []);
+                                workerOrder.push(e.worker_id);
+                              }
+                              workerGroups.get(e.worker_id)!.push(e);
+                            });
 
-                                  return (
-                                    <TableCell key={day} className="text-center p-1">
-                                      {isDraft ? (
-                                        isEditing ? (
-                                          <Input type="number" min="0" max="24" step="0.5" value={editValue}
-                                            onChange={(e) => setEditValue(e.target.value)} onBlur={handleCellBlur}
-                                            onKeyDown={handleCellKeyDown} className="h-7 w-14 text-center text-xs p-1" autoFocus />
-                                        ) : (
-                                          <TooltipProvider>
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <button onClick={() => handleCellClick(entry.id, day, val)}
-                                                  className={cn(
-                                                    "w-14 h-7 rounded border text-xs font-mono transition-colors",
-                                                    hasVariance && variance > 0 && "border-chart-positive/50 bg-chart-positive/10",
-                                                    hasVariance && variance < 0 && "border-destructive/50 bg-destructive/10",
-                                                    !hasVariance && "border-transparent hover:border-border",
-                                                  )}>
-                                                  {val || "–"}
-                                                </button>
-                                              </TooltipTrigger>
-                                              {hasVariance && (
-                                                <TooltipContent>
-                                                  <div className="text-xs">
-                                                    <p>Scheduled: {scheduledVal}h</p>
-                                                    <p>Actual: {val}h</p>
-                                                    <p className={cn(variance > 0 ? "text-chart-positive" : "text-destructive")}>
-                                                      {variance > 0 ? "+" : ""}{variance.toFixed(1)}h variance
-                                                    </p>
-                                                  </div>
-                                                </TooltipContent>
-                                              )}
-                                            </Tooltip>
-                                          </TooltipProvider>
-                                        )
-                                      ) : (
-                                        <TooltipProvider>
-                                          <Tooltip>
-                                            <TooltipTrigger asChild>
-                                              <span className={cn(
-                                                "text-xs font-mono px-1 py-0.5 rounded",
-                                                hasVariance && variance > 0 && "bg-chart-positive/10",
-                                                hasVariance && variance < 0 && "bg-destructive/10",
-                                              )}>
-                                                {val || "–"}
-                                              </span>
-                                            </TooltipTrigger>
-                                            {hasVariance && (
-                                              <TooltipContent>
-                                                <div className="text-xs">
-                                                  <p>Scheduled: {scheduledVal}h | Actual: {val}h</p>
-                                                  <p className={cn(variance > 0 ? "text-chart-positive" : "text-destructive")}>
-                                                    {variance > 0 ? "+" : ""}{variance.toFixed(1)}h
-                                                  </p>
-                                                </div>
-                                              </TooltipContent>
-                                            )}
-                                          </Tooltip>
-                                        </TooltipProvider>
+                            return workerOrder.map((workerId) => {
+                              const workerEntries = workerGroups.get(workerId)!;
+                              const firstEntry = workerEntries[0];
+                              const hasMultipleJobs = workerEntries.length > 1;
+
+                              // Aggregate totals across all jobs for this worker
+                              const aggDayHours: Record<string, number> = {};
+                              DAYS.forEach((day) => {
+                                aggDayHours[day] = workerEntries.reduce((s, e) => s + (e[`${day}_hours` as keyof TimesheetEntry] as number), 0);
+                              });
+                              const aggTotal = workerEntries.reduce((s, e) => s + e.total_hours, 0);
+                              const aggOT = Math.max(0, aggTotal - 40);
+                              const aggRegular = aggTotal - aggOT;
+                              const rate = firstEntry.pay_rate;
+                              const aggPay = aggRegular * rate + aggOT * rate * 1.5;
+
+                              return (
+                                <React.Fragment key={workerId}>
+                                  {/* Worker header/summary row */}
+                                  <TableRow className={cn(hasMultipleJobs && "border-t-2 border-border/60")}>
+                                    <TableCell>
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-semibold">{firstEntry.worker_name}</span>
+                                        <Badge variant="outline" className="text-[10px]">{firstEntry.worker_type}</Badge>
+                                      </div>
+                                      {!hasMultipleJobs && (
+                                        <div className="mt-0.5">
+                                          {isDraft ? (
+                                            <Select value={firstEntry.job_id || "none"} onValueChange={(v) => handleJobChange(firstEntry.id, v === "none" ? "" : v)}>
+                                              <SelectTrigger className="h-6 text-xs w-28"><SelectValue placeholder="None" /></SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="none">None</SelectItem>
+                                                {jobs.map((j) => (
+                                                  <SelectItem key={j.id} value={j.id}>{j.title}</SelectItem>
+                                                ))}
+                                              </SelectContent>
+                                            </Select>
+                                          ) : (
+                                            <span className="text-xs text-muted-foreground">
+                                              {firstEntry.job_id ? jobs.find((j) => j.id === firstEntry.job_id)?.title || "—" : "—"}
+                                            </span>
+                                          )}
+                                        </div>
+                                      )}
+                                      {hasMultipleJobs && (
+                                        <span className="text-[10px] text-muted-foreground">{workerEntries.length} jobs</span>
                                       )}
                                     </TableCell>
-                                  );
-                                })}
-                                <TableCell className="text-right font-semibold font-mono text-sm">{entry.total_hours}</TableCell>
-                                <TableCell className="text-right font-mono text-xs text-muted-foreground">
-                                  {entry.overtime_hours > 0 ? entry.overtime_hours : "–"}
-                                </TableCell>
-                                <TableCell className="text-right font-mono font-medium">{formatCurrency(entry.total_pay)}</TableCell>
-                                {isDraft && (
-                                  <TableCell>
-                                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive"
-                                      onClick={() => deleteEntry(entry.id)}>
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </TableCell>
-                                )}
-                              </TableRow>
-                            );
-                          })}
+                                    <TableCell className="text-right font-mono text-xs">${rate.toFixed(2)}</TableCell>
+                                    {DAYS.map((day) => {
+                                      const val = hasMultipleJobs ? aggDayHours[day] : (firstEntry[`${day}_hours` as keyof TimesheetEntry] as number);
+                                      const scheduled = hasMultipleJobs ? null : getScheduledHours(firstEntry, ts);
+                                      const scheduledVal = scheduled ? (scheduled[`${day}_hours`] || 0) : null;
+                                      const hasVariance = scheduledVal !== null && val !== scheduledVal && (val > 0 || scheduledVal > 0);
+                                      const variance = scheduledVal !== null ? val - scheduledVal : 0;
+
+                                      if (hasMultipleJobs) {
+                                        // Aggregated — not editable, just show total
+                                        return (
+                                          <TableCell key={day} className="text-center p-1">
+                                            <span className="text-xs font-mono font-semibold">{val || "–"}</span>
+                                          </TableCell>
+                                        );
+                                      }
+
+                                      const isEditing = editingCell?.entryId === firstEntry.id && editingCell?.day === day;
+                                      return (
+                                        <TableCell key={day} className="text-center p-1">
+                                          {isDraft ? (
+                                            isEditing ? (
+                                              <Input type="number" min="0" max="24" step="0.5" value={editValue}
+                                                onChange={(e) => setEditValue(e.target.value)} onBlur={handleCellBlur}
+                                                onKeyDown={handleCellKeyDown} className="h-7 w-14 text-center text-xs p-1" autoFocus />
+                                            ) : (
+                                              <TooltipProvider>
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <button onClick={() => handleCellClick(firstEntry.id, day, val)}
+                                                      className={cn(
+                                                        "w-14 h-7 rounded border text-xs font-mono transition-colors",
+                                                        hasVariance && variance > 0 && "border-chart-positive/50 bg-chart-positive/10",
+                                                        hasVariance && variance < 0 && "border-destructive/50 bg-destructive/10",
+                                                        !hasVariance && "border-transparent hover:border-border",
+                                                      )}>
+                                                      {val || "–"}
+                                                    </button>
+                                                  </TooltipTrigger>
+                                                  {hasVariance && (
+                                                    <TooltipContent>
+                                                      <div className="text-xs">
+                                                        <p>Scheduled: {scheduledVal}h</p>
+                                                        <p>Actual: {val}h</p>
+                                                        <p className={cn(variance > 0 ? "text-chart-positive" : "text-destructive")}>
+                                                          {variance > 0 ? "+" : ""}{variance.toFixed(1)}h variance
+                                                        </p>
+                                                      </div>
+                                                    </TooltipContent>
+                                                  )}
+                                                </Tooltip>
+                                              </TooltipProvider>
+                                            )
+                                          ) : (
+                                            <span className={cn(
+                                              "text-xs font-mono px-1 py-0.5 rounded",
+                                              hasVariance && variance > 0 && "bg-chart-positive/10",
+                                              hasVariance && variance < 0 && "bg-destructive/10",
+                                            )}>
+                                              {val || "–"}
+                                            </span>
+                                          )}
+                                        </TableCell>
+                                      );
+                                    })}
+                                    <TableCell className="text-right font-bold font-mono text-sm">{hasMultipleJobs ? aggTotal : firstEntry.total_hours}</TableCell>
+                                    <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                                      {(hasMultipleJobs ? aggOT : firstEntry.overtime_hours) > 0 ? (hasMultipleJobs ? aggOT : firstEntry.overtime_hours) : "–"}
+                                    </TableCell>
+                                    <TableCell className="text-right font-mono font-semibold">{formatCurrency(hasMultipleJobs ? aggPay : firstEntry.total_pay)}</TableCell>
+                                    {isDraft && (
+                                      <TableCell>
+                                        {!hasMultipleJobs && (
+                                          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive"
+                                            onClick={() => deleteEntry(firstEntry.id)}>
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                          </Button>
+                                        )}
+                                      </TableCell>
+                                    )}
+                                  </TableRow>
+
+                                  {/* Sub-rows for each job (only when worker has multiple jobs) */}
+                                  {hasMultipleJobs && workerEntries.map((entry) => {
+                                    const scheduled = getScheduledHours(entry, ts);
+                                    return (
+                                      <TableRow key={entry.id} className="bg-muted/30">
+                                        <TableCell className="pl-6">
+                                          {isDraft ? (
+                                            <Select value={entry.job_id || "none"} onValueChange={(v) => handleJobChange(entry.id, v === "none" ? "" : v)}>
+                                              <SelectTrigger className="h-6 text-xs w-28"><SelectValue placeholder="None" /></SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="none">None</SelectItem>
+                                                {jobs.map((j) => (
+                                                  <SelectItem key={j.id} value={j.id}>{j.title}</SelectItem>
+                                                ))}
+                                              </SelectContent>
+                                            </Select>
+                                          ) : (
+                                            <span className="text-xs text-muted-foreground">
+                                              {entry.job_id ? jobs.find((j) => j.id === entry.job_id)?.title || "—" : "—"}
+                                            </span>
+                                          )}
+                                        </TableCell>
+                                        <TableCell />
+                                        {DAYS.map((day) => {
+                                          const key = `${day}_hours` as keyof TimesheetEntry;
+                                          const val = entry[key] as number;
+                                          const scheduledVal = scheduled ? (scheduled[`${day}_hours`] || 0) : null;
+                                          const isEditing = editingCell?.entryId === entry.id && editingCell?.day === day;
+                                          const hasVariance = scheduledVal !== null && val !== scheduledVal && (val > 0 || scheduledVal > 0);
+                                          const variance = scheduledVal !== null ? val - scheduledVal : 0;
+
+                                          return (
+                                            <TableCell key={day} className="text-center p-1">
+                                              {isDraft ? (
+                                                isEditing ? (
+                                                  <Input type="number" min="0" max="24" step="0.5" value={editValue}
+                                                    onChange={(e) => setEditValue(e.target.value)} onBlur={handleCellBlur}
+                                                    onKeyDown={handleCellKeyDown} className="h-7 w-14 text-center text-xs p-1" autoFocus />
+                                                ) : (
+                                                  <TooltipProvider>
+                                                    <Tooltip>
+                                                      <TooltipTrigger asChild>
+                                                        <button onClick={() => handleCellClick(entry.id, day, val)}
+                                                          className={cn(
+                                                            "w-14 h-7 rounded border text-xs font-mono transition-colors",
+                                                            hasVariance && variance > 0 && "border-chart-positive/50 bg-chart-positive/10",
+                                                            hasVariance && variance < 0 && "border-destructive/50 bg-destructive/10",
+                                                            !hasVariance && "border-transparent hover:border-border",
+                                                          )}>
+                                                          {val || "–"}
+                                                        </button>
+                                                      </TooltipTrigger>
+                                                      {hasVariance && (
+                                                        <TooltipContent>
+                                                          <div className="text-xs">
+                                                            <p>Scheduled: {scheduledVal}h | Actual: {val}h</p>
+                                                            <p className={cn(variance > 0 ? "text-chart-positive" : "text-destructive")}>
+                                                              {variance > 0 ? "+" : ""}{variance.toFixed(1)}h
+                                                            </p>
+                                                          </div>
+                                                        </TooltipContent>
+                                                      )}
+                                                    </Tooltip>
+                                                  </TooltipProvider>
+                                                )
+                                              ) : (
+                                                <span className={cn(
+                                                  "text-xs font-mono px-1 py-0.5 rounded",
+                                                  hasVariance && variance > 0 && "bg-chart-positive/10",
+                                                  hasVariance && variance < 0 && "bg-destructive/10",
+                                                )}>
+                                                  {val || "–"}
+                                                </span>
+                                              )}
+                                            </TableCell>
+                                          );
+                                        })}
+                                        <TableCell className="text-right font-mono text-xs text-muted-foreground">{entry.total_hours}</TableCell>
+                                        <TableCell />
+                                        <TableCell />
+                                        {isDraft && (
+                                          <TableCell>
+                                            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive"
+                                              onClick={() => deleteEntry(entry.id)}>
+                                              <Trash2 className="h-3 w-3" />
+                                            </Button>
+                                          </TableCell>
+                                        )}
+                                      </TableRow>
+                                    );
+                                  })}
+                                </React.Fragment>
+                              );
+                            });
+                          })()}
                           <TableRow className="border-t-2">
-                            <TableCell colSpan={3} className="font-semibold">Totals</TableCell>
+                            <TableCell colSpan={2} className="font-semibold">Totals</TableCell>
                             {DAYS.map((day) => {
                               const dayTotal = tsEntries.reduce((s, e) => s + (e[`${day}_hours` as keyof TimesheetEntry] as number), 0);
                               return <TableCell key={day} className="text-center font-mono text-xs font-semibold">{dayTotal || "–"}</TableCell>;
