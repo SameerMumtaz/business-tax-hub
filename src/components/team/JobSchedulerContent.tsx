@@ -616,8 +616,8 @@ export default function JobSchedulerContent() {
                 assignments={assignments}
                 teamMembers={teamMembers}
                 allJobs={jobs}
-                onAssign={async (wId, wName, wType, hrs) => {
-                  await assignWorker(editJob.id, wId, wName, wType, hrs);
+                onAssign={async (wId, wName, wType, totalHrs, hpd, days) => {
+                  await assignWorker(editJob.id, wId, wName, wType, totalHrs, hpd, days);
                   // Dispatch notification to assigned crew member
                   try {
                     const { data: member } = await supabase
