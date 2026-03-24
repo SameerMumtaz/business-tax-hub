@@ -91,7 +91,7 @@ export default function TodayJobs() {
           }
           return (a.start_time || "00:00").localeCompare(b.start_time || "00:00");
         }),
-    [jobs, todayStr]
+    [jobs, todayStr, activeJobIds, completedJobIds]
   );
 
   const getEffectiveStatus = (job: typeof todayJobs[0]): string => {
