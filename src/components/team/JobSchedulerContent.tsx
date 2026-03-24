@@ -130,8 +130,10 @@ export default function JobSchedulerContent() {
   // Helper: get labor summary for a job
   const getLaborSummary = useCallback((job: Job) => {
     const jobAssigns = assignments.filter((a) => a.job_id === job.id);
-    const assignedHrs = jobAssigns.reduce((s, a) => s + (a.assigned_hours || 0), 0);
-    const assignedDollars = jobAssigns.reduce((s, a) => {
+    // Exclude W-2 (salaried) workers from labor budget calculations
+    const contractorAssigns = jobAssigns.filter(a => a.worker_type !== "W2");
+    const assignedHrs = contractorAssigns.reduce((s, a) => s + (a.assigned_hours || 0), 0);
+    const assignedDollars = contractorAssigns.reduce((s, a) => {
       const member = teamMembers.find((m) => m.id === a.worker_id);
       return s + (a.assigned_hours || 0) * (member?.pay_rate || 0);
     }, 0);
