@@ -37,6 +37,9 @@ interface Job {
   job_type: string;
   start_time: string | null;
   estimated_hours: number | null;
+  status?: string;
+  recurring_interval?: string | null;
+  recurring_end_date?: string | null;
 }
 
 interface JobAssignment {
@@ -58,6 +61,7 @@ interface CheckinRecord {
   check_out_time: string | null;
   total_hours: number | null;
   occurrence_date: string | null;
+  status?: string;
 }
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
