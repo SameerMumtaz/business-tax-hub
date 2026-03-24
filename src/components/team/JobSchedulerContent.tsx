@@ -779,7 +779,6 @@ export default function JobSchedulerContent() {
                             onClick={() => setPhotosJobId(j.id)}
                           >
                             <Camera className="h-3.5 w-3.5" />
-                            📷
                           </Button>
                         </TableCell>
                         <TableCell className="text-right space-x-1">
