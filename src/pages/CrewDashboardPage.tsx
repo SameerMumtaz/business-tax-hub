@@ -279,10 +279,10 @@ export default function CrewDashboardPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-foreground">
-              {getGreeting()}{firstName ? `, ${firstName}` : ""}
+              {greeting}{firstName ? `, ${firstName}` : ""}
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Here's your schedule overview
+              {t("greeting.schedule")}
             </p>
           </div>
           <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
