@@ -52,6 +52,8 @@ export interface JobAssignment {
   worker_name: string;
   worker_type: string;
   assigned_hours: number;
+  hours_per_day: number;
+  assigned_days: string[] | null;
   created_at: string;
 }
 
