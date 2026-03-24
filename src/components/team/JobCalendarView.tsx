@@ -96,6 +96,7 @@ interface Props {
   teamMembers?: { id: string; name: string; pay_rate: number | null; worker_type: string }[];
   onJobClick?: (job: Job) => void;
   onJobMove?: (event: JobMoveEvent) => void;
+  onDiscardEdits?: (revertData: { jobId: string; updates: Record<string, any> }[]) => void;
 }
 
 type ViewMode = "week" | "month";
