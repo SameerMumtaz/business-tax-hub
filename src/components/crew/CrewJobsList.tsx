@@ -53,6 +53,42 @@ function getDirectionsUrl(lat: number | null, lng: number | null, address: strin
   return null;
 }
 
+/** Live countdown to a job's start_time (e.g. "Starts in 3h 24m") */
+function StartsInCountdown({ startTime }: { startTime: string }) {
+  const [label, setLabel] = useState("");
+  useEffect(() => {
+    const update = () => {
+      const now = new Date();
+      const [h, m] = startTime.split(":").map(Number);
+      const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
+      const diffMs = target.getTime() - now.getTime();
+      if (diffMs <= 0) {
+        setLabel("Starting now");
+        return;
+      }
+      const mins = Math.floor(diffMs / 60000);
+      if (mins < 60) {
+        setLabel(`Starts in ${mins}m`);
+      } else {
+        const hrs = Math.floor(mins / 60);
+        const rm = mins % 60;
+        setLabel(`Starts in ${hrs}h ${rm > 0 ? `${rm}m` : ""}`);
+      }
+    };
+    update();
+    const id = setInterval(update, 60_000);
+    return () => clearInterval(id);
+  }, [startTime]);
+
+  if (!label) return null;
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-primary font-medium">
+      <Timer className="h-3 w-3" />
+      {label}
+    </span>
+  );
+}
+
 function JobCard({ job, activeCheckin, gpsLoading, onCheckIn, onPhotos, variant }: {
   job: AssignedJob;
   activeCheckin: any;
