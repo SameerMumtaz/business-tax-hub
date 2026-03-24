@@ -66,6 +66,7 @@ function parseLocalDate(dateStr: string): Date {
 
 export default function ScheduledVsActualWidget({ jobs, assignments, checkins, members }: Props) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const todayStr = formatDateStr(new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
