@@ -3,7 +3,7 @@ import { useJobPhotos, type JobPhoto } from "@/hooks/useJobPhotos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Camera, Upload, Trash2, ImagePlus, Loader2 } from "lucide-react";
+import { Camera, Trash2, ImagePlus, Loader2 } from "lucide-react";
 
 const TYPE_LABELS: Record<string, string> = {
   before: "Before",
@@ -22,7 +22,6 @@ export default function JobPhotosPanel({ jobId, compact = false, occurrenceDate 
   const { photos, loading, uploading, uploadPhoto, updateCaption, deletePhoto } = useJobPhotos(jobId, occurrenceDate);
   const [selectedType, setSelectedType] = useState<JobPhoto["photo_type"]>("before");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
 
   const handleFiles = useCallback((files: FileList | null) => {
@@ -73,33 +72,14 @@ export default function JobPhotosPanel({ jobId, compact = false, occurrenceDate 
           className="hidden"
           onChange={(e) => handleFiles(e.target.files)}
         />
-        <input
-          ref={cameraInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          onChange={(e) => handleFiles(e.target.files)}
-        />
-
         <Button
           variant="outline"
           size="sm"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
         >
-          {uploading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
-          Upload
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => cameraInputRef.current?.click()}
-          disabled={uploading}
-          className="md:hidden"
-        >
-          <Camera className="h-4 w-4 mr-1" />
-          Camera
+          {uploading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Camera className="h-4 w-4 mr-1" />}
+          Upload Photos
         </Button>
       </div>
 
