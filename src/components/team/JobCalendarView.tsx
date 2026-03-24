@@ -3,7 +3,7 @@ import { type Job, type JobSite, type JobAssignment, type CrewCheckinOccurrence 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ChevronLeft, ChevronRight, Clock, MapPin, AlertTriangle, Sparkles, GripVertical, Lock, Unlock, Copy, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, MapPin, AlertTriangle, Sparkles, GripVertical, Lock, Unlock, Copy, RefreshCw, Undo2, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
@@ -96,6 +96,7 @@ interface Props {
   teamMembers?: { id: string; name: string; pay_rate: number | null; worker_type: string }[];
   onJobClick?: (job: Job) => void;
   onJobMove?: (event: JobMoveEvent) => void;
+  onDiscardEdits?: (revertData: { jobId: string; updates: Record<string, any> }[]) => void;
 }
 
 type ViewMode = "week" | "month";
@@ -232,7 +233,7 @@ function buildJobsByDate(jobs: Job[], checkins: CrewCheckinOccurrence[], rangeSt
   return map;
 }
 
-export default function JobCalendarView({ jobs, sites, assignments = [], checkins = [], teamMembers = [], onJobClick, onJobMove }: Props) {
+export default function JobCalendarView({ jobs, sites, assignments = [], checkins = [], teamMembers = [], onJobClick, onJobMove, onDiscardEdits }: Props) {
   const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -247,6 +248,52 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
   const wasDragging = useRef(false);
   const [recurringDialogOpen, setRecurringDialogOpen] = useState(false);
   const [pendingRecurringMove, setPendingRecurringMove] = useState<{ job: Job; fromDate: string; toDate: string; newTime?: string | null } | null>(null);
+
+  // Snapshot tracking for undo
+  const jobSnapshotsRef = useRef<Map<string, { start_date: string; start_time: string | null; end_date: string | null }>>(new Map());
+  const [movedJobIds, setMovedJobIds] = useState<Set<string>>(new Set());
+  const hasEdits = movedJobIds.size > 0;
+
+  const enterEditMode = useCallback(() => {
+    // Snapshot all jobs when entering edit mode
+    const snapshots = new Map<string, { start_date: string; start_time: string | null; end_date: string | null }>();
+    jobs.forEach((j) => {
+      snapshots.set(j.id, { start_date: j.start_date, start_time: j.start_time, end_date: j.end_date });
+    });
+    jobSnapshotsRef.current = snapshots;
+    setMovedJobIds(new Set());
+    setEditMode(true);
+  }, [jobs]);
+
+  const handleSaveEdits = useCallback(() => {
+    setEditMode(false);
+    setMovedJobIds(new Set());
+    jobSnapshotsRef.current = new Map();
+    toast.success(`${movedJobIds.size} change${movedJobIds.size !== 1 ? "s" : ""} saved`);
+  }, [movedJobIds]);
+
+  const handleDiscardEdits = useCallback(() => {
+    if (movedJobIds.size > 0 && onDiscardEdits) {
+      const revertData: { jobId: string; updates: Record<string, any> }[] = [];
+      movedJobIds.forEach((id) => {
+        const snapshot = jobSnapshotsRef.current.get(id);
+        if (snapshot) {
+          revertData.push({ jobId: id, updates: snapshot });
+        }
+      });
+      onDiscardEdits(revertData);
+    }
+    setEditMode(false);
+    setMovedJobIds(new Set());
+    jobSnapshotsRef.current = new Map();
+    toast.info("Changes discarded");
+  }, [movedJobIds, onDiscardEdits]);
+
+  // Wrap onJobMove to track moved IDs
+  const wrappedOnJobMove = useCallback((event: JobMoveEvent) => {
+    setMovedJobIds((prev) => new Set(prev).add(event.jobId));
+    onJobMove?.(event);
+  }, [onJobMove]);
 
   const siteMap = useMemo(() => new Map(sites.map((s) => [s.id, s])), [sites]);
 
@@ -378,9 +425,9 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
         if (!proceed) { clearDragState(); return; }
       }
     }
-    onJobMove?.({ jobId: dragJob.id, newDate: dateStr, newTime: sameDay ? newTime : (newTime || undefined), fromDate: dragStartDate.current || undefined, dropIndex: typeof dropIdx === "number" ? dropIdx : undefined });
+    wrappedOnJobMove({ jobId: dragJob.id, newDate: dateStr, newTime: sameDay ? newTime : (newTime || undefined), fromDate: dragStartDate.current || undefined, dropIndex: typeof dropIdx === "number" ? dropIdx : undefined });
     clearDragState();
-  }, [dragJob, jobs, jobsByDate, assignments, onJobMove]);
+  }, [dragJob, jobs, jobsByDate, assignments, wrappedOnJobMove]);
 
   const handleDrop = useCallback((e: React.DragEvent, dateStr: string) => { e.preventDefault(); executeDrop(dateStr, dragOverIndex ?? undefined); }, [executeDrop, dragOverIndex]);
   const handleCardDrop = useCallback((e: React.DragEvent, dateStr: string, index: number) => { e.preventDefault(); e.stopPropagation(); executeDrop(dateStr, index); }, [executeDrop]);
@@ -388,7 +435,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
   const handleRecurringChoice = (mode: "this" | "all") => {
     if (!pendingRecurringMove) return;
     const { job, fromDate, toDate, newTime } = pendingRecurringMove;
-    onJobMove?.({ jobId: job.id, newDate: toDate, newTime, recurringMode: mode, sourceJob: job, instanceDate: fromDate });
+    wrappedOnJobMove({ jobId: job.id, newDate: toDate, newTime, recurringMode: mode, sourceJob: job, instanceDate: fromDate });
     setRecurringDialogOpen(false);
     setPendingRecurringMove(null);
   };
@@ -476,5 +523,5 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
       return <div key={dateStr} className={cn("border-r border-b border-border min-h-[80px] p-1 transition-colors", isToday && "bg-primary/5", isDragTarget && "bg-primary/10 ring-1 ring-inset ring-primary", isGapSuggestion && dragJob && "bg-emerald-500/5")} onDragOver={(e) => handleDragOver(e, dateStr)} onDragLeave={handleDragLeave} onDrop={(e) => handleDrop(e, dateStr)} onClick={() => { setCurrentDate(day); setViewMode("week"); }}><div className="flex items-center justify-between"><span className={cn("text-xs font-medium w-5 h-5 flex items-center justify-center rounded-full", isToday && "bg-primary text-primary-foreground")}>{day.getDate()}</span>{hours > 0 && <span className="text-[9px] font-mono text-muted-foreground">{hours.toFixed(0)}h</span>}</div>{hours > 0 && <div className="mt-0.5 h-0.5 rounded-full bg-muted overflow-hidden"><div className={cn("h-full rounded-full", getWorkloadBarColor(hours))} style={{ width: `${Math.min(100, (hours / 12) * 100)}%` }} /></div>}<div className="mt-0.5 space-y-0.5 overflow-hidden max-h-[52px]">{dayJobs.slice(0, 3).map((job) => { const displayStatus = job._displayStatus || job.status; return <div key={`${job.id}-${dateStr}`} draggable={editMode && displayStatus !== "completed" && job.status !== "cancelled"} onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, job, dateStr); }} onDragEnd={handleDragEnd} onClick={(e) => { e.stopPropagation(); if (!wasDragging.current) onJobClick?.(job); }} className={cn("rounded px-1 py-0 text-[9px] leading-tight truncate border cursor-pointer", STATUS_BG[displayStatus] || STATUS_BG.scheduled)}><span className={cn("font-medium", STATUS_TEXT[displayStatus] || STATUS_TEXT.scheduled)}>{job.title}</span></div>; })}{dayJobs.length > 3 && <span className="text-[9px] text-muted-foreground pl-1">+{dayJobs.length - 3} more</span>}</div></div>; })}</div></>;
   };
 
-  return <><Card><CardContent className="pt-4 px-2 sm:px-6"><div className="flex items-center justify-between mb-3 flex-wrap gap-2"><div className="flex items-center gap-1 sm:gap-2"><Button variant="outline" size="icon" className="h-8 w-8" onClick={goBack}><ChevronLeft className="h-4 w-4" /></Button><Button variant="outline" size="icon" className="h-8 w-8" onClick={goForward}><ChevronRight className="h-4 w-4" /></Button><h3 className="text-sm sm:text-base font-semibold ml-1 sm:ml-2">{headerLabel}</h3></div><div className="flex items-center gap-1.5"><Button variant="ghost" size="sm" className="text-xs h-7" onClick={goToday}>Today</Button><Button variant={editMode ? "default" : "outline"} size="sm" className="h-7 text-xs" onClick={() => setEditMode((v) => !v)}>{editMode ? <><Unlock className="h-3.5 w-3.5 mr-1" />Done</> : <><Lock className="h-3.5 w-3.5 mr-1" />Edit layout</>}</Button><Button variant={viewMode === "week" ? "default" : "outline"} size="sm" className="h-7 text-xs" onClick={() => setViewMode("week")}>Week</Button><Button variant={viewMode === "month" ? "default" : "outline"} size="sm" className="h-7 text-xs" onClick={() => setViewMode("month")}>Month</Button></div></div>{viewMode === "week" ? renderWeekView() : renderMonthView()}</CardContent></Card><Dialog open={recurringDialogOpen} onOpenChange={setRecurringDialogOpen}><DialogContent><DialogHeader><DialogTitle>Move recurring job</DialogTitle><DialogDescription>Choose whether to move only this occurrence or shift the whole recurring series.</DialogDescription></DialogHeader><DialogFooter className="gap-2 sm:gap-0"><Button variant="outline" onClick={() => handleRecurringChoice("this")}><Copy className="h-4 w-4 mr-2" />This instance only</Button><Button onClick={() => handleRecurringChoice("all")}><RefreshCw className="h-4 w-4 mr-2" />All future instances</Button></DialogFooter></DialogContent></Dialog></>;
+  return <><Card><CardContent className="pt-4 px-2 sm:px-6"><div className="flex items-center justify-between mb-3 flex-wrap gap-2"><div className="flex items-center gap-1 sm:gap-2"><Button variant="outline" size="icon" className="h-8 w-8" onClick={goBack}><ChevronLeft className="h-4 w-4" /></Button><Button variant="outline" size="icon" className="h-8 w-8" onClick={goForward}><ChevronRight className="h-4 w-4" /></Button><h3 className="text-sm sm:text-base font-semibold ml-1 sm:ml-2">{headerLabel}</h3></div><div className="flex items-center gap-1.5"><Button variant="ghost" size="sm" className="text-xs h-7" onClick={goToday}>Today</Button>{editMode ? (<>{hasEdits && <Button variant="outline" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={handleDiscardEdits}><Undo2 className="h-3.5 w-3.5 mr-1" />Discard</Button>}<Button variant="default" size="sm" className="h-7 text-xs" onClick={hasEdits ? handleSaveEdits : () => setEditMode(false)}><Save className="h-3.5 w-3.5 mr-1" />{hasEdits ? "Save" : "Done"}</Button></>) : (<Button variant="outline" size="sm" className="h-7 text-xs" onClick={enterEditMode}><Lock className="h-3.5 w-3.5 mr-1" />Edit layout</Button>)}<Button variant={viewMode === "week" ? "default" : "outline"} size="sm" className="h-7 text-xs" onClick={() => setViewMode("week")}>Week</Button><Button variant={viewMode === "month" ? "default" : "outline"} size="sm" className="h-7 text-xs" onClick={() => setViewMode("month")}>Month</Button></div></div>{viewMode === "week" ? renderWeekView() : renderMonthView()}</CardContent></Card><Dialog open={recurringDialogOpen} onOpenChange={setRecurringDialogOpen}><DialogContent><DialogHeader><DialogTitle>Move recurring job</DialogTitle><DialogDescription>Choose whether to move only this occurrence or shift the whole recurring series.</DialogDescription></DialogHeader><DialogFooter className="gap-2 sm:gap-0"><Button variant="outline" onClick={() => handleRecurringChoice("this")}><Copy className="h-4 w-4 mr-2" />This instance only</Button><Button onClick={() => handleRecurringChoice("all")}><RefreshCw className="h-4 w-4 mr-2" />All future instances</Button></DialogFooter></DialogContent></Dialog></>;
 }
