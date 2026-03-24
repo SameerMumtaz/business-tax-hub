@@ -1,9 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Camera, Navigation, Clock, LogIn, AlertTriangle, DollarSign, CalendarOff, CheckCircle, MapPin, CalendarDays } from "lucide-react";
+import { Camera, Navigation, Clock, LogIn, AlertTriangle, DollarSign, CalendarOff, CheckCircle, MapPin, CalendarDays, Timer } from "lucide-react";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 import { formatDateOnly, getNextInstanceDate, isRecurringJobToday, getTodayDateOnlyKey, compareDateOnly, addDaysToDateOnly, parseDateOnlyLocal } from "@/lib/dateOnly";
 
@@ -13,6 +13,7 @@ export interface AssignedJob {
   description: string | null;
   start_date: string;
   end_date: string | null;
+  start_time: string | null;
   status: string;
   job_type?: string;
   recurring_interval?: string | null;
