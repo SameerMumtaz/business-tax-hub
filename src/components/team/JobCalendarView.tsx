@@ -309,10 +309,12 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
   const siteMap = useMemo(() => new Map(sites.map((s) => [s.id, s])), [sites]);
 
   const { weekDays, rangeStart, rangeEnd } = useMemo(() => {
+    const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
     if (viewMode === "week") {
       const ws = getWeekStart(currentDate);
       const days = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
-      return { weekDays: days, rangeStart: days[0], rangeEnd: days[6] };
+      return { weekDays: days, rangeStart: startOfDay(days[0]), rangeEnd: endOfDay(days[6]) };
     }
     const ms = getMonthStart(currentDate);
     const daysInMonth = new Date(ms.getFullYear(), ms.getMonth() + 1, 0).getDate();
@@ -321,7 +323,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     for (let i = -firstDay; i < daysInMonth + (6 - new Date(ms.getFullYear(), ms.getMonth(), daysInMonth).getDay()); i++) {
       days.push(addDays(ms, i));
     }
-    return { weekDays: days, rangeStart: days[0], rangeEnd: days[days.length - 1] };
+    return { weekDays: days, rangeStart: startOfDay(days[0]), rangeEnd: endOfDay(days[days.length - 1]) };
   }, [viewMode, currentDate]);
 
   const jobsByDate = useMemo(() => buildJobsByDate(jobs, checkins, rangeStart, rangeEnd), [jobs, checkins, rangeStart, rangeEnd]);
