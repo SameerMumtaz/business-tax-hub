@@ -53,6 +53,16 @@ export default function JobSchedulerContent() {
   const [editSiteLng, setEditSiteLng] = useState("");
   const [editSiteClientId, setEditSiteClientId] = useState("");
 
+  // Inline new site state (used inside job dialogs)
+  const [inlineNewSite, setInlineNewSite] = useState(false);
+  const [inlineSiteName, setInlineSiteName] = useState("");
+  const [inlineSiteAddress, setInlineSiteAddress] = useState("");
+  const [inlineSiteCity, setInlineSiteCity] = useState("");
+  const [inlineSiteState, setInlineSiteState] = useState("");
+  const [inlineSiteLat, setInlineSiteLat] = useState("");
+  const [inlineSiteLng, setInlineSiteLng] = useState("");
+  const [creatingSiteInline, setCreatingSiteInline] = useState(false);
+
   // Create job state
   const [jobOpen, setJobOpen] = useState(false);
   const [jobTitle, setJobTitle] = useState("");
@@ -160,6 +170,36 @@ export default function JobSchedulerContent() {
       setGeocoding(false);
     }
   }, []);
+
+  const resetInlineSite = () => {
+    setInlineNewSite(false);
+    setInlineSiteName(""); setInlineSiteAddress(""); setInlineSiteCity("");
+    setInlineSiteState(""); setInlineSiteLat(""); setInlineSiteLng("");
+  };
+
+  const handleCreateSiteInline = async (setSiteIdFn: (id: string) => void) => {
+    if (!inlineSiteName.trim()) { toast.error("Site name is required"); return; }
+    setCreatingSiteInline(true);
+    try {
+      await createSite({
+        name: inlineSiteName, address: inlineSiteAddress || null, city: inlineSiteCity || null,
+        state: inlineSiteState || null, zip: null, notes: null,
+        latitude: inlineSiteLat ? Number(inlineSiteLat) : null,
+        longitude: inlineSiteLng ? Number(inlineSiteLng) : null,
+        geofence_radius: 150, client_id: null,
+      });
+      // After creation, find the newly created site and select it
+      await refetch();
+      // We need to wait for refetch, then find by name
+      const { data: newSites } = await supabase
+        .from("job_sites").select("id").eq("user_id", user!.id)
+        .eq("name", inlineSiteName).order("created_at", { ascending: false }).limit(1);
+      if (newSites?.[0]) setSiteIdFn(newSites[0].id);
+      resetInlineSite();
+      toast.success("Site created");
+    } catch { toast.error("Failed to create site"); }
+    finally { setCreatingSiteInline(false); }
+  };
 
   const handleCreateSite = async () => {
     if (!siteName.trim()) { toast.error("Name is required"); return; }
