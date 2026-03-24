@@ -290,10 +290,11 @@ export function useJobs() {
     }
   };
 
-  const assignWorker = async (jobId: string, workerId: string, workerName: string, workerType: string, assignedHours: number = 0) => {
+  const assignWorker = async (jobId: string, workerId: string, workerName: string, workerType: string, assignedHours: number = 0, hoursPerDay: number = 0, assignedDays: string[] | null = null) => {
     const { error } = await supabase.from("job_assignments").insert({
-      job_id: jobId, worker_id: workerId, worker_name: workerName, worker_type: workerType, assigned_hours: assignedHours,
-    });
+      job_id: jobId, worker_id: workerId, worker_name: workerName, worker_type: workerType,
+      assigned_hours: assignedHours, hours_per_day: hoursPerDay, assigned_days: assignedDays,
+    } as any);
     if (error) {
       toast.error(error.message);
       return;
