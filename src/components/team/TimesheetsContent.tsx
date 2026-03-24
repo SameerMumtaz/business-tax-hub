@@ -832,7 +832,28 @@ export default function TimesheetsContent() {
                                         <span className="text-[10px] text-muted-foreground">{workerEntries.length} jobs</span>
                                       )}
                                     </TableCell>
-                                    <TableCell className="text-right font-mono text-xs">${rate.toFixed(2)}</TableCell>
+                                    <TableCell className="text-right">
+                                      <div className="flex flex-col items-end gap-1">
+                                        <span className="font-mono text-xs">${rate.toFixed(2)}</span>
+                                        <TooltipProvider>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <div className="flex items-center gap-1">
+                                                <span className="text-[10px] text-muted-foreground">OT</span>
+                                                <Switch
+                                                  checked={workerOtEnabled}
+                                                  onCheckedChange={() => toggleOt(workerId)}
+                                                  className="h-4 w-7 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input [&>span]:h-3 [&>span]:w-3 [&>span]:data-[state=checked]:translate-x-3"
+                                                />
+                                              </div>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p className="text-xs">{workerOtEnabled ? "1.5x overtime enabled (40+ hrs)" : "No overtime applied"}</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </TooltipProvider>
+                                      </div>
+                                    </TableCell>
                                     {DAYS.map((day) => {
                                       const val = hasMultipleJobs ? aggDayHours[day] : (firstEntry[`${day}_hours` as keyof TimesheetEntry] as number);
                                       const scheduled = hasMultipleJobs ? null : getScheduledHours(firstEntry, ts);
