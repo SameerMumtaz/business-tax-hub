@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import ScheduledVsActualWidget from "./ScheduledVsActualWidget";
 import { useTimesheets, type TimesheetEntry } from "@/hooks/useTimesheets";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -573,6 +574,14 @@ export default function TimesheetsContent() {
 
   return (
     <div className="space-y-4">
+      {/* Weekly Scheduled vs. Actual comparison */}
+      <ScheduledVsActualWidget
+        jobs={jobs}
+        assignments={assignments}
+        checkins={checkins}
+        members={workers.map((w) => ({ id: w.id, name: w.name }))}
+      />
+
       {/* Quick-create buttons + custom */}
       <div className="flex items-center gap-2 flex-wrap justify-between">
         <div className="flex items-center gap-2">
