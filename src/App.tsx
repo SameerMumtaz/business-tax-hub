@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { DateRangeProvider } from "@/contexts/DateRangeContext";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 import ProtectedRoute, { ProfileGateProvider } from "@/components/ProtectedRoute";
 import AuthPage from "./pages/AuthPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
@@ -52,6 +53,7 @@ const App = () => (
     <AuthProvider>
       <ProfileGateProvider>
       <DateRangeProvider>
+      <LanguageProvider>
       <TooltipProvider>
         <Toaster />
         <Sonner />
@@ -107,6 +109,7 @@ const App = () => (
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
+      </LanguageProvider>
       </DateRangeProvider>
       </ProfileGateProvider>
     </AuthProvider>
