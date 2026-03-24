@@ -80,11 +80,12 @@ const links: NavItem[] = [
   },
   {
     to: "/tax-center", label: "Taxes", icon: Calculator,
-    matchPaths: ["/tax-center"],
+    matchPaths: ["/tax-center", "/1099"],
     children: [
       { to: "/tax-center", label: "Tax Estimates", icon: Calculator },
       { to: "/tax-center?tab=deductions", label: "Deductions", icon: Percent },
       { to: "/tax-center?tab=schedule-c", label: "Tax Form Preview", icon: Home },
+      { to: "/1099", label: "1099-NEC & W-2", icon: Users },
     ],
   },
   {
@@ -97,7 +98,7 @@ const links: NavItem[] = [
       { to: "/team?tab=members", label: "Members", icon: Users },
     ],
   },
-  { to: "/1099", label: "Team & Contractors", icon: Users },
+  
   { to: "/booking-settings", label: "Online Booking", icon: CalendarDays },
   { to: "/profile", label: "Business Info", icon: Building2 },
 ];
