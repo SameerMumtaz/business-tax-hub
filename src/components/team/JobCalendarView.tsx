@@ -425,9 +425,9 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
         if (!proceed) { clearDragState(); return; }
       }
     }
-    onJobMove?.({ jobId: dragJob.id, newDate: dateStr, newTime: sameDay ? newTime : (newTime || undefined), fromDate: dragStartDate.current || undefined, dropIndex: typeof dropIdx === "number" ? dropIdx : undefined });
+    wrappedOnJobMove({ jobId: dragJob.id, newDate: dateStr, newTime: sameDay ? newTime : (newTime || undefined), fromDate: dragStartDate.current || undefined, dropIndex: typeof dropIdx === "number" ? dropIdx : undefined });
     clearDragState();
-  }, [dragJob, jobs, jobsByDate, assignments, onJobMove]);
+  }, [dragJob, jobs, jobsByDate, assignments, wrappedOnJobMove]);
 
   const handleDrop = useCallback((e: React.DragEvent, dateStr: string) => { e.preventDefault(); executeDrop(dateStr, dragOverIndex ?? undefined); }, [executeDrop, dragOverIndex]);
   const handleCardDrop = useCallback((e: React.DragEvent, dateStr: string, index: number) => { e.preventDefault(); e.stopPropagation(); executeDrop(dateStr, index); }, [executeDrop]);
@@ -435,7 +435,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
   const handleRecurringChoice = (mode: "this" | "all") => {
     if (!pendingRecurringMove) return;
     const { job, fromDate, toDate, newTime } = pendingRecurringMove;
-    onJobMove?.({ jobId: job.id, newDate: toDate, newTime, recurringMode: mode, sourceJob: job, instanceDate: fromDate });
+    wrappedOnJobMove({ jobId: job.id, newDate: toDate, newTime, recurringMode: mode, sourceJob: job, instanceDate: fromDate });
     setRecurringDialogOpen(false);
     setPendingRecurringMove(null);
   };
