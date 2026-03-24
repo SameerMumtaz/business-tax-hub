@@ -90,17 +90,24 @@ export default function CrewAssignmentPanel({
     return conflicts;
   }, [job, assignments, allJobs, teamMembers]);
 
-  const totalAssignedHours = jobAssignments.reduce((s, a) => s + (a.assigned_hours || 0), 0);
+  // W-2 (salaried) workers don't count toward labor budget
+  const isW2 = (workerType: string) => workerType === "W2";
+
+  const totalAssignedHours = jobAssignments
+    .filter(a => !isW2(a.worker_type))
+    .reduce((s, a) => s + (a.assigned_hours || 0), 0);
   const laborBudgetHrs = job.labor_budget_type === "hours"
     ? job.labor_budget_hours
     : (job.labor_budget_amount > 0 ? job.labor_budget_amount : 0);
   const isHoursMode = job.labor_budget_type === "hours";
 
-  const assignedDollars = jobAssignments.reduce((s, a) => {
-    const member = teamMembers.find((m) => m.id === a.worker_id);
-    const rate = member?.pay_rate || 0;
-    return s + (a.assigned_hours || 0) * rate;
-  }, 0);
+  const assignedDollars = jobAssignments
+    .filter(a => !isW2(a.worker_type))
+    .reduce((s, a) => {
+      const member = teamMembers.find((m) => m.id === a.worker_id);
+      const rate = member?.pay_rate || 0;
+      return s + (a.assigned_hours || 0) * rate;
+    }, 0);
 
   const budgetDollars = isHoursMode
     ? job.labor_budget_hours * job.labor_budget_rate
