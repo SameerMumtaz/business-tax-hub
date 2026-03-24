@@ -651,8 +651,10 @@ export type Database = {
       }
       job_assignments: {
         Row: {
+          assigned_days: string[] | null
           assigned_hours: number
           created_at: string
+          hours_per_day: number
           id: string
           job_id: string
           worker_id: string
@@ -660,8 +662,10 @@ export type Database = {
           worker_type: string
         }
         Insert: {
+          assigned_days?: string[] | null
           assigned_hours?: number
           created_at?: string
+          hours_per_day?: number
           id?: string
           job_id: string
           worker_id: string
@@ -669,8 +673,10 @@ export type Database = {
           worker_type: string
         }
         Update: {
+          assigned_days?: string[] | null
           assigned_hours?: number
           created_at?: string
+          hours_per_day?: number
           id?: string
           job_id?: string
           worker_id?: string
