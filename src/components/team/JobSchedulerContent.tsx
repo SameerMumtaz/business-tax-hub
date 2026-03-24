@@ -679,7 +679,7 @@ export default function JobSchedulerContent() {
         </DialogContent>
       </Dialog>
 
-      <Tabs value={tab} onValueChange={setTab}>
+      <Tabs value={tab} onValueChange={(v) => { setTab(v); if (v !== "services") refetchTemplates(); }}>
         <TabsList>
           <TabsTrigger value="calendar"><Calendar className="h-3.5 w-3.5 mr-1" />Calendar</TabsTrigger>
           <TabsTrigger value="jobs">Jobs</TabsTrigger>
