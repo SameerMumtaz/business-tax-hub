@@ -166,6 +166,7 @@ export default function CheckInProgressWidget({ jobs, assignments, checkins }: P
       completedJobs,
       inProgressJobs,
       notStartedPastDue,
+      pastDueJobCount,
       upcomingJobs,
       jobDetails,
     };
