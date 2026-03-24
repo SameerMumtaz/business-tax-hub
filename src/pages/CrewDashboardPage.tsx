@@ -284,7 +284,7 @@ export default function CrewDashboardPage() {
           </Button>
         </div>
 
-        <LinkToBusinessCard />
+        
 
         {/* Quick Stats */}
         {!loading && (
