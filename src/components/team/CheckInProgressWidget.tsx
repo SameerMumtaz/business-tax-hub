@@ -135,7 +135,8 @@ export default function CheckInProgressWidget({ jobs, assignments, checkins }: P
         expectedCheckins += job.assignedWorkers;
       } else if (jobHasStarted && jobCheckins.length === 0) {
         jobStatus = "missed";
-        notStartedPastDue++;
+        notStartedPastDue += job.assignedWorkers;
+        pastDueJobCount++;
         expectedCheckins += job.assignedWorkers;
       } else if (!jobHasStarted) {
         jobStatus = "upcoming";
