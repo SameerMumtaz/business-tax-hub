@@ -90,13 +90,12 @@ const links: NavItem[] = [
   },
   {
     to: "/team", label: "Team", icon: Users,
-    matchPaths: ["/team", "/services"],
+    matchPaths: ["/team"],
     children: [
       { to: "/team", label: "Supervisor", icon: Eye },
-      { to: "/team?tab=scheduler", label: "Schedule", icon: BarChart3 },
+      { to: "/team?tab=scheduler", label: "Schedule", icon: CalendarDays },
       { to: "/team?tab=timesheets", label: "Timesheets", icon: Clock },
       { to: "/team?tab=members", label: "Members", icon: Users },
-      { to: "/services", label: "Services", icon: ClipboardList },
     ],
   },
   

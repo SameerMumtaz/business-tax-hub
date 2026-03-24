@@ -20,7 +20,7 @@ const links = [
   { to: "/team?tab=scheduler", label: "Schedule", icon: Calendar },
   { to: "/team?tab=timesheets", label: "Timesheets", icon: Clock },
   { to: "/team?tab=members", label: "Members", icon: Users },
-  { to: "/services", label: "Services", icon: ClipboardList },
+  
 ];
 
 export default function ManagerSidebar() {
