@@ -3,6 +3,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, DollarSign, MapPin } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 import type { AssignedJob } from "./CrewJobsList";
 import { addDaysToDateOnly, dateOnlyKeyFromLocalDate, formatDateOnlyLong, getJobDateKeysInRange, getTodayDateOnlyKey } from "@/lib/dateOnly";
 
@@ -20,11 +21,9 @@ interface Props {
 
 function getOccurrenceStatus(job: AssignedJob, dateKey: string, checkins: CrewOccurrence[]) {
   if (job.job_type !== "recurring") return job.status;
-
   const latest = checkins
     .filter((entry) => entry.job_id === job.id && entry.occurrence_date === dateKey)
     .sort((a, b) => b.check_in_time.localeCompare(a.check_in_time))[0];
-
   if (!latest) return "scheduled";
   if (latest.status === "checked_in") return "in_progress";
   if (latest.status === "checked_out") return "completed";
@@ -32,6 +31,7 @@ function getOccurrenceStatus(job: AssignedJob, dateKey: string, checkins: CrewOc
 }
 
 export default function CrewCalendarView({ jobs, checkins = [] }: Props) {
+  const { t } = useLanguage();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
 
   const jobDates = useMemo(() => {
@@ -40,7 +40,6 @@ export default function CrewCalendarView({ jobs, checkins = [] }: Props) {
       if (!map.has(dateStr)) map.set(dateStr, []);
       map.get(dateStr)!.push(job);
     };
-
     const rangeEnd = jobs.reduce((latest, job) => {
       const candidate = job.recurring_end_date ?? job.end_date ?? addDaysToDateOnly(job.start_date, 366);
       return candidate > latest ? candidate : latest;
@@ -52,22 +51,17 @@ export default function CrewCalendarView({ jobs, checkins = [] }: Props) {
         addJob(job.start_date, { ...job, displayStatus: getOccurrenceStatus(job, job.start_date, checkins) });
         return;
       }
-
       keys.forEach((key) => {
         addJob(key, { ...job, displayStatus: getOccurrenceStatus(job, key, checkins) });
       });
     });
-
     return map;
   }, [jobs, checkins]);
 
   const toKey = (d: Date) => dateOnlyKeyFromLocalDate(d);
   const selectedDateKey = selectedDate ? toKey(selectedDate) : undefined;
 
-  const modifiers = {
-    hasJob: (date: Date) => jobDates.has(toKey(date)),
-  };
-
+  const modifiers = { hasJob: (date: Date) => jobDates.has(toKey(date)) };
   const modifiersStyles = {
     hasJob: {
       backgroundColor: "hsl(var(--primary) / 0.15)",
@@ -99,7 +93,7 @@ export default function CrewCalendarView({ jobs, checkins = [] }: Props) {
             {selectedDateKey ? formatDateOnlyLong(selectedDateKey) : ""}
           </h3>
           {selectedJobs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No jobs scheduled</p>
+            <p className="text-sm text-muted-foreground">{t("calendar.noJobs")}</p>
           ) : (
             selectedJobs.map((job) => (
               <Card key={`${job.id}-${selectedDateKey}`}>

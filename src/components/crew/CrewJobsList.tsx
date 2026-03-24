@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Camera, Navigation, Clock, LogIn, AlertTriangle, DollarSign, CalendarOff, CheckCircle, MapPin, CalendarDays, Timer } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 import { formatDateOnly, getNextInstanceDate, isRecurringJobToday, getTodayDateOnlyKey, compareDateOnly, addDaysToDateOnly, parseDateOnlyLocal } from "@/lib/dateOnly";
 
@@ -37,24 +38,15 @@ interface Props {
   onCheckIn: (job: AssignedJob) => void;
 }
 
-function getRelativeDayLabel(dateStr: string): string {
-  const today = getTodayDateOnlyKey();
-  const tomorrow = addDaysToDateOnly(today, 1);
-  if (dateStr === today) return "Today";
-  if (dateStr === tomorrow) return "Tomorrow";
-  const d = parseDateOnlyLocal(dateStr);
-  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  return dayNames[d.getDay()];
-}
-
 function getDirectionsUrl(lat: number | null, lng: number | null, address: string | null) {
   if (lat != null && lng != null) return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
   if (address) return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
   return null;
 }
 
-/** Live countdown to a job's start_time (e.g. "Starts in 3h 24m") */
+/** Live countdown to a job's start_time */
 function StartsInCountdown({ startTime }: { startTime: string }) {
+  const { t } = useLanguage();
   const [label, setLabel] = useState("");
   useEffect(() => {
     const update = () => {
@@ -63,22 +55,22 @@ function StartsInCountdown({ startTime }: { startTime: string }) {
       const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
       const diffMs = target.getTime() - now.getTime();
       if (diffMs <= 0) {
-        setLabel("Starting now");
+        setLabel(t("jobs.startingNow"));
         return;
       }
       const mins = Math.floor(diffMs / 60000);
       if (mins < 60) {
-        setLabel(`Starts in ${mins}m`);
+        setLabel(`${t("jobs.startsIn")} ${mins}m`);
       } else {
         const hrs = Math.floor(mins / 60);
         const rm = mins % 60;
-        setLabel(`Starts in ${hrs}h ${rm > 0 ? `${rm}m` : ""}`);
+        setLabel(`${t("jobs.startsIn")} ${hrs}h ${rm > 0 ? `${rm}m` : ""}`);
       }
     };
     update();
     const id = setInterval(update, 60_000);
     return () => clearInterval(id);
-  }, [startTime]);
+  }, [startTime, t]);
 
   if (!label) return null;
   return (
@@ -97,9 +89,25 @@ function JobCard({ job, activeCheckin, gpsLoading, onCheckIn, onPhotos, variant 
   onPhotos: (id: string) => void;
   variant: "today" | "week" | "upcoming";
 }) {
+  const { t } = useLanguage();
   const directionsUrl = getDirectionsUrl(job.site.latitude, job.site.longitude, job.site.address);
   const todayJob = isRecurringJobToday(job);
   const displayDate = getNextInstanceDate(job);
+
+  const dayNames: Record<number, string> = {
+    0: t("day.sunday"), 1: t("day.monday"), 2: t("day.tuesday"),
+    3: t("day.wednesday"), 4: t("day.thursday"), 5: t("day.friday"), 6: t("day.saturday"),
+  };
+
+  const getRelativeDayLabel = (dateStr: string): string => {
+    const today = getTodayDateOnlyKey();
+    const tomorrow = addDaysToDateOnly(today, 1);
+    if (dateStr === today) return t("jobs.today");
+    if (dateStr === tomorrow) return t("jobs.tomorrow");
+    const d = parseDateOnlyLocal(dateStr);
+    return dayNames[d.getDay()] || "";
+  };
+
   const borderColor = variant === "today"
     ? "border-l-4 border-l-primary"
     : variant === "week"
@@ -142,7 +150,7 @@ function JobCard({ job, activeCheckin, gpsLoading, onCheckIn, onPhotos, variant 
         {!job.site.latitude && (
           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted px-2.5 py-1.5 rounded-md">
             <AlertTriangle className="h-3 w-3" />
-            No GPS — geofencing disabled
+            {t("jobs.noGps")}
           </div>
         )}
 
@@ -150,12 +158,12 @@ function JobCard({ job, activeCheckin, gpsLoading, onCheckIn, onPhotos, variant 
           {job.status === "completed" && job.job_type !== "recurring" ? (
             <div className="flex-1 flex items-center gap-1.5 text-xs text-primary bg-accent px-3 py-2 rounded-md">
               <CheckCircle className="h-3.5 w-3.5" />
-              Completed
+              {t("jobs.completed")}
             </div>
           ) : variant === "today" && !activeCheckin && todayJob ? (
             <Button className="flex-1 h-9" onClick={() => onCheckIn(job)} disabled={gpsLoading === job.id}>
               <LogIn className="h-4 w-4 mr-1.5" />
-              {gpsLoading === job.id ? "Getting location…" : "Check In"}
+              {gpsLoading === job.id ? t("checkin.gettingLocation") : t("checkin.checkIn")}
             </Button>
           ) : variant !== "today" ? (
             <div className="flex-1 flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-3 py-2 rounded-md">
@@ -165,11 +173,11 @@ function JobCard({ job, activeCheckin, gpsLoading, onCheckIn, onPhotos, variant 
           ) : !activeCheckin && !todayJob ? (
             <div className="flex-1 flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-3 py-2 rounded-md">
               <CalendarOff className="h-3.5 w-3.5" />
-              Check-in on {formatDateOnly(displayDate)}
+              {t("checkin.onScheduledDate")} {formatDateOnly(displayDate)}
             </div>
           ) : null}
 
-          <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => onPhotos(job.id)} title="Photos">
+          <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => onPhotos(job.id)} title={t("jobs.photos")}>
             <Camera className="h-4 w-4" />
           </Button>
           {directionsUrl && (
@@ -184,13 +192,14 @@ function JobCard({ job, activeCheckin, gpsLoading, onCheckIn, onPhotos, variant 
 }
 
 export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckIn }: Props) {
+  const { t } = useLanguage();
   const [photosJobId, setPhotosJobId] = useState<string | null>(null);
 
   const { todayJobs, thisWeekJobs, upcomingJobs } = useMemo(() => {
     const today = getTodayDateOnlyKey();
-    const dayOfWeek = parseDateOnlyLocal(today).getDay(); // 0=Sun
+    const dayOfWeek = parseDateOnlyLocal(today).getDay();
     const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const weekEnd = addDaysToDateOnly(today, 6 - mondayOffset); // end of week (Sun)
+    const weekEnd = addDaysToDateOnly(today, 6 - mondayOffset);
 
     const todayArr: AssignedJob[] = [];
     const weekArr: AssignedJob[] = [];
@@ -198,13 +207,10 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
 
     for (const job of jobs) {
       const instanceDate = getNextInstanceDate(job);
-
-      // Skip past non-recurring jobs
       if (job.job_type !== "recurring" && !job.recurring_interval && job.status !== "completed") {
         const end = job.end_date ?? job.start_date;
         if (compareDateOnly(end, today) < 0) continue;
       }
-
       if (instanceDate === today) {
         todayArr.push(job);
       } else if (compareDateOnly(instanceDate, today) > 0 && compareDateOnly(instanceDate, weekEnd) <= 0) {
@@ -212,10 +218,8 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
       } else if (compareDateOnly(instanceDate, weekEnd) > 0) {
         upcomingArr.push(job);
       }
-      // Past completed jobs are silently omitted from list (visible in calendar)
     }
 
-    // Sort each group by instance date
     const sortFn = (a: AssignedJob, b: AssignedJob) => compareDateOnly(getNextInstanceDate(a), getNextInstanceDate(b));
     weekArr.sort(sortFn);
     upcomingArr.sort(sortFn);
@@ -228,7 +232,7 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
       <Card>
         <CardContent className="text-center py-12 space-y-2">
           <MapPin className="h-12 w-12 mx-auto text-muted-foreground/50" />
-          <p className="text-muted-foreground">No jobs assigned</p>
+          <p className="text-muted-foreground">{t("jobs.noJobs")}</p>
         </CardContent>
       </Card>
     );
@@ -238,12 +242,11 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
 
   return (
     <div className="space-y-5">
-      {/* Today */}
       {todayJobs.length > 0 && (
         <section className="space-y-2">
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
             <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-            Today — {todayJobs.length} job{todayJobs.length !== 1 ? "s" : ""}
+            {t("jobs.today")} — {todayJobs.length} {todayJobs.length !== 1 ? t("jobs.jobPlural") : t("jobs.job")}
           </h2>
           {todayJobs.map((job) => (
             <JobCard key={job.id} job={job} activeCheckin={activeCheckin} gpsLoading={gpsLoading} onCheckIn={onCheckIn} onPhotos={setPhotosJobId} variant="today" />
@@ -251,26 +254,24 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
         </section>
       )}
 
-      {/* This Week */}
       {thisWeekJobs.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-sm font-medium text-muted-foreground">This Week</h2>
+          <h2 className="text-sm font-medium text-muted-foreground">{t("jobs.thisWeek")}</h2>
           {thisWeekJobs.map((job) => (
             <JobCard key={job.id} job={job} activeCheckin={activeCheckin} gpsLoading={gpsLoading} onCheckIn={onCheckIn} onPhotos={setPhotosJobId} variant="week" />
           ))}
         </section>
       )}
 
-      {/* Upcoming */}
       {upcomingJobs.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-sm font-medium text-muted-foreground">Upcoming</h2>
+          <h2 className="text-sm font-medium text-muted-foreground">{t("jobs.upcoming")}</h2>
           {upcomingJobs.map((job) => (
             <JobCard key={job.id} job={job} activeCheckin={activeCheckin} gpsLoading={gpsLoading} onCheckIn={onCheckIn} onPhotos={setPhotosJobId} variant="upcoming" />
           ))}
           <p className="text-xs text-muted-foreground text-center pt-1">
             <CalendarDays className="h-3 w-3 inline mr-1" />
-            View all jobs in Calendar tab
+            {t("jobs.viewCalendar")}
           </p>
         </section>
       )}
@@ -279,17 +280,16 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
         <Card>
           <CardContent className="text-center py-10 space-y-2">
             <CheckCircle className="h-10 w-10 mx-auto text-primary/50" />
-            <p className="text-sm text-muted-foreground">All caught up! No upcoming jobs this week.</p>
-            <p className="text-xs text-muted-foreground">Check the Calendar tab for future jobs.</p>
+            <p className="text-sm text-muted-foreground">{t("jobs.allCaughtUp")}</p>
+            <p className="text-xs text-muted-foreground">{t("jobs.viewCalendar")}</p>
           </CardContent>
         </Card>
       )}
 
-      {/* Photos Dialog */}
       <Dialog open={!!photosJobId} onOpenChange={(open) => { if (!open) setPhotosJobId(null); }}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Job Photos</DialogTitle>
+            <DialogTitle>{t("jobs.photos")}</DialogTitle>
           </DialogHeader>
           {photosJobId && <JobPhotosPanel jobId={photosJobId} occurrenceDate={jobs.find((j) => j.id === photosJobId) ? getNextInstanceDate(jobs.find((j) => j.id === photosJobId)!) : null} compact />}
         </DialogContent>

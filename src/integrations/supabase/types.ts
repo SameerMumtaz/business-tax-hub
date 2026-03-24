@@ -1143,6 +1143,7 @@ export type Database = {
           personal_city: string | null
           personal_state: string | null
           personal_zip: string | null
+          preferred_language: string
           ssn_last4: string | null
           updated_at: string
           user_id: string
@@ -1169,6 +1170,7 @@ export type Database = {
           personal_city?: string | null
           personal_state?: string | null
           personal_zip?: string | null
+          preferred_language?: string
           ssn_last4?: string | null
           updated_at?: string
           user_id: string
@@ -1195,6 +1197,7 @@ export type Database = {
           personal_city?: string | null
           personal_state?: string | null
           personal_zip?: string | null
+          preferred_language?: string
           ssn_last4?: string | null
           updated_at?: string
           user_id?: string

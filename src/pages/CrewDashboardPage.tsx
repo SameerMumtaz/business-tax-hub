@@ -5,6 +5,7 @@ import { useTeamRole } from "@/hooks/useTeamRole";
 import { useCrewCheckins } from "@/hooks/useCrewCheckins";
 import { useGeofenceMonitor } from "@/hooks/useGeofenceMonitor";
 import { useJobPhotos } from "@/hooks/useJobPhotos";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { getCurrentPosition, isWithinGeofence, haversineDistance } from "@/lib/geofence";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,15 +68,17 @@ function ElapsedProgress({ since, expectedHours }: { since: string; expectedHour
 }
 
 /* ── Greeting helper ────────────────────────────────── */
-function getGreeting(): string {
+function useGreeting(): string {
+  const { t } = useLanguage();
   const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 17) return "Good afternoon";
-  return "Good evening";
+  if (h < 12) return t("greeting.morning");
+  if (h < 17) return t("greeting.afternoon");
+  return t("greeting.evening");
 }
 
 /* ── Quick Stats Strip ──────────────────────────────── */
 function QuickStats({ checkins, payRate, jobs }: { checkins: any[]; payRate: number | null; jobs: AssignedJob[] }) {
+  const { t } = useLanguage();
   const today = getTodayDateOnlyKey();
   const dayOfWeek = parseDateOnlyLocal(today).getDay();
   const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
@@ -91,9 +94,9 @@ function QuickStats({ checkins, payRate, jobs }: { checkins: any[]; payRate: num
   const todayJobCount = jobs.filter((j) => getNextInstanceDate(j) === today && j.status !== "completed").length;
 
   const stats = [
-    { label: "Today", value: `${todayJobCount} job${todayJobCount !== 1 ? "s" : ""}`, icon: Briefcase },
-    { label: "This Week", value: `${weekHours.toFixed(1)}h`, icon: Clock },
-    ...(payRate ? [{ label: "Earned", value: `$${weekEarnings.toFixed(0)}`, icon: DollarSign }] : []),
+    { label: t("stats.today"), value: `${todayJobCount} ${todayJobCount !== 1 ? t("jobs.jobPlural") : t("jobs.job")}`, icon: Briefcase },
+    { label: t("stats.thisWeek"), value: `${weekHours.toFixed(1)}h`, icon: Clock },
+    ...(payRate ? [{ label: t("stats.earned"), value: `$${weekEarnings.toFixed(0)}`, icon: DollarSign }] : []),
   ];
 
   return (
@@ -115,6 +118,8 @@ function QuickStats({ checkins, payRate, jobs }: { checkins: any[]; payRate: num
 export default function CrewDashboardPage() {
   const { user, signOut } = useAuth();
   const { teamMemberId, businessUserId } = useTeamRole();
+  const { t } = useLanguage();
+  const greeting = useGreeting();
   const { checkins, activeCheckin, checkIn, checkOut, refetch } = useCrewCheckins();
   const [assignedJobs, setAssignedJobs] = useState<AssignedJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -207,7 +212,7 @@ export default function CrewDashboardPage() {
     const endMs = parseDateOnlyLocal(instanceDate).setHours(23, 59, 59, 999);
     const nowMs = Date.now();
     if (nowMs < startMs || nowMs > endMs) {
-      toast.error("You can only check in on the scheduled date for this job.");
+      toast.error(t("error.checkInDate"));
       return;
     }
     setGpsLoading(job.id);
@@ -218,21 +223,21 @@ export default function CrewDashboardPage() {
         const radius = job.site.geofence_radius || 150;
         if (!isWithinGeofence(lat, lng, job.site.latitude, job.site.longitude, radius)) {
           const dist = haversineDistance(lat, lng, job.site.latitude, job.site.longitude);
-          toast.error(`You are ${Math.round(dist)}m away. Must be within ${radius}m.`);
+          toast.error(`${Math.round(dist)}m ${t("error.tooFar")} ${radius}m.`);
           setGpsLoading(null);
           return;
         }
       }
       await checkIn(job.id, job.site.id, lat, lng, job.expectedHours, instanceDate);
     } catch (err: any) {
-      toast.error(err.message || "Failed to get GPS location");
+      toast.error(err.message || t("error.gps"));
     }
     setGpsLoading(null);
   };
 
   const handleCheckOut = async () => {
     if (!activeCheckin) return;
-    if (!photosComplete) { toast.error("Please upload both before and after photos before checking out."); return; }
+    if (!photosComplete) { toast.error(t("error.photos")); return; }
     setGpsLoading("checkout");
     try {
       const pos = await getCurrentPosition();
@@ -249,14 +254,14 @@ export default function CrewDashboardPage() {
       }
       await checkOut(activeCheckin.id, lat, lng);
     } catch (err: any) {
-      toast.error(err.message || "Failed to get GPS location");
+      toast.error(err.message || t("error.gps"));
     }
     setGpsLoading(null);
   };
 
   const handleOvertimeCheckout = async () => {
     if (!activeCheckin || !pendingCheckoutCoords) return;
-    if (!overtimeExplanation.trim()) { toast.error("Please provide an explanation for the overtime."); return; }
+    if (!overtimeExplanation.trim()) { toast.error(t("error.overtime")); return; }
     setGpsLoading("checkout");
     await checkOut(activeCheckin.id, pendingCheckoutCoords.lat, pendingCheckoutCoords.lng, overtimeExplanation.trim());
     setOvertimeDialogOpen(false);
@@ -274,10 +279,10 @@ export default function CrewDashboardPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-foreground">
-              {getGreeting()}{firstName ? `, ${firstName}` : ""}
+              {greeting}{firstName ? `, ${firstName}` : ""}
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Here's your schedule overview
+              {t("greeting.schedule")}
             </p>
           </div>
           <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
@@ -298,14 +303,14 @@ export default function CrewDashboardPage() {
             <CardHeader className="pb-2 pt-4 px-4">
               <CardTitle className="text-sm font-medium flex items-center gap-2 text-primary">
                 <div className="h-2.5 w-2.5 rounded-full bg-primary animate-pulse" />
-                Checked in{activeJob ? ` — ${activeJob.title}` : ""}
+                {t("checkin.checkedIn")}{activeJob ? ` — ${activeJob.title}` : ""}
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Clock className="h-4 w-4" />
-                  Since {new Date(activeCheckin.check_in_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                  {t("checkin.since")} {new Date(activeCheckin.check_in_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                 </div>
                 {payRate && <span className="text-xs text-muted-foreground">${payRate}/hr</span>}
               </div>
@@ -318,10 +323,10 @@ export default function CrewDashboardPage() {
                 <div className="space-y-2">
                   <div className="flex gap-3 text-xs">
                     <span className={hasBeforePhotos ? "text-primary" : "text-destructive"}>
-                      {hasBeforePhotos ? "✓" : "✗"} Before photo{hasBeforePhotos ? "" : " needed"}
+                      {hasBeforePhotos ? "✓" : "✗"} {t("checkin.beforePhoto")}{hasBeforePhotos ? "" : ` ${t("checkin.needed")}`}
                     </span>
                     <span className={hasAfterPhotos ? "text-primary" : "text-destructive"}>
-                      {hasAfterPhotos ? "✓" : "✗"} After photo{hasAfterPhotos ? "" : " needed"}
+                      {hasAfterPhotos ? "✓" : "✗"} {t("checkin.afterPhoto")}{hasAfterPhotos ? "" : ` ${t("checkin.needed")}`}
                     </span>
                   </div>
                   <JobPhotosPanel jobId={activeJobId} occurrenceDate={activeOccurrenceDate} compact />
@@ -335,7 +340,7 @@ export default function CrewDashboardPage() {
                 disabled={gpsLoading === "checkout" || !photosComplete}
               >
                 <LogOut className="h-4 w-4 mr-2" />
-                {!photosComplete ? "Upload photos to check out" : gpsLoading === "checkout" ? "Getting location…" : "Check Out"}
+                {!photosComplete ? t("checkin.uploadPhotos") : gpsLoading === "checkout" ? t("checkin.gettingLocation") : t("checkin.checkOut")}
               </Button>
             </CardContent>
           </Card>
@@ -343,21 +348,21 @@ export default function CrewDashboardPage() {
 
         {/* Main Content */}
         {loading ? (
-          <p className="text-muted-foreground text-center py-12">Loading jobs…</p>
+          <p className="text-muted-foreground text-center py-12">{t("loading.jobs")}</p>
         ) : (
           <Tabs defaultValue="list">
             <TabsList className="w-full sticky bottom-0 sm:relative sm:bottom-auto z-10 bg-card border border-border">
               <TabsTrigger value="list" className="flex-1 gap-1.5">
-                <List className="h-4 w-4" /> Jobs
+                <List className="h-4 w-4" /> {t("tab.jobs")}
               </TabsTrigger>
               <TabsTrigger value="calendar" className="flex-1 gap-1.5">
-                <CalendarDays className="h-4 w-4" /> Calendar
+                <CalendarDays className="h-4 w-4" /> {t("tab.calendar")}
               </TabsTrigger>
               <TabsTrigger value="map" className="flex-1 gap-1.5">
-                <MapIcon className="h-4 w-4" /> Map
+                <MapIcon className="h-4 w-4" /> {t("tab.map")}
               </TabsTrigger>
               <TabsTrigger value="profile" className="flex-1 gap-1.5">
-                <UserCircle className="h-4 w-4" /> Profile
+                <UserCircle className="h-4 w-4" /> {t("tab.profile")}
               </TabsTrigger>
             </TabsList>
             <TabsContent value="list" className="mt-4">
@@ -384,14 +389,14 @@ export default function CrewDashboardPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-chart-warning" />
-              Overtime Explanation Required
+              {t("overtime.title")}
             </DialogTitle>
             <DialogDescription>
-              You've exceeded the scheduled time ({((activeCheckin as any)?.expected_hours || 0).toFixed(1)} hours). Please explain why.
+              {t("overtime.description")}
             </DialogDescription>
           </DialogHeader>
           <Textarea
-            placeholder="e.g. Client requested additional work, weather delay..."
+            placeholder={t("overtime.placeholder")}
             value={overtimeExplanation}
             onChange={(e) => setOvertimeExplanation(e.target.value)}
             rows={3}
@@ -401,7 +406,7 @@ export default function CrewDashboardPage() {
               Cancel
             </Button>
             <Button onClick={handleOvertimeCheckout} disabled={!overtimeExplanation.trim() || gpsLoading === "checkout"}>
-              {gpsLoading === "checkout" ? "Checking out…" : "Submit & Check Out"}
+              {gpsLoading === "checkout" ? t("checkin.gettingLocation") : t("overtime.submit")}
             </Button>
           </DialogFooter>
         </DialogContent>

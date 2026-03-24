@@ -2,11 +2,13 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTeamRole } from "@/hooks/useTeamRole";
+import { useLanguage, type Language } from "@/contexts/LanguageContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Save, UserCircle } from "lucide-react";
+import { Save, UserCircle, Globe } from "lucide-react";
 import { toast } from "sonner";
 import SetPasswordCard from "@/components/SetPasswordCard";
 import DeleteAccountSection from "@/components/DeleteAccountSection";
@@ -35,6 +37,7 @@ const empty: PersonalFields = {
 export default function CrewProfileTab() {
   const { user } = useAuth();
   const { teamMemberId, businessUserId } = useTeamRole();
+  const { language, setLanguage, t } = useLanguage();
   const [profile, setProfile] = useState<PersonalFields>(empty);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -125,7 +128,7 @@ export default function CrewProfileTab() {
       .eq("user_id", user.id);
 
     if (error) {
-      toast.error("Failed to save profile");
+      toast.error(t("profile.saveFailed"));
       setSaving(false);
       return;
     }
@@ -182,69 +185,89 @@ export default function CrewProfileTab() {
     }
 
     setSaving(false);
-    toast.success("Profile saved & synced");
+    toast.success(t("profile.saved"));
   };
 
   const set = (key: keyof PersonalFields, value: string) =>
     setProfile((p) => ({ ...p, [key]: value }));
 
   if (loading) {
-    return <div className="text-center py-8 text-muted-foreground">Loading…</div>;
+    return <div className="text-center py-8 text-muted-foreground">{t("loading")}</div>;
   }
 
   return (
     <>
+    {/* Language Selector */}
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <UserCircle className="h-5 w-5" /> My Info
+          <Globe className="h-5 w-5" /> {t("profile.language")}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Select value={language} onValueChange={(v) => setLanguage(v as Language)}>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="en">English</SelectItem>
+            <SelectItem value="es">Español</SelectItem>
+          </SelectContent>
+        </Select>
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <UserCircle className="h-5 w-5" /> {t("profile.myInfo")}
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Changes you make here will also update your employer's records.
+          {t("profile.changesSync")}
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label>First Name</Label>
+            <Label>{t("profile.firstName")}</Label>
             <Input value={profile.first_name} onChange={(e) => set("first_name", e.target.value)} />
           </div>
           <div>
-            <Label>Last Name</Label>
+            <Label>{t("profile.lastName")}</Label>
             <Input value={profile.last_name} onChange={(e) => set("last_name", e.target.value)} />
           </div>
         </div>
         <div>
-          <Label>Street Address</Label>
+          <Label>{t("profile.streetAddress")}</Label>
           <Input value={profile.personal_address} onChange={(e) => set("personal_address", e.target.value)} />
         </div>
         <div className="grid grid-cols-3 gap-3">
           <div>
-            <Label>City</Label>
+            <Label>{t("profile.city")}</Label>
             <Input value={profile.personal_city} onChange={(e) => set("personal_city", e.target.value)} />
           </div>
           <div>
-            <Label>State</Label>
+            <Label>{t("profile.state")}</Label>
             <Input value={profile.personal_state} onChange={(e) => set("personal_state", e.target.value)} placeholder="TX" maxLength={2} />
           </div>
           <div>
-            <Label>ZIP</Label>
+            <Label>{t("profile.zip")}</Label>
             <Input value={profile.personal_zip} onChange={(e) => set("personal_zip", e.target.value)} maxLength={10} />
           </div>
         </div>
         <div className="max-w-[200px]">
-          <Label>SSN (last 4 only)</Label>
+          <Label>{t("profile.ssnLast4")}</Label>
           <Input
             value={profile.ssn_last4}
             onChange={(e) => set("ssn_last4", e.target.value.replace(/\D/g, "").slice(0, 4))}
             maxLength={4}
             placeholder="••••"
           />
-          <p className="text-xs text-muted-foreground mt-1">Only last 4 digits stored</p>
+          <p className="text-xs text-muted-foreground mt-1">{t("profile.onlyLast4")}</p>
         </div>
         <Button onClick={handleSave} disabled={saving} className="w-full gap-2">
           <Save className="h-4 w-4" />
-          {saving ? "Saving…" : "Save Profile"}
+          {saving ? t("profile.saving") : t("profile.saveProfile")}
         </Button>
       </CardContent>
     </Card>
