@@ -72,7 +72,11 @@ export default function AllCheckinsTable({ checkins, members, sites, jobs, photo
   }, [photos]);
 
   const filtered = useMemo(() => {
-    let result = checkins;
+    const { from, to } = getDateRange(dateRange, customFrom, customTo);
+    let result = checkins.filter((c) => {
+      const checkinDate = c.occurrence_date || new Date(c.check_in_time).toISOString().split("T")[0];
+      return checkinDate >= from && checkinDate <= to;
+    });
     if (filterMember !== "all") result = result.filter((c) => c.team_member_id === filterMember);
     if (filterSite !== "all") result = result.filter((c) => c.job_site_id === filterSite);
     if (filterStatus !== "all") {
@@ -94,7 +98,7 @@ export default function AllCheckinsTable({ checkins, members, sites, jobs, photo
       });
     }
     return result;
-  }, [checkins, filterMember, filterSite, filterStatus, search, memberMap, siteMap, jobMap]);
+  }, [checkins, dateRange, customFrom, customTo, filterMember, filterSite, filterStatus, search, memberMap, siteMap, jobMap]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
