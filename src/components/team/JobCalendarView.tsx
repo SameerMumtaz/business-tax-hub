@@ -348,36 +348,78 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     return a.start_time.localeCompare(b.start_time);
   });
 
-  const computeTimeForIndex = (dateStr: string, dropIndex: number, excludeJobId?: string): string | null => {
+  const BUFFER_MINUTES = 20;
+  const DEFAULT_START = "08:00";
+
+  const roundTo5Min = (totalMinutes: number): number => Math.round(totalMinutes / 5) * 5;
+
+  const minsToTimeStr = (mins: number): string => {
+    const clamped = Math.max(0, Math.min(mins, 23 * 60 + 59));
+    return `${String(Math.floor(clamped / 60)).padStart(2, "0")}:${String(clamped % 60).padStart(2, "0")}`;
+  };
+
+  const getJobEndMinutes = (job: CalendarJob): number => {
+    if (!job.start_time) return 0;
+    const [h, m] = job.start_time.split(":").map(Number);
+    return h * 60 + m + Math.round((job.estimated_hours || 1) * 60);
+  };
+
+  const getJobStartMinutes = (job: CalendarJob): number => {
+    if (!job.start_time) return 0;
+    const [h, m] = job.start_time.split(":").map(Number);
+    return h * 60 + m;
+  };
+
+  const computeTimeForIndex = (dateStr: string, dropIndex: number, excludeJobId?: string, movedJobDurationHours?: number): string | null => {
     const dayJobs = sortJobs((jobsByDate.get(dateStr) || []).filter((j) => j.id !== excludeJobId));
-    if (dayJobs.length === 0) return null;
+    const movedDurationMins = Math.round((movedJobDurationHours || 1) * 60);
+
+    // Empty day → default 8:00 AM
+    if (dayJobs.length === 0) return DEFAULT_START;
+
+    // Drop ABOVE all jobs
     if (dropIndex <= 0) {
-      const firstTime = dayJobs[0]?.start_time;
-      if (!firstTime) return null;
-      const [h, m] = firstTime.split(":").map(Number);
-      const mins = Math.max(0, h * 60 + m - 30);
-      return `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+      const firstJob = dayJobs[0];
+      if (!firstJob?.start_time) return DEFAULT_START;
+      const nextStart = getJobStartMinutes(firstJob);
+      const newStart = roundTo5Min(nextStart - movedDurationMins - BUFFER_MINUTES);
+      return minsToTimeStr(Math.max(0, newStart));
     }
+
+    // Drop BELOW all jobs
     if (dropIndex >= dayJobs.length) {
       const lastJob = dayJobs[dayJobs.length - 1];
-      const lastTime = lastJob?.start_time;
-      if (!lastTime) return null;
-      const [h, m] = lastTime.split(":").map(Number);
-      const estHours = lastJob.estimated_hours || 1;
-      const mins = h * 60 + m + estHours * 60;
-      return `${String(Math.floor(mins / 60) % 24).padStart(2, "0")}:${String(Math.floor(mins) % 60).padStart(2, "0")}`;
+      if (!lastJob?.start_time) return DEFAULT_START;
+      const prevEnd = getJobEndMinutes(lastJob);
+      const newStart = roundTo5Min(prevEnd + BUFFER_MINUTES);
+      return minsToTimeStr(Math.min(newStart, 23 * 60 + 59));
     }
-    const before = dayJobs[dropIndex - 1];
-    const after = dayJobs[dropIndex];
-    if (before?.start_time && after?.start_time) {
-      const [bh, bm] = before.start_time.split(":").map(Number);
-      const [ah, am] = after.start_time.split(":").map(Number);
-      const bMins = bh * 60 + bm + (before.estimated_hours || 1) * 60;
-      const aMins = ah * 60 + am;
-      const midMins = Math.floor((bMins + aMins) / 2);
-      return `${String(Math.floor(midMins / 60) % 24).padStart(2, "0")}:${String(midMins % 60).padStart(2, "0")}`;
-    }
-    return null;
+
+    // Drop BETWEEN two jobs
+    const prevJob = dayJobs[dropIndex - 1];
+    if (!prevJob?.start_time) return DEFAULT_START;
+    const prevEnd = getJobEndMinutes(prevJob);
+    const newStart = roundTo5Min(prevEnd + BUFFER_MINUTES);
+    return minsToTimeStr(newStart);
+  };
+
+  /** Check if a computed end time exceeds typical workday (18:00) */
+  const wouldOverflowWorkday = (startTime: string | null, durationHours: number): boolean => {
+    if (!startTime) return false;
+    const [h, m] = startTime.split(":").map(Number);
+    const endMins = h * 60 + m + Math.round(durationHours * 60);
+    return endMins > 18 * 60; // 6:00 PM
+  };
+
+  /** Check if moved job would overlap with the next job in sequence */
+  const wouldOverlapNext = (dateStr: string, dropIndex: number, startTime: string | null, durationHours: number, excludeJobId?: string): boolean => {
+    if (!startTime) return false;
+    const dayJobs = sortJobs((jobsByDate.get(dateStr) || []).filter((j) => j.id !== excludeJobId));
+    const nextJob = dayJobs[dropIndex];
+    if (!nextJob?.start_time) return false;
+    const [sh, sm] = startTime.split(":").map(Number);
+    const endMins = sh * 60 + sm + Math.round(durationHours * 60);
+    return endMins > getJobStartMinutes(nextJob);
   };
 
   const clearDragState = () => {
