@@ -233,7 +233,7 @@ function buildJobsByDate(jobs: Job[], checkins: CrewCheckinOccurrence[], rangeSt
   return map;
 }
 
-export default function JobCalendarView({ jobs, sites, assignments = [], checkins = [], teamMembers = [], onJobClick, onJobMove }: Props) {
+export default function JobCalendarView({ jobs, sites, assignments = [], checkins = [], teamMembers = [], onJobClick, onJobMove, onDiscardEdits }: Props) {
   const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -248,6 +248,52 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
   const wasDragging = useRef(false);
   const [recurringDialogOpen, setRecurringDialogOpen] = useState(false);
   const [pendingRecurringMove, setPendingRecurringMove] = useState<{ job: Job; fromDate: string; toDate: string; newTime?: string | null } | null>(null);
+
+  // Snapshot tracking for undo
+  const jobSnapshotsRef = useRef<Map<string, { start_date: string; start_time: string | null; end_date: string | null }>>(new Map());
+  const [movedJobIds, setMovedJobIds] = useState<Set<string>>(new Set());
+  const hasEdits = movedJobIds.size > 0;
+
+  const enterEditMode = useCallback(() => {
+    // Snapshot all jobs when entering edit mode
+    const snapshots = new Map<string, { start_date: string; start_time: string | null; end_date: string | null }>();
+    jobs.forEach((j) => {
+      snapshots.set(j.id, { start_date: j.start_date, start_time: j.start_time, end_date: j.end_date });
+    });
+    jobSnapshotsRef.current = snapshots;
+    setMovedJobIds(new Set());
+    setEditMode(true);
+  }, [jobs]);
+
+  const handleSaveEdits = useCallback(() => {
+    setEditMode(false);
+    setMovedJobIds(new Set());
+    jobSnapshotsRef.current = new Map();
+    toast.success(`${movedJobIds.size} change${movedJobIds.size !== 1 ? "s" : ""} saved`);
+  }, [movedJobIds]);
+
+  const handleDiscardEdits = useCallback(() => {
+    if (movedJobIds.size > 0 && onDiscardEdits) {
+      const revertData: { jobId: string; updates: Record<string, any> }[] = [];
+      movedJobIds.forEach((id) => {
+        const snapshot = jobSnapshotsRef.current.get(id);
+        if (snapshot) {
+          revertData.push({ jobId: id, updates: snapshot });
+        }
+      });
+      onDiscardEdits(revertData);
+    }
+    setEditMode(false);
+    setMovedJobIds(new Set());
+    jobSnapshotsRef.current = new Map();
+    toast.info("Changes discarded");
+  }, [movedJobIds, onDiscardEdits]);
+
+  // Wrap onJobMove to track moved IDs
+  const wrappedOnJobMove = useCallback((event: JobMoveEvent) => {
+    setMovedJobIds((prev) => new Set(prev).add(event.jobId));
+    onJobMove?.(event);
+  }, [onJobMove]);
 
   const siteMap = useMemo(() => new Map(sites.map((s) => [s.id, s])), [sites]);
 
