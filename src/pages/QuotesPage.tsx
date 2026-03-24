@@ -26,6 +26,7 @@ export default function QuotesPage() {
   const { data: quotes = [] } = useQuotes();
   const { data: clients = [] } = useClients();
   const { sites } = useJobs();
+  const { templates } = useJobTemplates();
   const addQuote = useAddQuote();
   const updateStatus = useUpdateQuoteStatus();
   const deleteQuote = useDeleteQuote();
