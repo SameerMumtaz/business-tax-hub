@@ -1,16 +1,19 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { MapPin, LogOut, Receipt, Clock } from "lucide-react";
+import { MapPin, LogOut, Clock } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Button } from "@/components/ui/button";
-
-const links = [
-  { to: "/crew", label: "My Jobs", icon: MapPin },
-  { to: "/crew/history", label: "Check-in History", icon: Clock },
-];
+import { Receipt } from "lucide-react";
 
 export default function CrewSidebar() {
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const { t } = useLanguage();
+
+  const links = [
+    { to: "/crew", label: t("nav.myJobs"), icon: MapPin },
+    { to: "/crew/history", label: t("nav.checkinHistory"), icon: Clock },
+  ];
 
   return (
     <aside className="w-64 h-screen bg-sidebar border-r border-sidebar-border flex flex-col sticky top-0">
@@ -21,7 +24,7 @@ export default function CrewSidebar() {
             Bookie
           </span>
         </div>
-        <p className="text-xs text-sidebar-foreground mt-1.5 opacity-70">Crew Portal</p>
+        <p className="text-xs text-sidebar-foreground mt-1.5 opacity-70">{t("nav.crewPortal")}</p>
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1 flex flex-col justify-center">
@@ -55,7 +58,7 @@ export default function CrewSidebar() {
           onClick={signOut}
         >
           <LogOut className="h-4 w-4 mr-2" />
-          Sign Out
+          {t("nav.signOut")}
         </Button>
       </div>
     </aside>
