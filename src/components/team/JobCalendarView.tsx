@@ -527,8 +527,9 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     const ms = getMonthStart(currentDate);
     const daysInMonth = new Date(ms.getFullYear(), ms.getMonth() + 1, 0).getDate();
     const firstDayOfWeek = ms.getDay();
+    const mondayPad = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1; // Mon=0
     const cells: (Date | null)[] = [];
-    for (let i = 0; i < firstDayOfWeek; i++) cells.push(null);
+    for (let i = 0; i < mondayPad; i++) cells.push(null);
     for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(ms.getFullYear(), ms.getMonth(), d));
     while (cells.length % 7 !== 0) cells.push(null);
     return <><div className="grid grid-cols-7 text-center text-[10px] sm:text-xs font-medium text-muted-foreground mb-1">{dayHeaders.map((d, i) => <div key={i} className="py-1">{d}</div>)}</div><div className="grid grid-cols-7 border-t border-l border-border rounded-t-md overflow-hidden">{cells.map((day, i) => {
