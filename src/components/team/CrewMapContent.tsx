@@ -187,15 +187,17 @@ export default function CrewMapContent() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <TodayJobs />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <CheckInProgressWidget jobs={jobs} assignments={assignments} checkins={checkins} />
-          <Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="md:col-span-2 lg:col-span-2">
+          <TodayJobs />
+        </div>
+        <CheckInProgressWidget jobs={jobs} assignments={assignments} checkins={checkins} />
+        <div className="grid grid-cols-2 lg:grid-cols-1 gap-4">
+          <Card className="h-full flex flex-col justify-center">
             <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">On-Site Now</CardTitle></CardHeader>
             <CardContent><div className="text-2xl font-bold text-primary">{activeCheckins.length}</div></CardContent>
           </Card>
-          <Card>
+          <Card className="h-full flex flex-col justify-center">
             <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Team Members</CardTitle></CardHeader>
             <CardContent><div className="text-2xl font-bold">{members.length}</div></CardContent>
           </Card>
