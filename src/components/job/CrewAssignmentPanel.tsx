@@ -176,18 +176,20 @@ export default function CrewAssignmentPanel({
           {jobAssignments.map((a) => {
             const member = teamMembers.find((m) => m.id === a.worker_id);
             const rate = member?.pay_rate || 0;
-            const cost = (a.assigned_hours || 0) * rate;
+            const w2 = isW2(a.worker_type);
+            const cost = w2 ? 0 : (a.assigned_hours || 0) * rate;
             return (
               <div key={a.id} className="flex items-center justify-between rounded-md border px-2.5 py-1.5 text-sm">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="font-medium truncate">{a.worker_name}</span>
                   <Badge variant="outline" className="text-[10px] shrink-0">{a.worker_type}</Badge>
+                  {w2 && <Badge variant="secondary" className="text-[10px] shrink-0">Salaried</Badge>}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="text-xs text-muted-foreground font-mono flex items-center gap-1">
                     <Clock className="h-3 w-3" />
                     {a.assigned_hours}h
-                    {rate > 0 && ` · $${cost.toFixed(0)}`}
+                    {!w2 && rate > 0 && ` · $${cost.toFixed(0)}`}
                   </span>
                   <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onRemove(a.id)}>
                     <X className="h-3 w-3" />
