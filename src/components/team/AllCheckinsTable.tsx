@@ -6,9 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Search, Camera, MapPin, ShieldCheck, ShieldAlert, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Camera, MapPin, ShieldCheck, ShieldAlert, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isWithinGeofence, haversineDistance } from "@/lib/geofence";
+import { isWithinGeofence } from "@/lib/geofence";
+import { getTodayDateOnlyKey } from "@/lib/dateOnly";
+import { startOfWeek, startOfMonth, endOfWeek, endOfMonth, format } from "date-fns";
 import type { CrewCheckin } from "@/hooks/useCrewCheckins";
 
 interface SiteInfo { id: string; name: string; latitude: number | null; longitude: number | null; geofence_radius: number | null; }
@@ -24,6 +26,23 @@ interface Props {
   photos: PhotoInfo[];
 }
 
+type DateRange = "today" | "week" | "month" | "custom";
+
+function getDateRange(range: DateRange, customFrom: string, customTo: string): { from: string; to: string } {
+  const today = new Date();
+  const todayStr = getTodayDateOnlyKey();
+  if (range === "today") return { from: todayStr, to: todayStr };
+  if (range === "week") {
+    const ws = startOfWeek(today, { weekStartsOn: 1 });
+    const we = endOfWeek(today, { weekStartsOn: 1 });
+    return { from: format(ws, "yyyy-MM-dd"), to: format(we, "yyyy-MM-dd") };
+  }
+  if (range === "month") {
+    return { from: format(startOfMonth(today), "yyyy-MM-dd"), to: format(endOfMonth(today), "yyyy-MM-dd") };
+  }
+  return { from: customFrom || todayStr, to: customTo || todayStr };
+}
+
 const PAGE_SIZE = 25;
 
 export default function AllCheckinsTable({ checkins, members, sites, jobs, photos }: Props) {
@@ -31,6 +50,9 @@ export default function AllCheckinsTable({ checkins, members, sites, jobs, photo
   const [filterMember, setFilterMember] = useState("all");
   const [filterSite, setFilterSite] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [dateRange, setDateRange] = useState<DateRange>("today");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [page, setPage] = useState(0);
   const [photoDialog, setPhotoDialog] = useState<{ jobId: string; date: string } | null>(null);
 
