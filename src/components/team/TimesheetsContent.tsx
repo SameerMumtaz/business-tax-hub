@@ -663,8 +663,26 @@ export default function TimesheetsContent() {
         <div className="space-y-6">
           {timesheets.map((ts) => {
             const tsEntries = getTimesheetEntries(ts.id);
-            const totalPay = tsEntries.reduce((s, e) => s + e.total_pay, 0);
             const totalHours = tsEntries.reduce((s, e) => s + e.total_hours, 0);
+            // Compute OT-aware totals by grouping per worker
+            const { otAwarePay, otAwareOT } = (() => {
+              const byWorker = new Map<string, { total: number; rate: number }>();
+              tsEntries.forEach((e) => {
+                const existing = byWorker.get(e.worker_id) || { total: 0, rate: e.pay_rate };
+                existing.total += e.total_hours;
+                byWorker.set(e.worker_id, existing);
+              });
+              let pay = 0, ot = 0;
+              byWorker.forEach(({ total, rate }, wid) => {
+                const otOn = getOtEnabled(wid);
+                const workerOT = otOn ? Math.max(0, total - 40) : 0;
+                const reg = total - workerOT;
+                ot += workerOT;
+                pay += reg * rate + workerOT * rate * 1.5;
+              });
+              return { otAwarePay: pay, otAwareOT: ot };
+            })();
+            const totalPay = otAwarePay;
             const isDraft = ts.status === "draft";
             return (
               <Card key={ts.id}>
