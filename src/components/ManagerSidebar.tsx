@@ -8,7 +8,6 @@ import {
   LogOut,
   Receipt,
   Link2,
-  ClipboardList,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -20,7 +19,7 @@ const links = [
   { to: "/team?tab=scheduler", label: "Schedule", icon: Calendar },
   { to: "/team?tab=timesheets", label: "Timesheets", icon: Clock },
   { to: "/team?tab=members", label: "Members", icon: Users },
-  { to: "/services", label: "Services", icon: ClipboardList },
+  
 ];
 
 export default function ManagerSidebar() {

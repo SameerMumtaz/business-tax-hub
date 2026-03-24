@@ -19,12 +19,13 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, MapPin, Briefcase, Loader2, Pencil, Trash2, Camera, Calendar, UserCheck, Clock } from "lucide-react";
+import { Plus, MapPin, Briefcase, Loader2, Pencil, Trash2, Camera, Calendar, UserCheck, Clock, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import JobPhotosByDate from "@/components/job/JobPhotosByDate";
+import ServicesContent from "@/components/team/ServicesContent";
 
 export default function JobSchedulerContent() {
   const { user } = useAuth();
@@ -683,6 +684,7 @@ export default function JobSchedulerContent() {
           <TabsTrigger value="calendar"><Calendar className="h-3.5 w-3.5 mr-1" />Calendar</TabsTrigger>
           <TabsTrigger value="jobs">Jobs</TabsTrigger>
           <TabsTrigger value="sites">Sites</TabsTrigger>
+          <TabsTrigger value="services"><Wrench className="h-3.5 w-3.5 mr-1" />Services</TabsTrigger>
         </TabsList>
         <TabsContent value="calendar" className="mt-4">
           <JobCalendarView
@@ -1016,6 +1018,9 @@ export default function JobSchedulerContent() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+        <TabsContent value="services" className="mt-4">
+          <ServicesContent />
         </TabsContent>
       </Tabs>
 
