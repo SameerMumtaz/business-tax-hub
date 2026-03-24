@@ -230,7 +230,7 @@ export default function TimesheetsContent() {
         supabase.from("team_members").select("id, name, worker_type, pay_rate").eq("business_user_id", user.id).in("status", ["active", "invited"]),
         supabase.from("employees").select("id, name, salary").eq("user_id", user.id),
         supabase.from("contractors").select("id, name, pay_rate").eq("user_id", user.id),
-        supabase.from("jobs").select("id, title, start_date, end_date, job_type, start_time, estimated_hours").eq("user_id", user.id).in("status", ["scheduled", "in_progress"]),
+        supabase.from("jobs").select("id, title, start_date, end_date, job_type, start_time, estimated_hours, status, recurring_interval, recurring_end_date").eq("user_id", user.id).in("status", ["scheduled", "in_progress"]),
         supabase.from("job_assignments").select("job_id, worker_id, worker_name, worker_type, hours_per_day, assigned_days, assigned_hours"),
         supabase.from("crew_checkins").select("id, team_member_id, job_id, job_site_id, check_in_time, check_out_time, total_hours, occurrence_date"),
       ]);
