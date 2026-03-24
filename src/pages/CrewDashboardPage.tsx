@@ -303,14 +303,14 @@ export default function CrewDashboardPage() {
             <CardHeader className="pb-2 pt-4 px-4">
               <CardTitle className="text-sm font-medium flex items-center gap-2 text-primary">
                 <div className="h-2.5 w-2.5 rounded-full bg-primary animate-pulse" />
-                Checked in{activeJob ? ` — ${activeJob.title}` : ""}
+                {t("checkin.checkedIn")}{activeJob ? ` — ${activeJob.title}` : ""}
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Clock className="h-4 w-4" />
-                  Since {new Date(activeCheckin.check_in_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                  {t("checkin.since")} {new Date(activeCheckin.check_in_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                 </div>
                 {payRate && <span className="text-xs text-muted-foreground">${payRate}/hr</span>}
               </div>
@@ -323,10 +323,10 @@ export default function CrewDashboardPage() {
                 <div className="space-y-2">
                   <div className="flex gap-3 text-xs">
                     <span className={hasBeforePhotos ? "text-primary" : "text-destructive"}>
-                      {hasBeforePhotos ? "✓" : "✗"} Before photo{hasBeforePhotos ? "" : " needed"}
+                      {hasBeforePhotos ? "✓" : "✗"} {t("checkin.beforePhoto")}{hasBeforePhotos ? "" : ` ${t("checkin.needed")}`}
                     </span>
                     <span className={hasAfterPhotos ? "text-primary" : "text-destructive"}>
-                      {hasAfterPhotos ? "✓" : "✗"} After photo{hasAfterPhotos ? "" : " needed"}
+                      {hasAfterPhotos ? "✓" : "✗"} {t("checkin.afterPhoto")}{hasAfterPhotos ? "" : ` ${t("checkin.needed")}`}
                     </span>
                   </div>
                   <JobPhotosPanel jobId={activeJobId} occurrenceDate={activeOccurrenceDate} compact />
@@ -340,7 +340,7 @@ export default function CrewDashboardPage() {
                 disabled={gpsLoading === "checkout" || !photosComplete}
               >
                 <LogOut className="h-4 w-4 mr-2" />
-                {!photosComplete ? "Upload photos to check out" : gpsLoading === "checkout" ? "Getting location…" : "Check Out"}
+                {!photosComplete ? t("checkin.uploadPhotos") : gpsLoading === "checkout" ? t("checkin.gettingLocation") : t("checkin.checkOut")}
               </Button>
             </CardContent>
           </Card>
@@ -348,21 +348,21 @@ export default function CrewDashboardPage() {
 
         {/* Main Content */}
         {loading ? (
-          <p className="text-muted-foreground text-center py-12">Loading jobs…</p>
+          <p className="text-muted-foreground text-center py-12">{t("loading.jobs")}</p>
         ) : (
           <Tabs defaultValue="list">
             <TabsList className="w-full sticky bottom-0 sm:relative sm:bottom-auto z-10 bg-card border border-border">
               <TabsTrigger value="list" className="flex-1 gap-1.5">
-                <List className="h-4 w-4" /> Jobs
+                <List className="h-4 w-4" /> {t("tab.jobs")}
               </TabsTrigger>
               <TabsTrigger value="calendar" className="flex-1 gap-1.5">
-                <CalendarDays className="h-4 w-4" /> Calendar
+                <CalendarDays className="h-4 w-4" /> {t("tab.calendar")}
               </TabsTrigger>
               <TabsTrigger value="map" className="flex-1 gap-1.5">
-                <MapIcon className="h-4 w-4" /> Map
+                <MapIcon className="h-4 w-4" /> {t("tab.map")}
               </TabsTrigger>
               <TabsTrigger value="profile" className="flex-1 gap-1.5">
-                <UserCircle className="h-4 w-4" /> Profile
+                <UserCircle className="h-4 w-4" /> {t("tab.profile")}
               </TabsTrigger>
             </TabsList>
             <TabsContent value="list" className="mt-4">
@@ -389,14 +389,14 @@ export default function CrewDashboardPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-chart-warning" />
-              Overtime Explanation Required
+              {t("overtime.title")}
             </DialogTitle>
             <DialogDescription>
-              You've exceeded the scheduled time ({((activeCheckin as any)?.expected_hours || 0).toFixed(1)} hours). Please explain why.
+              {t("overtime.description")}
             </DialogDescription>
           </DialogHeader>
           <Textarea
-            placeholder="e.g. Client requested additional work, weather delay..."
+            placeholder={t("overtime.placeholder")}
             value={overtimeExplanation}
             onChange={(e) => setOvertimeExplanation(e.target.value)}
             rows={3}
@@ -406,7 +406,7 @@ export default function CrewDashboardPage() {
               Cancel
             </Button>
             <Button onClick={handleOvertimeCheckout} disabled={!overtimeExplanation.trim() || gpsLoading === "checkout"}>
-              {gpsLoading === "checkout" ? "Checking out…" : "Submit & Check Out"}
+              {gpsLoading === "checkout" ? t("checkin.gettingLocation") : t("overtime.submit")}
             </Button>
           </DialogFooter>
         </DialogContent>
