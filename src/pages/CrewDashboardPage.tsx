@@ -212,7 +212,7 @@ export default function CrewDashboardPage() {
     const endMs = parseDateOnlyLocal(instanceDate).setHours(23, 59, 59, 999);
     const nowMs = Date.now();
     if (nowMs < startMs || nowMs > endMs) {
-      toast.error("You can only check in on the scheduled date for this job.");
+      toast.error(t("error.checkInDate"));
       return;
     }
     setGpsLoading(job.id);
@@ -223,21 +223,21 @@ export default function CrewDashboardPage() {
         const radius = job.site.geofence_radius || 150;
         if (!isWithinGeofence(lat, lng, job.site.latitude, job.site.longitude, radius)) {
           const dist = haversineDistance(lat, lng, job.site.latitude, job.site.longitude);
-          toast.error(`You are ${Math.round(dist)}m away. Must be within ${radius}m.`);
+          toast.error(`${Math.round(dist)}m ${t("error.tooFar")} ${radius}m.`);
           setGpsLoading(null);
           return;
         }
       }
       await checkIn(job.id, job.site.id, lat, lng, job.expectedHours, instanceDate);
     } catch (err: any) {
-      toast.error(err.message || "Failed to get GPS location");
+      toast.error(err.message || t("error.gps"));
     }
     setGpsLoading(null);
   };
 
   const handleCheckOut = async () => {
     if (!activeCheckin) return;
-    if (!photosComplete) { toast.error("Please upload both before and after photos before checking out."); return; }
+    if (!photosComplete) { toast.error(t("error.photos")); return; }
     setGpsLoading("checkout");
     try {
       const pos = await getCurrentPosition();
@@ -254,14 +254,14 @@ export default function CrewDashboardPage() {
       }
       await checkOut(activeCheckin.id, lat, lng);
     } catch (err: any) {
-      toast.error(err.message || "Failed to get GPS location");
+      toast.error(err.message || t("error.gps"));
     }
     setGpsLoading(null);
   };
 
   const handleOvertimeCheckout = async () => {
     if (!activeCheckin || !pendingCheckoutCoords) return;
-    if (!overtimeExplanation.trim()) { toast.error("Please provide an explanation for the overtime."); return; }
+    if (!overtimeExplanation.trim()) { toast.error(t("error.overtime")); return; }
     setGpsLoading("checkout");
     await checkOut(activeCheckin.id, pendingCheckoutCoords.lat, pendingCheckoutCoords.lng, overtimeExplanation.trim());
     setOvertimeDialogOpen(false);
