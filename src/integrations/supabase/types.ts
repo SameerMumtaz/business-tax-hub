@@ -826,6 +826,57 @@ export type Database = {
           },
         ]
       }
+      job_templates: {
+        Row: {
+          created_at: string
+          default_crew: Json
+          description: string | null
+          estimated_hours: number | null
+          id: string
+          labor_budget_amount: number
+          labor_budget_hours: number
+          labor_budget_rate: number
+          labor_budget_type: string
+          material_budget: number
+          price: number
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          default_crew?: Json
+          description?: string | null
+          estimated_hours?: number | null
+          id?: string
+          labor_budget_amount?: number
+          labor_budget_hours?: number
+          labor_budget_rate?: number
+          labor_budget_type?: string
+          material_budget?: number
+          price?: number
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          default_crew?: Json
+          description?: string | null
+          estimated_hours?: number | null
+          id?: string
+          labor_budget_amount?: number
+          labor_budget_hours?: number
+          labor_budget_rate?: number
+          labor_budget_type?: string
+          material_budget?: number
+          price?: number
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       jobs: {
         Row: {
           client_id: string | null
