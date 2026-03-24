@@ -6,11 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MapPin, Download, Users, Clock } from "lucide-react";
 import CheckInProgressWidget from "./CheckInProgressWidget";
 import TodayScheduledVsActual from "./TodayScheduledVsActual";
 import TodayJobs from "@/components/dashboard/TodayJobs";
+import AllCheckinsTable from "./AllCheckinsTable";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -35,7 +35,8 @@ const siteIcon = new L.Icon({
 });
 
 interface TeamMemberInfo { id: string; name: string; email: string; role: string; }
-interface SiteInfo { id: string; name: string; latitude: number | null; longitude: number | null; address: string | null; }
+interface SiteInfo { id: string; name: string; latitude: number | null; longitude: number | null; address: string | null; geofence_radius: number | null; }
+interface PhotoInfo { id: string; job_id: string; photo_url: string; photo_type: string; occurrence_date: string | null; }
 
 function LiveElapsed({ since }: { since: string }) {
   const [elapsed, setElapsed] = useState("");
@@ -113,20 +114,23 @@ export default function CrewMapContent() {
   const [filterSite, setFilterSite] = useState<string>("all");
   const [jobs, setJobs] = useState<any[]>([]);
   const [assignments, setAssignments] = useState<any[]>([]);
+  const [photos, setPhotos] = useState<PhotoInfo[]>([]);
 
   useEffect(() => {
     if (!user) return;
     const fetchData = async () => {
-      const [memRes, sitesRes, jobsRes, assignRes] = await Promise.all([
+      const [memRes, sitesRes, jobsRes, assignRes, photosRes] = await Promise.all([
         supabase.from("team_members").select("id, name, email, role").eq("business_user_id", user.id),
-        supabase.from("job_sites").select("id, name, latitude, longitude, address").eq("user_id", user.id),
+        supabase.from("job_sites").select("id, name, latitude, longitude, address, geofence_radius").eq("user_id", user.id),
         supabase.from("jobs").select("id, title, start_date, end_date, start_time, estimated_hours, job_type, status, recurring_interval, recurring_end_date").eq("user_id", user.id).neq("status", "cancelled"),
         supabase.from("job_assignments").select("job_id, worker_id, worker_name, worker_type, hours_per_day, assigned_days"),
+        supabase.from("job_photos").select("id, job_id, photo_url, photo_type, occurrence_date"),
       ]);
       if (memRes.data) setMembers(memRes.data as TeamMemberInfo[]);
       if (sitesRes.data) setSites(sitesRes.data as SiteInfo[]);
       if (jobsRes.data) setJobs(jobsRes.data);
       if (assignRes.data) setAssignments(assignRes.data);
+      if (photosRes.data) setPhotos(photosRes.data as PhotoInfo[]);
     };
     fetchData();
   }, [user]);
@@ -158,18 +162,22 @@ export default function CrewMapContent() {
   );
 
   const exportCSV = () => {
-    const headers = ["Name", "Site", "Check In Time", "Check Out Time", "Total Hours", "Check In Lat", "Check In Lng", "Check Out Lat", "Check Out Lng", "Status"];
+    const jobMap = new Map(jobs.map((j: any) => [j.id, j]));
+    const headers = ["Name", "Job", "Site", "Check In Time", "Check Out Time", "Total Hours", "Est Hours", "Check In Lat", "Check In Lng", "Check Out Lat", "Check Out Lng", "Status", "Flag"];
     const rows = checkins.map((c) => {
       const member = memberMap.get(c.team_member_id);
       const site = c.job_site_id ? siteMap.get(c.job_site_id) : null;
+      const job = c.job_id ? jobMap.get(c.job_id) : null;
       return [
-        member?.name || "Unknown", site?.name || "—",
+        member?.name || "Unknown", job?.title || "", site?.name || "—",
         new Date(c.check_in_time).toLocaleString(),
         c.check_out_time ? new Date(c.check_out_time).toLocaleString() : "",
         c.total_hours?.toString() || "0",
+        job?.estimated_hours?.toString() || "",
         c.check_in_lat?.toString() || "", c.check_in_lng?.toString() || "",
         c.check_out_lat?.toString() || "", c.check_out_lng?.toString() || "",
         c.status,
+        c.flag_reason || "",
       ].join(",");
     });
     const csv = [headers.join(","), ...rows].join("\n");
@@ -259,43 +267,13 @@ export default function CrewMapContent() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader><CardTitle>All Check-ins</CardTitle></CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Crew Member</TableHead>
-                <TableHead>Site</TableHead>
-                <TableHead>Check In</TableHead>
-                <TableHead>Check Out</TableHead>
-                <TableHead>Hours</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {checkins.slice(0, 50).map((c) => {
-                const member = memberMap.get(c.team_member_id);
-                const site = c.job_site_id ? siteMap.get(c.job_site_id) : null;
-                return (
-                  <TableRow key={c.id}>
-                    <TableCell className="font-medium">{member?.name || "Unknown"}</TableCell>
-                    <TableCell>{site?.name || "—"}</TableCell>
-                    <TableCell className="text-sm">{new Date(c.check_in_time).toLocaleString()}</TableCell>
-                    <TableCell className="text-sm">{c.check_out_time ? new Date(c.check_out_time).toLocaleString() : "—"}</TableCell>
-                    <TableCell>{c.total_hours > 0 ? `${c.total_hours.toFixed(1)}h` : "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant={c.status === "checked_in" ? "default" : "secondary"}>
-                        {c.status === "checked_in" ? "On-Site" : "Completed"}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <AllCheckinsTable
+        checkins={checkins}
+        members={members}
+        sites={sites}
+        jobs={jobs}
+        photos={photos}
+      />
     </div>
   );
 }

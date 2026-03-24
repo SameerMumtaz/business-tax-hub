@@ -18,8 +18,10 @@ export interface CrewCheckin {
   total_hours: number;
   status: string;
   notes: string | null;
+  flag_reason: string | null;
   created_at: string;
   occurrence_date: string | null;
+  expected_hours: number | null;
 }
 
 export function useCrewCheckins() {
