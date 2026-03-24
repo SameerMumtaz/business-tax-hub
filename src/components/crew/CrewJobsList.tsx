@@ -76,7 +76,7 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
                     {job.site.address && ` — ${job.site.address}`}
                   </div>
                 </div>
-                <Badge variant="secondary">{job.status}</Badge>
+                <Badge variant={job.status === "completed" ? "default" : "secondary"} className={job.status === "completed" ? "bg-emerald-600 text-white" : ""}>{job.status}</Badge>
               </div>
 
               <div className="flex flex-wrap gap-3 text-sm">
