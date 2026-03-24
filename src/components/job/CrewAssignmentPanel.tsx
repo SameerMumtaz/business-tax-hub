@@ -216,10 +216,11 @@ export default function CrewAssignmentPanel({
               ) : (
                 availableWorkers.map((m) => {
                   const conflicts = workerConflicts.get(m.id);
+                  const w2 = isW2(m.worker_type);
                   return (
                     <SelectItem key={m.id} value={m.id}>
                       <span className={cn(conflicts && "text-destructive")}>
-                        {m.name} ({m.worker_type}){m.pay_rate ? ` · $${m.pay_rate}/hr` : ""}
+                        {m.name} ({m.worker_type}){!w2 && m.pay_rate ? ` · $${m.pay_rate}/hr` : ""}{w2 ? " · Salaried" : ""}
                         {conflicts ? ` ⚠ ${conflicts.length} conflict${conflicts.length > 1 ? "s" : ""}` : ""}
                       </span>
                     </SelectItem>
