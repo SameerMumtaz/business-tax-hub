@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Calendar, Clock, MapPin } from "lucide-react";
+import { Users, Calendar, Clock, Eye } from "lucide-react";
 import MembersContent from "@/components/team/MembersContent";
 import JobSchedulerContent from "@/components/team/JobSchedulerContent";
 import TimesheetsContent from "@/components/team/TimesheetsContent";
@@ -13,18 +13,18 @@ export default function TeamPage() {
   const navigate = useNavigate();
 
   const params = new URLSearchParams(location.search);
-  const initialTab = params.get("tab") || "members";
+  const initialTab = params.get("tab") || "supervisor";
   const [tab, setTab] = useState(initialTab);
 
   useEffect(() => {
     const p = new URLSearchParams(location.search);
-    const t = p.get("tab") || "members";
+    const t = p.get("tab") || "supervisor";
     setTab(t);
   }, [location.search]);
 
   const handleTabChange = (newTab: string) => {
     setTab(newTab);
-    navigate(newTab === "members" ? "/team" : `/team?tab=${newTab}`, { replace: true });
+    navigate(newTab === "supervisor" ? "/team" : `/team?tab=${newTab}`, { replace: true });
   };
 
   return (
@@ -41,6 +41,9 @@ export default function TeamPage() {
 
         <Tabs value={tab} onValueChange={handleTabChange}>
           <TabsList>
+            <TabsTrigger value="supervisor" className="gap-1.5">
+              <Eye className="h-3.5 w-3.5" />Supervisor
+            </TabsTrigger>
             <TabsTrigger value="members" className="gap-1.5">
               <Users className="h-3.5 w-3.5" />Members
             </TabsTrigger>
@@ -50,11 +53,11 @@ export default function TeamPage() {
             <TabsTrigger value="timesheets" className="gap-1.5">
               <Clock className="h-3.5 w-3.5" />Timesheets
             </TabsTrigger>
-            <TabsTrigger value="crew-map" className="gap-1.5">
-              <MapPin className="h-3.5 w-3.5" />Crew Map
-            </TabsTrigger>
           </TabsList>
 
+          <TabsContent value="supervisor" className="mt-4">
+            <CrewMapContent />
+          </TabsContent>
           <TabsContent value="members" className="mt-4">
             <MembersContent />
           </TabsContent>
@@ -63,9 +66,6 @@ export default function TeamPage() {
           </TabsContent>
           <TabsContent value="timesheets" className="mt-4">
             <TimesheetsContent />
-          </TabsContent>
-          <TabsContent value="crew-map" className="mt-4">
-            <CrewMapContent />
           </TabsContent>
         </Tabs>
       </div>

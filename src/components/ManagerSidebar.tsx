@@ -4,7 +4,7 @@ import {
   Calendar,
   Clock,
   Users,
-  MapPin,
+  Eye,
   LogOut,
   Receipt,
   Link2,
@@ -15,10 +15,10 @@ import LinkToBusinessCard from "@/components/LinkToBusinessCard";
 
 const links = [
   { to: "/invoices", label: "Invoices", icon: FileText },
-  { to: "/team", label: "Members", icon: Users },
+  { to: "/team", label: "Supervisor", icon: Eye },
+  { to: "/team?tab=members", label: "Members", icon: Users },
   { to: "/team?tab=scheduler", label: "Job Scheduler", icon: Calendar },
   { to: "/team?tab=timesheets", label: "Timesheets", icon: Clock },
-  { to: "/team?tab=crew-map", label: "Crew Map", icon: MapPin },
 ];
 
 export default function ManagerSidebar() {
@@ -28,6 +28,7 @@ export default function ManagerSidebar() {
 
   const isActive = (to: string) => {
     if (to.includes("?")) return currentFull === to || currentFull.startsWith(to + "&");
+    if (to === "/team") return location.pathname === "/team" && !location.search;
     return location.pathname === to && !location.search;
   };
 

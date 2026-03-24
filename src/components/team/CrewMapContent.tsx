@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MapPin, Download, Users, Clock } from "lucide-react";
 import CheckInProgressWidget from "./CheckInProgressWidget";
+import TodayJobs from "@/components/dashboard/TodayJobs";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -186,16 +187,19 @@ export default function CrewMapContent() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <CheckInProgressWidget jobs={jobs} assignments={assignments} checkins={checkins} />
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">On-Site Now</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-bold text-primary">{activeCheckins.length}</div></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Team Members</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-bold">{members.length}</div></CardContent>
-        </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <TodayJobs />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <CheckInProgressWidget jobs={jobs} assignments={assignments} checkins={checkins} />
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">On-Site Now</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold text-primary">{activeCheckins.length}</div></CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Team Members</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{members.length}</div></CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Active crew cards with live timers */}
