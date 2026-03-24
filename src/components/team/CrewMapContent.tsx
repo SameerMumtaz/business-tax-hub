@@ -187,17 +187,10 @@ export default function CrewMapContent() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <CheckInProgressWidget jobs={jobs} assignments={assignments} checkins={checkins} />
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">On-Site Now</CardTitle></CardHeader>
           <CardContent><div className="text-2xl font-bold text-primary">{activeCheckins.length}</div></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Check-ins Today</CardTitle></CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {checkins.filter((c) => new Date(c.check_in_time).toDateString() === new Date().toDateString()).length}
-            </div>
-          </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Team Members</CardTitle></CardHeader>
