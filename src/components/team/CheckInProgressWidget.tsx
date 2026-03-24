@@ -180,7 +180,7 @@ export default function CheckInProgressWidget({ jobs, assignments, checkins }: P
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Today's Progress</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">Crew Status</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">No jobs scheduled today</p>
@@ -192,7 +192,7 @@ export default function CheckInProgressWidget({ jobs, assignments, checkins }: P
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">Today's Progress</CardTitle>
+        <CardTitle className="text-sm font-medium text-muted-foreground">Crew Status</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {/* Main metric */}
