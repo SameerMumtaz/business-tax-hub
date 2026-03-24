@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useTimesheets, type TimesheetEntry } from "@/hooks/useTimesheets";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -203,6 +204,19 @@ export default function TimesheetsContent() {
   const [editValue, setEditValue] = useState("");
   const [generatingCheckins, setGeneratingCheckins] = useState<string | null>(null);
   const [generatingSchedule, setGeneratingSchedule] = useState<string | null>(null);
+  // OT toggle per worker: default W-2 = true, 1099 = false
+  const [otEnabled, setOtEnabled] = useState<Record<string, boolean>>({});
+
+  const getOtEnabled = useCallback((workerId: string): boolean => {
+    if (workerId in otEnabled) return otEnabled[workerId];
+    const worker = workers.find((w) => w.id === workerId);
+    // Default: W-2 employees get OT, 1099 contractors don't
+    return worker ? worker.type === "employee" : true;
+  }, [otEnabled, workers]);
+
+  const toggleOt = useCallback((workerId: string) => {
+    setOtEnabled((prev) => ({ ...prev, [workerId]: !getOtEnabled(workerId) }));
+  }, [getOtEnabled]);
 
   useEffect(() => {
     if (!user) return;
