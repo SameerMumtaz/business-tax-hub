@@ -467,7 +467,8 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
   const executeDrop = useCallback((dateStr: string, dropIdx?: number) => {
     if (!dragJob) return;
     const sameDay = dateStr === dragStartDate.current;
-    const newTime = typeof dropIdx === "number" ? computeTimeForIndex(dateStr, dropIdx, dragJob.id) : undefined;
+    const movedDuration = dragJob.estimated_hours || 1;
+    const newTime = typeof dropIdx === "number" ? computeTimeForIndex(dateStr, dropIdx, dragJob.id, movedDuration) : undefined;
     if (sameDay && newTime === undefined) { clearDragState(); return; }
     if (dragJob.job_type === "recurring") {
       setPendingRecurringMove({ job: dragJob, fromDate: dragStartDate.current || dateStr, toDate: dateStr, newTime });
@@ -480,7 +481,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
       return;
     }
     if (!sameDay) {
-      const conflicts = detectConflicts(dragJob, dateStr, jobs, jobsByDate, assignments);
+      const conflicts = detectConflicts(dragJob, dateStr, jobs, jobsByDate, assignments, newTime);
       if (conflicts.some((c) => c.type === "crew_overlap")) {
         const proceed = window.confirm(`⚠️ Scheduling conflict:\n${conflicts.map((c) => c.message).join("\n")}\n\nMove anyway?`);
         if (!proceed) { clearDragState(); return; }
