@@ -3,6 +3,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { useQuotes, useAddQuote, useUpdateQuoteStatus, useDeleteQuote, useConvertQuoteToInvoice, useConvertQuoteToJob, Quote } from "@/hooks/useQuotes";
 import { useClients } from "@/hooks/useClients";
 import { useJobs } from "@/hooks/useJobs";
+import { useJobTemplates } from "@/hooks/useJobTemplates";
 import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -203,7 +204,33 @@ ${q.notes ? `\nNotes: ${q.notes}` : ""}
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-sm font-medium">Line Items</label>
-                      <Button variant="outline" size="sm" onClick={addLineItem}><Plus className="h-3 w-3 mr-1" />Add</Button>
+                      <div className="flex gap-1.5">
+                        {templates.length > 0 && (
+                          <Select value="" onValueChange={(templateId) => {
+                            const t = templates.find((x) => x.id === templateId);
+                            if (!t) return;
+                            setForm({
+                              ...form,
+                              line_items: [...form.line_items.filter(li => li.description || li.unit_price), {
+                                description: t.title + (t.description ? ` — ${t.description}` : ""),
+                                quantity: "1",
+                                unit_price: String(t.price || ""),
+                              }],
+                            });
+                          }}>
+                            <SelectTrigger className="h-8 text-xs w-auto border-dashed">
+                              <Briefcase className="h-3 w-3 mr-1" />
+                              <SelectValue placeholder="From service" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {templates.map((t) => (
+                                <SelectItem key={t.id} value={t.id}>{t.title}{t.price > 0 ? ` — $${t.price}` : ""}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                        <Button variant="outline" size="sm" onClick={addLineItem}><Plus className="h-3 w-3 mr-1" />Add</Button>
+                      </div>
                     </div>
                     <div className="space-y-2">
                       {form.line_items.map((li, i) => (
