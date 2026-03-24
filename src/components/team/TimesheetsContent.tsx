@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useTimesheets, type TimesheetEntry } from "@/hooks/useTimesheets";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -203,6 +204,19 @@ export default function TimesheetsContent() {
   const [editValue, setEditValue] = useState("");
   const [generatingCheckins, setGeneratingCheckins] = useState<string | null>(null);
   const [generatingSchedule, setGeneratingSchedule] = useState<string | null>(null);
+  // OT toggle per worker: default W-2 = true, 1099 = false
+  const [otEnabled, setOtEnabled] = useState<Record<string, boolean>>({});
+
+  const getOtEnabled = useCallback((workerId: string): boolean => {
+    if (workerId in otEnabled) return otEnabled[workerId];
+    const worker = workers.find((w) => w.id === workerId);
+    // Default: W-2 employees get OT, 1099 contractors don't
+    return worker ? worker.type === "employee" : true;
+  }, [otEnabled, workers]);
+
+  const toggleOt = useCallback((workerId: string) => {
+    setOtEnabled((prev) => ({ ...prev, [workerId]: !getOtEnabled(workerId) }));
+  }, [getOtEnabled]);
 
   useEffect(() => {
     if (!user) return;
@@ -649,8 +663,26 @@ export default function TimesheetsContent() {
         <div className="space-y-6">
           {timesheets.map((ts) => {
             const tsEntries = getTimesheetEntries(ts.id);
-            const totalPay = tsEntries.reduce((s, e) => s + e.total_pay, 0);
             const totalHours = tsEntries.reduce((s, e) => s + e.total_hours, 0);
+            // Compute OT-aware totals by grouping per worker
+            const { otAwarePay, otAwareOT } = (() => {
+              const byWorker = new Map<string, { total: number; rate: number }>();
+              tsEntries.forEach((e) => {
+                const existing = byWorker.get(e.worker_id) || { total: 0, rate: e.pay_rate };
+                existing.total += e.total_hours;
+                byWorker.set(e.worker_id, existing);
+              });
+              let pay = 0, ot = 0;
+              byWorker.forEach(({ total, rate }, wid) => {
+                const otOn = getOtEnabled(wid);
+                const workerOT = otOn ? Math.max(0, total - 40) : 0;
+                const reg = total - workerOT;
+                ot += workerOT;
+                pay += reg * rate + workerOT * rate * 1.5;
+              });
+              return { otAwarePay: pay, otAwareOT: ot };
+            })();
+            const totalPay = otAwarePay;
             const isDraft = ts.status === "draft";
             return (
               <Card key={ts.id}>
@@ -780,7 +812,8 @@ export default function TimesheetsContent() {
                                 aggDayHours[day] = workerEntries.reduce((s, e) => s + (e[`${day}_hours` as keyof TimesheetEntry] as number), 0);
                               });
                               const aggTotal = workerEntries.reduce((s, e) => s + e.total_hours, 0);
-                              const aggOT = Math.max(0, aggTotal - 40);
+                              const workerOtEnabled = getOtEnabled(workerId);
+                              const aggOT = workerOtEnabled ? Math.max(0, aggTotal - 40) : 0;
                               const aggRegular = aggTotal - aggOT;
                               const rate = firstEntry.pay_rate;
                               const aggPay = aggRegular * rate + aggOT * rate * 1.5;
@@ -817,7 +850,28 @@ export default function TimesheetsContent() {
                                         <span className="text-[10px] text-muted-foreground">{workerEntries.length} jobs</span>
                                       )}
                                     </TableCell>
-                                    <TableCell className="text-right font-mono text-xs">${rate.toFixed(2)}</TableCell>
+                                    <TableCell className="text-right">
+                                      <div className="flex flex-col items-end gap-1">
+                                        <span className="font-mono text-xs">${rate.toFixed(2)}</span>
+                                        <TooltipProvider>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <div className="flex items-center gap-1">
+                                                <span className="text-[10px] text-muted-foreground">OT</span>
+                                                <Switch
+                                                  checked={workerOtEnabled}
+                                                  onCheckedChange={() => toggleOt(workerId)}
+                                                  className="h-4 w-7 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input [&>span]:h-3 [&>span]:w-3 [&>span]:data-[state=checked]:translate-x-3"
+                                                />
+                                              </div>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p className="text-xs">{workerOtEnabled ? "1.5x overtime enabled (40+ hrs)" : "No overtime applied"}</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </TooltipProvider>
+                                      </div>
+                                    </TableCell>
                                     {DAYS.map((day) => {
                                       const val = hasMultipleJobs ? aggDayHours[day] : (firstEntry[`${day}_hours` as keyof TimesheetEntry] as number);
                                       const scheduled = hasMultipleJobs ? null : getScheduledHours(firstEntry, ts);
@@ -1002,7 +1056,7 @@ export default function TimesheetsContent() {
                             })}
                             <TableCell className="text-right font-bold font-mono">{totalHours}</TableCell>
                             <TableCell className="text-right font-mono text-xs">
-                              {tsEntries.reduce((s, e) => s + e.overtime_hours, 0) || "–"}
+                              {otAwareOT > 0 ? otAwareOT.toFixed(1) : "–"}
                             </TableCell>
                             <TableCell className="text-right font-bold font-mono">{formatCurrency(totalPay)}</TableCell>
                             {isDraft && <TableCell />}
