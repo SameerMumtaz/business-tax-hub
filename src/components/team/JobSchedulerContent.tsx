@@ -374,16 +374,39 @@ export default function JobSchedulerContent() {
             <div className="space-y-3 pt-2">
               <Input placeholder="Job title" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
               <Input placeholder="Description (optional)" value={jobDesc} onChange={(e) => setJobDesc(e.target.value)} />
-              <Select value={jobSiteId} onValueChange={(v) => {
-                setJobSiteId(v);
-                const site = sites.find(s => s.id === v);
-                if (site?.client_id && !jobClientId) setJobClientId(site.client_id);
-              }}>
-                <SelectTrigger><SelectValue placeholder="Select site" /></SelectTrigger>
-                <SelectContent>
-                  {sites.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              {!inlineNewSite ? (
+                <Select value={jobSiteId} onValueChange={(v) => {
+                  if (v === "__new__") { setInlineNewSite(true); return; }
+                  setJobSiteId(v);
+                  const site = sites.find(s => s.id === v);
+                  if (site?.client_id && !jobClientId) setJobClientId(site.client_id);
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Select site" /></SelectTrigger>
+                  <SelectContent>
+                    {sites.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                    <SelectItem value="__new__" className="text-primary font-medium">
+                      <span className="flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> Add New Site</span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="space-y-2 rounded-md border p-3">
+                  <p className="text-sm font-medium">New Site</p>
+                  <Input placeholder="Site name *" value={inlineSiteName} onChange={(e) => setInlineSiteName(e.target.value)} />
+                  <Input placeholder="Address" value={inlineSiteAddress} onChange={(e) => setInlineSiteAddress(e.target.value)} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input placeholder="City" value={inlineSiteCity} onChange={(e) => setInlineSiteCity(e.target.value)} />
+                    <Input placeholder="State" value={inlineSiteState} onChange={(e) => setInlineSiteState(e.target.value)} />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" className="flex-1" disabled={creatingSiteInline} onClick={() => handleCreateSiteInline(setJobSiteId)}>
+                      {creatingSiteInline ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+                      Create Site
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={resetInlineSite}>Cancel</Button>
+                  </div>
+                </div>
+              )}
               <Select value={jobType} onValueChange={setJobType}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -480,12 +503,37 @@ export default function JobSchedulerContent() {
           <div className="space-y-3 pt-2">
             <Input placeholder="Job title" value={editJobTitle} onChange={(e) => setEditJobTitle(e.target.value)} />
             <Input placeholder="Description (optional)" value={editJobDesc} onChange={(e) => setEditJobDesc(e.target.value)} />
-            <Select value={editJobSiteId} onValueChange={setEditJobSiteId}>
-              <SelectTrigger><SelectValue placeholder="Select site" /></SelectTrigger>
-              <SelectContent>
-                {sites.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            {!inlineNewSite ? (
+              <Select value={editJobSiteId} onValueChange={(v) => {
+                if (v === "__new__") { setInlineNewSite(true); return; }
+                setEditJobSiteId(v);
+              }}>
+                <SelectTrigger><SelectValue placeholder="Select site" /></SelectTrigger>
+                <SelectContent>
+                  {sites.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  <SelectItem value="__new__" className="text-primary font-medium">
+                    <span className="flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> Add New Site</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="space-y-2 rounded-md border p-3">
+                <p className="text-sm font-medium">New Site</p>
+                <Input placeholder="Site name *" value={inlineSiteName} onChange={(e) => setInlineSiteName(e.target.value)} />
+                <Input placeholder="Address" value={inlineSiteAddress} onChange={(e) => setInlineSiteAddress(e.target.value)} />
+                <div className="grid grid-cols-2 gap-2">
+                  <Input placeholder="City" value={inlineSiteCity} onChange={(e) => setInlineSiteCity(e.target.value)} />
+                  <Input placeholder="State" value={inlineSiteState} onChange={(e) => setInlineSiteState(e.target.value)} />
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" className="flex-1" disabled={creatingSiteInline} onClick={() => handleCreateSiteInline(setEditJobSiteId)}>
+                    {creatingSiteInline ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+                    Create Site
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={resetInlineSite}>Cancel</Button>
+                </div>
+              </div>
+            )}
             <Select value={editJobType} onValueChange={setEditJobType}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
