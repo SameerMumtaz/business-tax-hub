@@ -8,7 +8,6 @@ import {
   LogOut,
   Receipt,
   Link2,
-  ClipboardList,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
