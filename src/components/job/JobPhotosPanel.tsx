@@ -3,7 +3,7 @@ import { useJobPhotos, type JobPhoto } from "@/hooks/useJobPhotos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Camera, Upload, Trash2, ImagePlus, Loader2 } from "lucide-react";
+import { Camera, Trash2, ImagePlus, Loader2 } from "lucide-react";
 
 const TYPE_LABELS: Record<string, string> = {
   before: "Before",
@@ -22,7 +22,7 @@ export default function JobPhotosPanel({ jobId, compact = false, occurrenceDate 
   const { photos, loading, uploading, uploadPhoto, updateCaption, deletePhoto } = useJobPhotos(jobId, occurrenceDate);
   const [selectedType, setSelectedType] = useState<JobPhoto["photo_type"]>("before");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
   const handleFiles = useCallback((files: FileList | null) => {
