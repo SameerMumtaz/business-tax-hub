@@ -227,13 +227,13 @@ export default function CrewMapContent() {
         </div>
       )}
 
-      <Card>
+      <Card className="overflow-visible">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5" />Live Crew Map</CardTitle>
             <Select value={filterSite} onValueChange={setFilterSite}>
               <SelectTrigger className="w-48"><SelectValue placeholder="Filter by site" /></SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper" sideOffset={4}>
                 <SelectItem value="all">All Sites</SelectItem>
                 {sites.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
               </SelectContent>
