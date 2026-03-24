@@ -189,7 +189,8 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
   const { todayJobs, thisWeekJobs, upcomingJobs } = useMemo(() => {
     const today = getTodayDateOnlyKey();
     const dayOfWeek = parseDateOnlyLocal(today).getDay(); // 0=Sun
-    const weekEnd = addDaysToDateOnly(today, 6 - dayOfWeek); // end of week (Sat)
+    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const weekEnd = addDaysToDateOnly(today, 6 - mondayOffset); // end of week (Sun)
 
     const todayArr: AssignedJob[] = [];
     const weekArr: AssignedJob[] = [];

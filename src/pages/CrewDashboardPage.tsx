@@ -78,7 +78,8 @@ function getGreeting(): string {
 function QuickStats({ checkins, payRate, jobs }: { checkins: any[]; payRate: number | null; jobs: AssignedJob[] }) {
   const today = getTodayDateOnlyKey();
   const dayOfWeek = parseDateOnlyLocal(today).getDay();
-  const weekStart = addDaysToDateOnly(today, -dayOfWeek);
+  const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const weekStart = addDaysToDateOnly(today, -mondayOffset);
 
   const weekCheckins = checkins.filter((c) => {
     const d = c.check_in_time?.slice(0, 10);

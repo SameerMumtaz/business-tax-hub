@@ -32,7 +32,9 @@ function addDays(date: Date, n: number): Date {
 
 function getWeekStart(date: Date): Date {
   const d = new Date(date);
-  d.setDate(d.getDate() - d.getDay());
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day; // Monday = start of week
+  d.setDate(d.getDate() + diff);
   return d;
 }
 
@@ -318,9 +320,13 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     }
     const ms = getMonthStart(currentDate);
     const daysInMonth = new Date(ms.getFullYear(), ms.getMonth() + 1, 0).getDate();
-    const firstDay = ms.getDay();
+    const firstDayOfWeek = ms.getDay(); // 0=Sun
+    const mondayOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1; // Mon=0
     const days: Date[] = [];
-    for (let i = -firstDay; i < daysInMonth + (6 - new Date(ms.getFullYear(), ms.getMonth(), daysInMonth).getDay()); i++) {
+    const lastDayOfMonth = new Date(ms.getFullYear(), ms.getMonth(), daysInMonth);
+    const lastDayOfWeek = lastDayOfMonth.getDay();
+    const trailingDays = lastDayOfWeek === 0 ? 0 : 7 - lastDayOfWeek;
+    for (let i = -mondayOffset; i < daysInMonth + trailingDays; i++) {
       days.push(addDays(ms, i));
     }
     return { weekDays: days, rangeStart: startOfDay(days[0]), rangeEnd: endOfDay(days[days.length - 1]) };
@@ -453,7 +459,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     setPendingRecurringMove(null);
   };
   const getDayHours = (dateStr: string) => (jobsByDate.get(dateStr) || []).reduce((s, j) => s + (j.estimated_hours || 2), 0);
-  const dayHeaders = isMobile ? ["S", "M", "T", "W", "T", "F", "S"] : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dayHeaders = isMobile ? ["M", "T", "W", "T", "F", "S", "S"] : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   const renderWeekView = () => {
     const HOUR_PX = 48;
@@ -475,7 +481,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <span className={cn("text-xs font-medium", !isMobile && "hidden")}>{day.toLocaleDateString("en-US", { weekday: "short" })}</span>
-                    <span className={cn("text-xs font-medium", isMobile && "hidden")}>{dayHeaders[day.getDay()]}</span>
+                    <span className={cn("text-xs font-medium", isMobile && "hidden")}>{day.toLocaleDateString("en-US", { weekday: "short" })}</span>
                     <span className={cn("w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center", isToday ? "bg-primary text-primary-foreground" : "text-foreground")}>{day.getDate()}</span>
                   </div>
                   {hours > 0 && <span className="text-[10px] font-mono text-muted-foreground">{hours.toFixed(1)}h</span>}
@@ -521,8 +527,9 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     const ms = getMonthStart(currentDate);
     const daysInMonth = new Date(ms.getFullYear(), ms.getMonth() + 1, 0).getDate();
     const firstDayOfWeek = ms.getDay();
+    const mondayPad = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1; // Mon=0
     const cells: (Date | null)[] = [];
-    for (let i = 0; i < firstDayOfWeek; i++) cells.push(null);
+    for (let i = 0; i < mondayPad; i++) cells.push(null);
     for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(ms.getFullYear(), ms.getMonth(), d));
     while (cells.length % 7 !== 0) cells.push(null);
     return <><div className="grid grid-cols-7 text-center text-[10px] sm:text-xs font-medium text-muted-foreground mb-1">{dayHeaders.map((d, i) => <div key={i} className="py-1">{d}</div>)}</div><div className="grid grid-cols-7 border-t border-l border-border rounded-t-md overflow-hidden">{cells.map((day, i) => {
