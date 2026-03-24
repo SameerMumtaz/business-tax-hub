@@ -162,18 +162,22 @@ export default function CrewMapContent() {
   );
 
   const exportCSV = () => {
-    const headers = ["Name", "Site", "Check In Time", "Check Out Time", "Total Hours", "Check In Lat", "Check In Lng", "Check Out Lat", "Check Out Lng", "Status"];
+    const jobMap = new Map(jobs.map((j: any) => [j.id, j]));
+    const headers = ["Name", "Job", "Site", "Check In Time", "Check Out Time", "Total Hours", "Est Hours", "Check In Lat", "Check In Lng", "Check Out Lat", "Check Out Lng", "Status", "Flag"];
     const rows = checkins.map((c) => {
       const member = memberMap.get(c.team_member_id);
       const site = c.job_site_id ? siteMap.get(c.job_site_id) : null;
+      const job = c.job_id ? jobMap.get(c.job_id) : null;
       return [
-        member?.name || "Unknown", site?.name || "—",
+        member?.name || "Unknown", job?.title || "", site?.name || "—",
         new Date(c.check_in_time).toLocaleString(),
         c.check_out_time ? new Date(c.check_out_time).toLocaleString() : "",
         c.total_hours?.toString() || "0",
+        job?.estimated_hours?.toString() || "",
         c.check_in_lat?.toString() || "", c.check_in_lng?.toString() || "",
         c.check_out_lat?.toString() || "", c.check_out_lng?.toString() || "",
         c.status,
+        c.flag_reason || "",
       ].join(",");
     });
     const csv = [headers.join(","), ...rows].join("\n");
