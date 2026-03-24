@@ -174,21 +174,46 @@ export function useTimesheets() {
     fetchAll();
   };
 
-  const syncContractorTotals = async (timesheetId: string) => {
-    // Get all entries for this timesheet that are contractors
-    const tsEntries = entries.filter((e) => e.timesheet_id === timesheetId && e.worker_type === "contractor");
-    for (const entry of tsEntries) {
-      // Get current contractor total
-      const { data: contractor } = await supabase
-        .from("contractors")
-        .select("id, total_paid, name")
-        .eq("name", entry.worker_name)
-        .maybeSingle();
-      if (contractor) {
+  // Recalculate contractor total_paid from ALL submitted timesheets
+  const recalcContractorTotals = async () => {
+    if (!user) return;
+    // Get all submitted timesheets for this user
+    const { data: submittedTs } = await supabase
+      .from("timesheets")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("status", "submitted");
+    const submittedIds = (submittedTs || []).map((t: any) => t.id);
+
+    // Get all contractor entries across submitted timesheets
+    const { data: allContractorEntries } = submittedIds.length > 0
+      ? await supabase
+          .from("timesheet_entries")
+          .select("worker_name, worker_type, total_pay")
+          .in("timesheet_id", submittedIds)
+          .eq("worker_type", "contractor")
+      : { data: [] };
+
+    // Sum totals by contractor name
+    const totals = new Map<string, number>();
+    (allContractorEntries || []).forEach((e: any) => {
+      totals.set(e.worker_name, (totals.get(e.worker_name) || 0) + e.total_pay);
+    });
+
+    // Get all contractors for this user
+    const { data: contractors } = await supabase
+      .from("contractors")
+      .select("id, name, total_paid")
+      .eq("user_id", user.id);
+
+    // Update each contractor's total_paid
+    for (const c of contractors || []) {
+      const newTotal = totals.get(c.name) || 0;
+      if (Math.abs(c.total_paid - newTotal) > 0.001) {
         await supabase
           .from("contractors")
-          .update({ total_paid: contractor.total_paid + entry.total_pay })
-          .eq("id", contractor.id);
+          .update({ total_paid: newTotal })
+          .eq("id", c.id);
       }
     }
   };
@@ -196,8 +221,7 @@ export function useTimesheets() {
   const submitTimesheet = async (id: string) => {
     const { error } = await supabase.from("timesheets").update({ status: "submitted" }).eq("id", id);
     if (error) { toast.error(error.message); return; }
-    // Sync contractor totals on submit
-    await syncContractorTotals(id);
+    await recalcContractorTotals();
     toast.success("Timesheet submitted");
     fetchAll();
   };
@@ -205,15 +229,16 @@ export function useTimesheets() {
   const reopenTimesheet = async (id: string) => {
     const { error } = await supabase.from("timesheets").update({ status: "draft" }).eq("id", id);
     if (error) { toast.error(error.message); return; }
+    await recalcContractorTotals();
     toast.success("Timesheet reopened");
     fetchAll();
   };
 
   const deleteTimesheet = async (id: string) => {
-    // Delete entries first, then timesheet
     await supabase.from("timesheet_entries").delete().eq("timesheet_id", id);
     const { error } = await supabase.from("timesheets").delete().eq("id", id);
     if (error) { toast.error(error.message); return; }
+    await recalcContractorTotals();
     toast.success("Timesheet deleted");
     fetchAll();
   };
