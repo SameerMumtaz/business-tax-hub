@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MapPin, Download, Users, Clock } from "lucide-react";
 import CheckInProgressWidget from "./CheckInProgressWidget";
+import ScheduledVsActualWidget from "./ScheduledVsActualWidget";
 import TodayJobs from "@/components/dashboard/TodayJobs";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -120,7 +121,7 @@ export default function CrewMapContent() {
         supabase.from("team_members").select("id, name, email, role").eq("business_user_id", user.id),
         supabase.from("job_sites").select("id, name, latitude, longitude, address").eq("user_id", user.id),
         supabase.from("jobs").select("id, title, start_date, end_date, start_time, estimated_hours, job_type, status, recurring_interval, recurring_end_date").eq("user_id", user.id).neq("status", "cancelled"),
-        supabase.from("job_assignments").select("job_id, worker_id, worker_name"),
+        supabase.from("job_assignments").select("job_id, worker_id, worker_name, worker_type, hours_per_day, assigned_days"),
       ]);
       if (memRes.data) setMembers(memRes.data as TeamMemberInfo[]);
       if (sitesRes.data) setSites(sitesRes.data as SiteInfo[]);
@@ -203,6 +204,9 @@ export default function CrewMapContent() {
           </Card>
         </div>
       </div>
+
+      {/* Scheduled vs. Actual comparison */}
+      <ScheduledVsActualWidget jobs={jobs} assignments={assignments} checkins={checkins} members={members} />
 
       {/* Active crew cards with live timers */}
       {filtered.length > 0 && (
