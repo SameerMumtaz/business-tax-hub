@@ -490,6 +490,7 @@ export default function JobSchedulerContent() {
                       <SelectItem value="weekly">Weekly</SelectItem>
                       <SelectItem value="biweekly">Biweekly</SelectItem>
                       <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="quarterly">Quarterly</SelectItem>
                     </SelectContent>
                   </Select>
                   <div>
@@ -623,6 +624,7 @@ export default function JobSchedulerContent() {
                     <SelectItem value="weekly">Weekly</SelectItem>
                     <SelectItem value="biweekly">Biweekly</SelectItem>
                     <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="quarterly">Quarterly</SelectItem>
                   </SelectContent>
                 </Select>
                 <div>
