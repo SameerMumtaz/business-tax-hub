@@ -1,77 +1,79 @@
 
 
-## Plan: Labor Budget Visibility & Worker Assignment Tracking in Scheduler
+# Crew Dashboard UX Overhaul
 
-### Problem
-The scheduler shows jobs but doesn't display labor budget info (budgeted hours/dollars), and there's no way to see how many labor hours are already assigned vs. remaining. The user needs to see at a glance which jobs need workers and how much labor capacity is left before exceeding the budget.
+## Current State
+The crew dashboard is a single page with 4 tabs (Jobs, Calendar, Map, Profile). The Jobs tab shows ALL assigned jobs in a flat list — no distinction between today, this week, or past jobs. The sidebar only has "My Jobs" and "Check-in History" (history route doesn't even exist in App.tsx).
 
-### Key Concept
-Labor budget hours (e.g., 4 hours) represent **total labor capacity**, not per-worker duration. Assigning 2 workers × 2 hours each = 4 labor hours consumed. The system should track assigned hours vs. budgeted hours and warn when assignments would exceed the labor budget.
+## Plan
 
-### Changes
+### 1. Restructure CrewJobsList into "This Week's Jobs"
+**What changes:** Instead of showing all jobs in one flat list, split them into sections:
+- **Today** — highlighted section at top with check-in buttons, bold styling
+- **This Week** (remaining days) — upcoming jobs this week, lighter styling, no check-in button (only available on the day)
+- **Upcoming** — next 2-3 jobs beyond this week as a teaser, with a "View all in Calendar" link
 
-**1. Add `assigned_hours` to job assignments** (DB migration)
-- Add `assigned_hours numeric NOT NULL DEFAULT 0` column to `job_assignments` table so each assignment tracks how many hours that worker is allocated.
+Jobs that are past and not recurring get filtered out entirely from the list view.
 
-**2. Update `useJobs` hook**
-- Update `JobAssignment` interface to include `assigned_hours`.
-- Update `assignWorker` to accept `assignedHours` parameter.
+**File:** `src/components/crew/CrewJobsList.tsx`
 
-**3. Add labor budget summary to job cards in the scheduler**
+### 2. Improve Job Cards Visual Design
+**What changes:**
+- Add color-coded left border (green = today, blue = upcoming, gray = completed)
+- Show day-of-week labels ("Today", "Tomorrow", "Wednesday", etc.) instead of raw dates
+- Make check-in button more prominent with a gradient or filled style for today's jobs
+- Add subtle time-remaining indicator ("starts in 2h")
+- Compact the info layout — site name, time, and pay on one line
 
-In the **Jobs table** (`JobSchedulerContent`), add columns:
-- **Price** — job price
-- **Labor Budget** — budgeted labor cost (flat or hours × rate)
-- **Labor Assigned** — sum of assigned hours from `job_assignments`, shown as `X / Y hrs` with color coding (green = under budget, amber = near, red = over)
+**File:** `src/components/crew/CrewJobsList.tsx`
 
-In the **Calendar view** (`JobCalendarView`), show a small labor indicator on job chips:
-- e.g., `"2/4 hrs"` next to the job title on desktop cells
+### 3. Improve Active Check-in Card
+**What changes:**
+- Move the active check-in card to be more visually prominent — add a green gradient border/glow
+- Add a progress bar showing elapsed time vs expected hours
+- Make photo upload buttons more touch-friendly with larger tap targets
 
-**4. Worker assignment panel on edit job dialog**
+**File:** `src/pages/CrewDashboardPage.tsx`
 
-Add a section to the Edit Job dialog showing:
-- Current assignments with name, assigned hours, and remove button
-- "Assign Worker" button that opens a picker listing team members (employees + contractors) with their pay rates
-- When assigning, user specifies hours for that worker
-- Running total: `Assigned: X hrs / Y hrs budgeted` with remaining capacity
-- Warning badge if total assigned hours would exceed labor budget hours
-- For "amount" budget type: show dollar equivalent using each worker's pay rate vs. budget amount
+### 4. Clean Up Page Header & Navigation
+**What changes:**
+- Add a greeting ("Good morning, [First Name]") using profile data
+- Show a compact summary strip: "2 jobs today · 5 this week"
+- Remove the Sign Out button from the header (it's already in the sidebar)
+- Make tabs bottom-anchored on mobile for thumb-friendly navigation
 
-**5. Update Job Profitability tab**
+**File:** `src/pages/CrewDashboardPage.tsx`
 
-In `JobProfitabilityTab`, add an **"Expected vs. Actual"** comparison column:
-- Show budgeted profit (from price/material/labor budget fields) alongside actual profit (from invoices/timesheets/expenses)
-- This gives a forecast-to-actual variance view
+### 5. Add Quick Stats Strip
+**What changes:** Add a horizontal scrollable strip of mini stat cards above the job list:
+- Hours this week (from check-ins)
+- Earnings this week (hours × pay rate)
+- Jobs completed this week
+- Next job countdown
 
-### Files to modify
-- **Migration**: Add `assigned_hours` to `job_assignments`
-- `src/hooks/useJobs.ts` — update interface and `assignWorker`
-- `src/components/team/JobSchedulerContent.tsx` — add labor columns to jobs table, add assignment panel to edit dialog
-- `src/components/team/JobCalendarView.tsx` — show labor indicator on job chips
-- `src/components/JobProfitabilityTab.tsx` — add expected profit column
-- `src/components/job/JobBudgetFields.tsx` — export helper used by multiple components (already done)
+**File:** `src/pages/CrewDashboardPage.tsx`
 
-### UI Sketch
+### 6. Calendar View Polish
+**What changes:**
+- Calendar already works well; add a "View full calendar" CTA from the jobs list
+- No major structural changes needed
+
+### Technical Details
+
+**Job filtering logic (CrewJobsList):**
 ```text
-Jobs Table:
-┌──────────┬────────┬──────────┬────────────────┬────────┬─────────┐
-│ Title    │ Site   │ Price    │ Labor Budget   │ Crew   │ Actions │
-├──────────┼────────┼──────────┼────────────────┼────────┼─────────┤
-│ Lawn Job │ Oak St │ $1,200   │ 2/4 hrs ($200) │ 2 crew │ ✏️ 🗑️  │
-│ Hedge    │ Elm Ln │ $800     │ 0/2 hrs ($0)   │ —      │ ✏️ 🗑️  │
-└──────────┴────────┴──────────┴────────────────┴────────┴─────────┘
+today = getTodayDateOnlyKey()
+weekEnd = addDaysToDateOnly(today, 6 - todayDayOfWeek) // end of week (Sun)
 
-Edit Job Dialog — Assignment Section:
-┌─────────────────────────────────────┐
-│ 👷 Crew Assignments                 │
-│ Labor Budget: 4 hrs ($120)          │
-│ Assigned: 2 hrs ($60) — 2 hrs left  │
-│                                     │
-│ ┌─ John (contractor) · 2 hrs ── ✕ ┐│
-│ └──────────────────────────────────┘│
-│ [+ Assign Worker]                   │
-│   → Pick worker, enter hours        │
-│   → Shows warning if over budget    │
-└─────────────────────────────────────┘
+todayJobs = jobs where getNextInstanceDate(job) === today
+thisWeekJobs = jobs where date > today && date <= weekEnd
+upcomingJobs = jobs where date > weekEnd (show first 3)
 ```
+
+**Files to modify:**
+- `src/components/crew/CrewJobsList.tsx` — Section-based layout with Today/This Week/Upcoming
+- `src/pages/CrewDashboardPage.tsx` — Greeting, stats strip, improved check-in card, mobile-friendly tabs
+- `src/components/CrewSidebar.tsx` — Minor label updates if needed
+
+**No database changes required.** All data is already available from existing queries.
 
