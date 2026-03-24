@@ -31,7 +31,7 @@ export default function JobSchedulerContent() {
   const { user } = useAuth();
   const { sites, jobs, assignments, checkins, loading, createSite, updateSite, deleteSite, createJob, updateJob, updateJobsBatch, deleteJob, assignWorker, removeAssignment, refetch } = useJobs();
   const { data: clients = [] } = useClients();
-  const { templates } = useJobTemplates();
+  const { templates, refetch: refetchTemplates } = useJobTemplates();
   const [tab, setTab] = useState("calendar");
 
   // Create site state
