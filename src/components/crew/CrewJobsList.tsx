@@ -128,11 +128,15 @@ function JobCard({ job, activeCheckin, gpsLoading, onCheckIn, onPhotos, variant 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span className="font-medium text-foreground">{getRelativeDayLabel(displayDate)}</span>
           <span>{formatDateOnly(displayDate)}</span>
+          {job.start_time && <span>{job.start_time.slice(0, 5)}</span>}
           {job.job_type === "recurring" && job.recurring_interval && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0">{job.recurring_interval}</Badge>
           )}
           {job.expectedHours != null && <span>{job.expectedHours}h</span>}
           {job.expectedPay != null && <span>${job.expectedPay.toFixed(0)}</span>}
+          {variant === "today" && job.start_time && job.status !== "completed" && !activeCheckin && (
+            <StartsInCountdown startTime={job.start_time} />
+          )}
         </div>
 
         {!job.site.latitude && (
