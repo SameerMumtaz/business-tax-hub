@@ -696,6 +696,11 @@ export default function JobSchedulerContent() {
               toast.success(`"${job.title}" ${newTime ? 'rescheduled' : 'moved'} to ${formattedDate}${newTime ? ' at ' + newTime : ''}`);
               await notifyAssignedCrew(jobId, job.title, `This job has been ${newTime ? 'rescheduled' : 'moved'} to ${formattedDate}${newTime ? ' at ' + newTime : ''}.`);
             }}
+            onDiscardEdits={async (revertData) => {
+              for (const { jobId, updates } of revertData) {
+                await updateJob(jobId, updates);
+              }
+            }}
           />
         </TabsContent>
         <TabsContent value="jobs" className="mt-4">
