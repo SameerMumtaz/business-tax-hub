@@ -489,7 +489,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
                   const displayStatus = job._displayStatus || job.status;
                   const isDragging = dragJob?.id === job.id;
                   const isRescheduled = !!job._rescheduled;
-                  const canDrag = editMode && !isRescheduled && displayStatus !== "completed" && job.status !== "cancelled";
+                  const canDrag = editMode && !isRescheduled && displayStatus !== "completed" && job.status !== "cancelled" && !job._isMultiDayContinuation;
                   const isLastCard = idx === dayJobs.length - 1;
                   const nextJob = dayJobs[idx + 1];
                   const showDropAfter = dragJob && dragJob.id !== job.id && (!nextJob || dragJob.id !== nextJob.id);
