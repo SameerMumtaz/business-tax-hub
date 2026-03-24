@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MapPin, Download, Users, Clock } from "lucide-react";
+import CheckInProgressWidget from "./CheckInProgressWidget";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -108,16 +109,22 @@ export default function CrewMapContent() {
   const [members, setMembers] = useState<TeamMemberInfo[]>([]);
   const [sites, setSites] = useState<SiteInfo[]>([]);
   const [filterSite, setFilterSite] = useState<string>("all");
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
 
   useEffect(() => {
     if (!user) return;
     const fetchData = async () => {
-      const [memRes, sitesRes] = await Promise.all([
+      const [memRes, sitesRes, jobsRes, assignRes] = await Promise.all([
         supabase.from("team_members").select("id, name, email, role").eq("business_user_id", user.id),
         supabase.from("job_sites").select("id, name, latitude, longitude, address").eq("user_id", user.id),
+        supabase.from("jobs").select("id, title, start_date, end_date, start_time, estimated_hours, job_type, status, recurring_interval, recurring_end_date").eq("user_id", user.id).neq("status", "cancelled"),
+        supabase.from("job_assignments").select("job_id, worker_id, worker_name"),
       ]);
       if (memRes.data) setMembers(memRes.data as TeamMemberInfo[]);
       if (sitesRes.data) setSites(sitesRes.data as SiteInfo[]);
+      if (jobsRes.data) setJobs(jobsRes.data);
+      if (assignRes.data) setAssignments(assignRes.data);
     };
     fetchData();
   }, [user]);
@@ -180,17 +187,10 @@ export default function CrewMapContent() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <CheckInProgressWidget jobs={jobs} assignments={assignments} checkins={checkins} />
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">On-Site Now</CardTitle></CardHeader>
           <CardContent><div className="text-2xl font-bold text-primary">{activeCheckins.length}</div></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Check-ins Today</CardTitle></CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {checkins.filter((c) => new Date(c.check_in_time).toDateString() === new Date().toDateString()).length}
-            </div>
-          </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Team Members</CardTitle></CardHeader>
