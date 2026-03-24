@@ -1,9 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Camera, Navigation, Clock, LogIn, AlertTriangle, DollarSign, CalendarOff, CheckCircle, MapPin, CalendarDays } from "lucide-react";
+import { Camera, Navigation, Clock, LogIn, AlertTriangle, DollarSign, CalendarOff, CheckCircle, MapPin, CalendarDays, Timer } from "lucide-react";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 import { formatDateOnly, getNextInstanceDate, isRecurringJobToday, getTodayDateOnlyKey, compareDateOnly, addDaysToDateOnly, parseDateOnlyLocal } from "@/lib/dateOnly";
 
@@ -13,6 +13,7 @@ export interface AssignedJob {
   description: string | null;
   start_date: string;
   end_date: string | null;
+  start_time: string | null;
   status: string;
   job_type?: string;
   recurring_interval?: string | null;
@@ -50,6 +51,42 @@ function getDirectionsUrl(lat: number | null, lng: number | null, address: strin
   if (lat != null && lng != null) return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
   if (address) return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
   return null;
+}
+
+/** Live countdown to a job's start_time (e.g. "Starts in 3h 24m") */
+function StartsInCountdown({ startTime }: { startTime: string }) {
+  const [label, setLabel] = useState("");
+  useEffect(() => {
+    const update = () => {
+      const now = new Date();
+      const [h, m] = startTime.split(":").map(Number);
+      const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
+      const diffMs = target.getTime() - now.getTime();
+      if (diffMs <= 0) {
+        setLabel("Starting now");
+        return;
+      }
+      const mins = Math.floor(diffMs / 60000);
+      if (mins < 60) {
+        setLabel(`Starts in ${mins}m`);
+      } else {
+        const hrs = Math.floor(mins / 60);
+        const rm = mins % 60;
+        setLabel(`Starts in ${hrs}h ${rm > 0 ? `${rm}m` : ""}`);
+      }
+    };
+    update();
+    const id = setInterval(update, 60_000);
+    return () => clearInterval(id);
+  }, [startTime]);
+
+  if (!label) return null;
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-primary font-medium">
+      <Timer className="h-3 w-3" />
+      {label}
+    </span>
+  );
 }
 
 function JobCard({ job, activeCheckin, gpsLoading, onCheckIn, onPhotos, variant }: {
@@ -91,11 +128,15 @@ function JobCard({ job, activeCheckin, gpsLoading, onCheckIn, onPhotos, variant 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span className="font-medium text-foreground">{getRelativeDayLabel(displayDate)}</span>
           <span>{formatDateOnly(displayDate)}</span>
+          {job.start_time && <span>{job.start_time.slice(0, 5)}</span>}
           {job.job_type === "recurring" && job.recurring_interval && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0">{job.recurring_interval}</Badge>
           )}
           {job.expectedHours != null && <span>{job.expectedHours}h</span>}
           {job.expectedPay != null && <span>${job.expectedPay.toFixed(0)}</span>}
+          {variant === "today" && job.start_time && job.status !== "completed" && !activeCheckin && (
+            <StartsInCountdown startTime={job.start_time} />
+          )}
         </div>
 
         {!job.site.latitude && (
