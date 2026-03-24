@@ -4,6 +4,7 @@ import CrewAssignmentPanel from "@/components/job/CrewAssignmentPanel";
 import { useJobs, type Job, type JobSite } from "@/hooks/useJobs";
 import { useClients } from "@/hooks/useClients";
 import { useAuth } from "@/hooks/useAuth";
+import { useJobTemplates } from "@/hooks/useJobTemplates";
 import JobCalendarView, { type JobMoveEvent } from "@/components/team/JobCalendarView";
 import { useJobPhotos } from "@/hooks/useJobPhotos";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ export default function JobSchedulerContent() {
   const { user } = useAuth();
   const { sites, jobs, assignments, checkins, loading, createSite, updateSite, deleteSite, createJob, updateJob, updateJobsBatch, deleteJob, assignWorker, removeAssignment, refetch } = useJobs();
   const { data: clients = [] } = useClients();
+  const { templates } = useJobTemplates();
   const [tab, setTab] = useState("calendar");
 
   // Create site state
@@ -388,6 +390,33 @@ export default function JobSchedulerContent() {
           <DialogContent className="max-h-[85vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Schedule Job</DialogTitle></DialogHeader>
             <div className="space-y-3 pt-2">
+              {templates.length > 0 && (
+                <Select value="" onValueChange={(templateId) => {
+                  const t = templates.find((x) => x.id === templateId);
+                  if (!t) return;
+                  setJobTitle(t.title);
+                  setJobDesc(t.description || "");
+                  setJobEstHours(t.estimated_hours ? String(t.estimated_hours) : "");
+                  setJobPrice(t.price ? String(t.price) : "");
+                  setJobMaterialBudget(t.material_budget ? String(t.material_budget) : "");
+                  setJobLaborType(t.labor_budget_type);
+                  setJobLaborAmount(t.labor_budget_amount ? String(t.labor_budget_amount) : "");
+                  setJobLaborHours(t.labor_budget_hours ? String(t.labor_budget_hours) : "");
+                  setJobLaborRate(t.labor_budget_rate ? String(t.labor_budget_rate) : "");
+                }}>
+                  <SelectTrigger className="border-dashed">
+                    <Briefcase className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                    <SelectValue placeholder="Use a service template…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templates.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.title}{t.price > 0 ? ` — $${t.price}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <Input placeholder="Job title" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
               <Input placeholder="Description (optional)" value={jobDesc} onChange={(e) => setJobDesc(e.target.value)} />
               {!inlineNewSite ? (
