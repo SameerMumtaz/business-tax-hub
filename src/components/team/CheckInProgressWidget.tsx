@@ -99,8 +99,9 @@ export default function CheckInProgressWidget({ jobs, assignments, checkins }: P
     let totalExpectedToday = 0; // Total workers expected today
     let completedJobs = 0;
     let inProgressJobs = 0;
-    let notStartedPastDue = 0;
+    let notStartedPastDue = 0; // count of past-due WORKERS, not jobs
     let upcomingJobs = 0;
+    let pastDueJobCount = 0;
     
     const jobDetails: {
       id: string;
