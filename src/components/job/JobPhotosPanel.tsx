@@ -23,7 +23,6 @@ export default function JobPhotosPanel({ jobId, compact = false, occurrenceDate 
   const [selectedType, setSelectedType] = useState<JobPhoto["photo_type"]>("before");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
 
   const handleFiles = useCallback((files: FileList | null) => {
     if (!files) return;
