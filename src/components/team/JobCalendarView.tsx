@@ -213,6 +213,7 @@ function buildJobsByDate(jobs: Job[], checkins: CrewCheckinOccurrence[], rangeSt
           add(dateStr, { ...job, _rescheduled: rescheduledSet.has(`${job.id}:${dateStr}`), _instanceDate: dateStr, _displayStatus: getOccurrenceStatus(job, dateStr, checkins) });
         }
         if (job.recurring_interval === "monthly") cursor.setMonth(cursor.getMonth() + 1);
+        else if (job.recurring_interval === "quarterly") cursor.setMonth(cursor.getMonth() + 3);
         else if (intervalDays > 0) cursor.setDate(cursor.getDate() + intervalDays);
         else break;
       }
