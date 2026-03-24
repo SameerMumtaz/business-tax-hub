@@ -23,7 +23,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-import JobPhotosPanel from "@/components/job/JobPhotosPanel";
+import JobPhotosByDate from "@/components/job/JobPhotosByDate";
 
 export default function JobSchedulerContent() {
   const { user } = useAuth();
@@ -890,7 +890,7 @@ export default function JobSchedulerContent() {
               Job Photos — {photosJobId ? jobs.find(j => j.id === photosJobId)?.title : ""}
             </DialogTitle>
           </DialogHeader>
-          {photosJobId && <JobPhotosPanel jobId={photosJobId} />}
+          {photosJobId && <JobPhotosByDate jobId={photosJobId} jobType={jobs.find(j => j.id === photosJobId)?.job_type} />}
         </DialogContent>
       </Dialog>
     </div>
