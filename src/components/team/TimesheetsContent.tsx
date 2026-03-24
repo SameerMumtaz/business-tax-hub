@@ -794,7 +794,8 @@ export default function TimesheetsContent() {
                                 aggDayHours[day] = workerEntries.reduce((s, e) => s + (e[`${day}_hours` as keyof TimesheetEntry] as number), 0);
                               });
                               const aggTotal = workerEntries.reduce((s, e) => s + e.total_hours, 0);
-                              const aggOT = Math.max(0, aggTotal - 40);
+                              const workerOtEnabled = getOtEnabled(workerId);
+                              const aggOT = workerOtEnabled ? Math.max(0, aggTotal - 40) : 0;
                               const aggRegular = aggTotal - aggOT;
                               const rate = firstEntry.pay_rate;
                               const aggPay = aggRegular * rate + aggOT * rate * 1.5;
