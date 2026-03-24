@@ -181,22 +181,36 @@ export default function JobSchedulerContent() {
     if (!inlineSiteName.trim()) { toast.error("Site name is required"); return; }
     setCreatingSiteInline(true);
     try {
+      // Auto-geocode if address provided but no coords
+      let lat = inlineSiteLat ? Number(inlineSiteLat) : null;
+      let lng = inlineSiteLng ? Number(inlineSiteLng) : null;
+      if (!lat && !lng && (inlineSiteAddress || inlineSiteCity || inlineSiteState)) {
+        const query = [inlineSiteAddress, inlineSiteCity, inlineSiteState].filter(Boolean).join(", ");
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`,
+            { headers: { "User-Agent": "LovableApp/1.0" } }
+          );
+          const data = await res.json();
+          if (data?.[0]) {
+            lat = Number(data[0].lat);
+            lng = Number(data[0].lon);
+          }
+        } catch { /* geocoding failed, continue without coords */ }
+      }
       await createSite({
         name: inlineSiteName, address: inlineSiteAddress || null, city: inlineSiteCity || null,
         state: inlineSiteState || null, zip: null, notes: null,
-        latitude: inlineSiteLat ? Number(inlineSiteLat) : null,
-        longitude: inlineSiteLng ? Number(inlineSiteLng) : null,
+        latitude: lat, longitude: lng,
         geofence_radius: 150, client_id: null,
       });
-      // After creation, find the newly created site and select it
       await refetch();
-      // We need to wait for refetch, then find by name
       const { data: newSites } = await supabase
         .from("job_sites").select("id").eq("user_id", user!.id)
         .eq("name", inlineSiteName).order("created_at", { ascending: false }).limit(1);
       if (newSites?.[0]) setSiteIdFn(newSites[0].id);
       resetInlineSite();
-      toast.success("Site created");
+      toast.success(lat && lng ? "Site created with GPS coordinates" : "Site created (no GPS coordinates found)");
     } catch { toast.error("Failed to create site"); }
     finally { setCreatingSiteInline(false); }
   };
