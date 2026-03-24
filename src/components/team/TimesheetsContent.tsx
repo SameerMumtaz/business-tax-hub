@@ -580,9 +580,9 @@ export default function TimesheetsContent() {
     <div className="space-y-4">
       {/* Weekly Scheduled vs. Actual comparison */}
       <ScheduledVsActualWidget
-        jobs={jobs}
+        jobs={jobs as any}
         assignments={assignments}
-        checkins={checkins}
+        checkins={checkins as any}
         members={workers.map((w) => ({ id: w.id, name: w.name }))}
       />
 
