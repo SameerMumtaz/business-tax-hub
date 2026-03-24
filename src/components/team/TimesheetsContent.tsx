@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import ScheduledVsActualWidget from "./ScheduledVsActualWidget";
 import { useTimesheets, type TimesheetEntry } from "@/hooks/useTimesheets";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,6 +37,9 @@ interface Job {
   job_type: string;
   start_time: string | null;
   estimated_hours: number | null;
+  status?: string;
+  recurring_interval?: string | null;
+  recurring_end_date?: string | null;
 }
 
 interface JobAssignment {
@@ -57,6 +61,7 @@ interface CheckinRecord {
   check_out_time: string | null;
   total_hours: number | null;
   occurrence_date: string | null;
+  status?: string;
 }
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
@@ -225,7 +230,7 @@ export default function TimesheetsContent() {
         supabase.from("team_members").select("id, name, worker_type, pay_rate").eq("business_user_id", user.id).in("status", ["active", "invited"]),
         supabase.from("employees").select("id, name, salary").eq("user_id", user.id),
         supabase.from("contractors").select("id, name, pay_rate").eq("user_id", user.id),
-        supabase.from("jobs").select("id, title, start_date, end_date, job_type, start_time, estimated_hours").eq("user_id", user.id).in("status", ["scheduled", "in_progress"]),
+        supabase.from("jobs").select("id, title, start_date, end_date, job_type, start_time, estimated_hours, status, recurring_interval, recurring_end_date").eq("user_id", user.id).in("status", ["scheduled", "in_progress"]),
         supabase.from("job_assignments").select("job_id, worker_id, worker_name, worker_type, hours_per_day, assigned_days, assigned_hours"),
         supabase.from("crew_checkins").select("id, team_member_id, job_id, job_site_id, check_in_time, check_out_time, total_hours, occurrence_date"),
       ]);
@@ -573,6 +578,14 @@ export default function TimesheetsContent() {
 
   return (
     <div className="space-y-4">
+      {/* Weekly Scheduled vs. Actual comparison */}
+      <ScheduledVsActualWidget
+        jobs={jobs as any}
+        assignments={assignments}
+        checkins={checkins as any}
+        members={workers.map((w) => ({ id: w.id, name: w.name }))}
+      />
+
       {/* Quick-create buttons + custom */}
       <div className="flex items-center gap-2 flex-wrap justify-between">
         <div className="flex items-center gap-2">

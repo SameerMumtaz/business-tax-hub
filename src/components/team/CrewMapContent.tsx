@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MapPin, Download, Users, Clock } from "lucide-react";
 import CheckInProgressWidget from "./CheckInProgressWidget";
-import ScheduledVsActualWidget from "./ScheduledVsActualWidget";
+import TodayScheduledVsActual from "./TodayScheduledVsActual";
 import TodayJobs from "@/components/dashboard/TodayJobs";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -205,8 +205,8 @@ export default function CrewMapContent() {
         </div>
       </div>
 
-      {/* Scheduled vs. Actual comparison */}
-      <ScheduledVsActualWidget jobs={jobs} assignments={assignments} checkins={checkins} members={members} />
+      {/* Today's Scheduled vs. Actual */}
+      <TodayScheduledVsActual jobs={jobs} assignments={assignments} checkins={checkins} members={members} />
 
       {/* Active crew cards with live timers */}
       {filtered.length > 0 && (
