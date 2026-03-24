@@ -92,9 +92,9 @@ const links: NavItem[] = [
     matchPaths: ["/team"],
     children: [
       { to: "/team", label: "Supervisor", icon: Eye },
-      { to: "/team?tab=members", label: "Members", icon: Users },
-      { to: "/team?tab=scheduler", label: "Job Scheduler", icon: BarChart3 },
+      { to: "/team?tab=scheduler", label: "Schedule", icon: BarChart3 },
       { to: "/team?tab=timesheets", label: "Timesheets", icon: Clock },
+      { to: "/team?tab=members", label: "Members", icon: Users },
     ],
   },
   { to: "/1099", label: "Team & Contractors", icon: Users },

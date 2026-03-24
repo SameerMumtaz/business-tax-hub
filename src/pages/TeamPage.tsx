@@ -44,14 +44,14 @@ export default function TeamPage() {
             <TabsTrigger value="supervisor" className="gap-1.5">
               <Eye className="h-3.5 w-3.5" />Supervisor
             </TabsTrigger>
-            <TabsTrigger value="members" className="gap-1.5">
-              <Users className="h-3.5 w-3.5" />Members
-            </TabsTrigger>
             <TabsTrigger value="scheduler" className="gap-1.5">
-              <Calendar className="h-3.5 w-3.5" />Job Scheduler
+              <Calendar className="h-3.5 w-3.5" />Schedule
             </TabsTrigger>
             <TabsTrigger value="timesheets" className="gap-1.5">
               <Clock className="h-3.5 w-3.5" />Timesheets
+            </TabsTrigger>
+            <TabsTrigger value="members" className="gap-1.5">
+              <Users className="h-3.5 w-3.5" />Members
             </TabsTrigger>
           </TabsList>
 
