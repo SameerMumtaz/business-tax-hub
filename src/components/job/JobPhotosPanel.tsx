@@ -73,33 +73,14 @@ export default function JobPhotosPanel({ jobId, compact = false, occurrenceDate 
           className="hidden"
           onChange={(e) => handleFiles(e.target.files)}
         />
-        <input
-          ref={cameraInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          onChange={(e) => handleFiles(e.target.files)}
-        />
-
         <Button
           variant="outline"
           size="sm"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
         >
-          {uploading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
-          Upload
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => cameraInputRef.current?.click()}
-          disabled={uploading}
-          className="md:hidden"
-        >
-          <Camera className="h-4 w-4 mr-1" />
-          Camera
+          {uploading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Camera className="h-4 w-4 mr-1" />}
+          Upload Photos
         </Button>
       </div>
 
