@@ -19,13 +19,89 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, MapPin, Briefcase, Loader2, Pencil, Trash2, Camera, Calendar, UserCheck, Clock, Wrench } from "lucide-react";
+import { Plus, MapPin, Briefcase, Loader2, Pencil, Trash2, Camera, Calendar, UserCheck, Clock, Wrench, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import JobPhotosByDate from "@/components/job/JobPhotosByDate";
 import ServicesContent from "@/components/team/ServicesContent";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+
+
+function DeleteJobDialog({ job, onDelete }: { job: Job; onDelete: (id: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const isCompleted = job.status === "completed";
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    await onDelete(job.id);
+    setDeleting(false);
+    setOpen(false);
+    setConfirmed(false);
+  };
+
+  return (
+    <AlertDialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setConfirmed(false); }}>
+      <AlertDialogTrigger asChild>
+        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive">
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            {isCompleted && <AlertTriangle className="h-5 w-5 text-chart-warning" />}
+            Delete Job?
+          </AlertDialogTitle>
+          <AlertDialogDescription className="space-y-2">
+            <span className="block">This will permanently delete "<strong>{job.title}</strong>" and cascade-remove:</span>
+            <ul className="list-disc ml-5 space-y-0.5 text-sm">
+              <li>All crew assignments</li>
+              <li>Timesheet entries (pay totals will be reversed)</li>
+              <li>Crew check-in/check-out records</li>
+              <li>Job photos</li>
+              <li>Linked expenses will be unlinked</li>
+              <li>Linked invoices will be unlinked</li>
+            </ul>
+            {isCompleted && (
+              <div className="mt-3 p-3 rounded-md bg-destructive/10 border border-destructive/20">
+                <p className="text-sm font-medium text-destructive mb-2">
+                  ⚠️ This job is marked as completed. Deleting it will reverse all pay allocated to crew members for this job.
+                </p>
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    id="confirm-delete-completed"
+                    checked={confirmed}
+                    onCheckedChange={(v) => setConfirmed(v === true)}
+                  />
+                  <Label htmlFor="confirm-delete-completed" className="text-sm leading-tight cursor-pointer">
+                    I understand the consequences and want to proceed with deletion
+                  </Label>
+                </div>
+              </div>
+            )}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+          <Button
+            variant="destructive"
+            disabled={deleting || (isCompleted && !confirmed)}
+            onClick={handleDelete}
+          >
+            {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+            Delete Job
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
 export default function JobSchedulerContent() {
   const { user } = useAuth();
@@ -927,23 +1003,7 @@ export default function JobSchedulerContent() {
                           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEditJob(j)}>
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive">
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Delete Job?</AlertDialogTitle>
-                                <AlertDialogDescription>This will permanently delete "{j.title}" and all its assignments.</AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => deleteJob(j.id)}>Delete</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                          <DeleteJobDialog job={j} onDelete={deleteJob} />
                         </TableCell>
                       </TableRow>
                       );
