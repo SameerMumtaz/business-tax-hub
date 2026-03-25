@@ -124,7 +124,13 @@ export function useCrewCheckins() {
     return data;
   };
 
-  const checkOut = async (checkinId: string, lat: number, lng: number, overtimeNotes?: string) => {
+  const checkOut = async (
+    checkinId: string,
+    lat: number,
+    lng: number,
+    overtimeNotes?: string,
+    flagReasonOverride?: string,
+  ) => {
     const checkin = checkins.find((c) => c.id === checkinId);
     if (!checkin) return;
 
@@ -134,8 +140,9 @@ export function useCrewCheckins() {
       (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
     const roundedHours = Math.round(totalHours * 100) / 100;
 
-    let flagReason: string | null = null;
-    if (checkin.job_site_id) {
+    // Use provided flag reason, or check geofence
+    let flagReason: string | null = flagReasonOverride || null;
+    if (!flagReason && checkin.job_site_id) {
       try {
         const { data: site } = await supabase
           .from("job_sites")
@@ -224,6 +231,7 @@ export function useCrewCheckins() {
       }
     }
 
+    // Mark job as completed
     if (checkin.job_id) {
       await supabase.rpc("update_job_status_on_checkin", {
         _job_id: checkin.job_id,
@@ -232,7 +240,7 @@ export function useCrewCheckins() {
     }
 
     if (flagReason) {
-      toast.warning(`Checked out — ${totalHours.toFixed(1)} hours worked (flagged: checked out away from job site)`);
+      toast.warning(`Checked out — ${totalHours.toFixed(1)} hours worked (flagged)`);
     } else {
       toast.success(`Checked out — ${totalHours.toFixed(1)} hours worked`);
     }

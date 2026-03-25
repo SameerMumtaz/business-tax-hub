@@ -114,6 +114,14 @@ function QuickStats({ checkins, payRate, jobs }: { checkins: any[]; payRate: num
   );
 }
 
+/* ── Explanation reasons type ───────────────────────── */
+type ExplanationReason = "lateCheckin" | "earlyCheckout" | "overtimeCheckout" | "geofenceCheckout";
+
+interface ExplanationItem {
+  reason: ExplanationReason;
+  detail: string; // e.g. "23 minutes late" or "150m from job site"
+}
+
 /* ── Main Page ──────────────────────────────────────── */
 export default function CrewDashboardPage() {
   const { user, signOut } = useAuth();
@@ -126,9 +134,19 @@ export default function CrewDashboardPage() {
   const [gpsLoading, setGpsLoading] = useState<string | null>(null);
   const [payRate, setPayRate] = useState<number | null>(null);
   const [firstName, setFirstName] = useState<string | null>(null);
-  const [overtimeDialogOpen, setOvertimeDialogOpen] = useState(false);
-  const [overtimeExplanation, setOvertimeExplanation] = useState("");
+
+  // Unified explanation dialog state
+  const [explanationDialogOpen, setExplanationDialogOpen] = useState(false);
+  const [explanationItems, setExplanationItems] = useState<ExplanationItem[]>([]);
+  const [explanationTexts, setExplanationTexts] = useState<Record<ExplanationReason, string>>({
+    lateCheckin: "",
+    earlyCheckout: "",
+    overtimeCheckout: "",
+    geofenceCheckout: "",
+  });
+  const [pendingAction, setPendingAction] = useState<"checkin" | "checkout" | null>(null);
   const [pendingCheckoutCoords, setPendingCheckoutCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [pendingCheckinJob, setPendingCheckinJob] = useState<AssignedJob | null>(null);
 
   // Photo requirement for checkout
   const activeJobId = activeCheckin?.job_id || null;
@@ -206,6 +224,7 @@ export default function CrewDashboardPage() {
     fetchData();
   }, [user, teamMemberId]);
 
+  /* ── Check-in handler ────────────────────────────── */
   const handleCheckIn = async (job: AssignedJob) => {
     const instanceDate = getNextInstanceDate(job);
     const startMs = parseDateOnlyLocal(instanceDate).setHours(0, 0, 0, 0);
@@ -215,6 +234,33 @@ export default function CrewDashboardPage() {
       toast.error(t("error.checkInDate"));
       return;
     }
+
+    // Check for late check-in (>15 min after start_time)
+    if (job.start_time) {
+      const [h, m] = job.start_time.split(":").map(Number);
+      const scheduledStart = new Date();
+      scheduledStart.setHours(h, m, 0, 0);
+      const graceMs = 15 * 60 * 1000; // 15 minute grace period
+      const lateMs = nowMs - scheduledStart.getTime();
+      if (lateMs > graceMs) {
+        const lateMinutes = Math.round(lateMs / 60000);
+        setPendingCheckinJob(job);
+        setPendingAction("checkin");
+        setExplanationItems([{
+          reason: "lateCheckin",
+          detail: `${lateMinutes} minutes late (scheduled: ${job.start_time.slice(0, 5)})`,
+        }]);
+        setExplanationTexts({ lateCheckin: "", earlyCheckout: "", overtimeCheckout: "", geofenceCheckout: "" });
+        setExplanationDialogOpen(true);
+        return;
+      }
+    }
+
+    await performCheckIn(job);
+  };
+
+  const performCheckIn = async (job: AssignedJob, lateNote?: string) => {
+    const instanceDate = getNextInstanceDate(job);
     setGpsLoading(job.id);
     try {
       const pos = await getCurrentPosition();
@@ -228,13 +274,33 @@ export default function CrewDashboardPage() {
           return;
         }
       }
-      await checkIn(job.id, job.site.id, lat, lng, job.expectedHours, instanceDate);
+      const result = await checkIn(job.id, job.site.id, lat, lng, job.expectedHours, instanceDate);
+
+      // If late, save the note and flag + notify
+      if (lateNote && result) {
+        await supabase
+          .from("crew_checkins")
+          .update({ notes: `Late check-in: ${lateNote}`, flag_reason: `Late check-in` } as any)
+          .eq("id", (result as any).id);
+
+        // Notify admin/manager
+        if (businessUserId && teamMemberId) {
+          const { data: tm } = await supabase.from("team_members").select("name").eq("id", teamMemberId).single();
+          await supabase.from("notifications").insert({
+            user_id: businessUserId,
+            title: "Late Check-In",
+            message: `${tm?.name || "Crew member"} checked in late for "${job.title}". Reason: ${lateNote}`,
+            type: "warning",
+          } as any);
+        }
+      }
     } catch (err: any) {
       toast.error(err.message || t("error.gps"));
     }
     setGpsLoading(null);
   };
 
+  /* ── Check-out handler ───────────────────────────── */
   const handleCheckOut = async () => {
     if (!activeCheckin) return;
     if (!photosComplete) { toast.error(t("error.photos")); return; }
@@ -242,16 +308,41 @@ export default function CrewDashboardPage() {
     try {
       const pos = await getCurrentPosition();
       const { latitude: lat, longitude: lng } = pos.coords;
+
+      const reasons: ExplanationItem[] = [];
       const expectedHours = (activeCheckin as any).expected_hours;
-      if (expectedHours && expectedHours > 0) {
-        const elapsed = (Date.now() - new Date(activeCheckin.check_in_time).getTime()) / (1000 * 60 * 60);
-        if (elapsed > expectedHours) {
-          setPendingCheckoutCoords({ lat, lng });
-          setOvertimeDialogOpen(true);
-          setGpsLoading(null);
-          return;
+      const elapsedHours = (Date.now() - new Date(activeCheckin.check_in_time).getTime()) / (1000 * 60 * 60);
+
+      // Check geofence
+      if (activeJobSite?.latitude && activeJobSite?.longitude) {
+        const radius = activeJobSite.geofence_radius || 150;
+        if (!isWithinGeofence(lat, lng, activeJobSite.latitude, activeJobSite.longitude, radius)) {
+          const dist = Math.round(haversineDistance(lat, lng, activeJobSite.latitude, activeJobSite.longitude));
+          reasons.push({ reason: "geofenceCheckout", detail: `${dist}m from job site (outside ${radius}m geofence)` });
         }
       }
+
+      // Check time variance
+      if (expectedHours && expectedHours > 0) {
+        if (elapsedHours <= expectedHours * 0.5) {
+          // Under 50% of expected time
+          reasons.push({ reason: "earlyCheckout", detail: `${elapsedHours.toFixed(1)}h worked vs ${expectedHours}h expected (${Math.round((elapsedHours / expectedHours) * 100)}%)` });
+        } else if (elapsedHours >= expectedHours * 1.2) {
+          // Over 120% of expected time
+          reasons.push({ reason: "overtimeCheckout", detail: `${elapsedHours.toFixed(1)}h worked vs ${expectedHours}h expected (${Math.round((elapsedHours / expectedHours) * 100)}%)` });
+        }
+      }
+
+      if (reasons.length > 0) {
+        setPendingCheckoutCoords({ lat, lng });
+        setPendingAction("checkout");
+        setExplanationItems(reasons);
+        setExplanationTexts({ lateCheckin: "", earlyCheckout: "", overtimeCheckout: "", geofenceCheckout: "" });
+        setExplanationDialogOpen(true);
+        setGpsLoading(null);
+        return;
+      }
+
       await checkOut(activeCheckin.id, lat, lng);
     } catch (err: any) {
       toast.error(err.message || t("error.gps"));
@@ -259,18 +350,111 @@ export default function CrewDashboardPage() {
     setGpsLoading(null);
   };
 
-  const handleOvertimeCheckout = async () => {
-    if (!activeCheckin || !pendingCheckoutCoords) return;
-    if (!overtimeExplanation.trim()) { toast.error(t("error.overtime")); return; }
-    setGpsLoading("checkout");
-    await checkOut(activeCheckin.id, pendingCheckoutCoords.lat, pendingCheckoutCoords.lng, overtimeExplanation.trim());
-    setOvertimeDialogOpen(false);
-    setOvertimeExplanation("");
+  /* ── Submit explanations ─────────────────────────── */
+  const handleExplanationSubmit = async () => {
+    // Validate all explanations are filled
+    for (const item of explanationItems) {
+      if (!explanationTexts[item.reason].trim()) {
+        toast.error(t("explain.required"));
+        return;
+      }
+    }
+
+    if (pendingAction === "checkin" && pendingCheckinJob) {
+      await performCheckIn(pendingCheckinJob, explanationTexts.lateCheckin.trim());
+    } else if (pendingAction === "checkout" && activeCheckin && pendingCheckoutCoords) {
+      setGpsLoading("checkout");
+
+      // Build combined notes from all explanations
+      const notesParts: string[] = [];
+      const flagParts: string[] = [];
+
+      for (const item of explanationItems) {
+        const text = explanationTexts[item.reason].trim();
+        switch (item.reason) {
+          case "geofenceCheckout":
+            notesParts.push(`Off-site checkout: ${text}`);
+            flagParts.push(`Off-site checkout (${item.detail})`);
+            break;
+          case "earlyCheckout":
+            notesParts.push(`Early completion: ${text}`);
+            flagParts.push(`Early completion (${item.detail})`);
+            break;
+          case "overtimeCheckout":
+            notesParts.push(`Overtime: ${text}`);
+            flagParts.push(`Overtime (${item.detail})`);
+            break;
+        }
+      }
+
+      await checkOut(
+        activeCheckin.id,
+        pendingCheckoutCoords.lat,
+        pendingCheckoutCoords.lng,
+        notesParts.join(" | "),
+        flagParts.length > 0 ? flagParts.join(" | ") : undefined,
+      );
+
+      // Notify admin/manager about flagged checkout
+      if (businessUserId && teamMemberId) {
+        const { data: tm } = await supabase.from("team_members").select("name").eq("id", teamMemberId).single();
+        const activeJob = assignedJobs.find((j) => j.id === activeCheckin.job_id);
+        const jobTitle = activeJob?.title || "Unknown job";
+
+        for (const item of explanationItems) {
+          const text = explanationTexts[item.reason].trim();
+          let title = "";
+          let message = "";
+          let type = "warning";
+
+          switch (item.reason) {
+            case "earlyCheckout":
+              title = "Early Job Completion";
+              message = `${tm?.name || "Crew member"} completed "${jobTitle}" in ${item.detail}. Reason: ${text}`;
+              type = "warning";
+              break;
+            case "overtimeCheckout":
+              title = "Overtime Reported";
+              message = `${tm?.name || "Crew member"} worked overtime on "${jobTitle}" — ${item.detail}. Reason: ${text}`;
+              type = "info";
+              break;
+            case "geofenceCheckout":
+              title = "Off-Site Checkout";
+              message = `${tm?.name || "Crew member"} checked out away from "${jobTitle}" — ${item.detail}. Reason: ${text}`;
+              type = "warning";
+              break;
+          }
+
+          if (title) {
+            await supabase.from("notifications").insert({
+              user_id: businessUserId,
+              title,
+              message,
+              type,
+            } as any);
+          }
+        }
+      }
+
+      setGpsLoading(null);
+    }
+
+    setExplanationDialogOpen(false);
+    setExplanationItems([]);
+    setExplanationTexts({ lateCheckin: "", earlyCheckout: "", overtimeCheckout: "", geofenceCheckout: "" });
     setPendingCheckoutCoords(null);
-    setGpsLoading(null);
+    setPendingCheckinJob(null);
+    setPendingAction(null);
   };
 
   const activeJob = activeCheckin ? assignedJobs.find((j) => j.id === activeCheckin.job_id) : null;
+
+  const reasonLabels: Record<ExplanationReason, { title: string; desc: string; placeholder: string }> = {
+    lateCheckin: { title: t("explain.lateCheckin"), desc: t("explain.lateCheckinDesc"), placeholder: t("explain.lateCheckinPlaceholder") },
+    earlyCheckout: { title: t("explain.earlyCheckout"), desc: t("explain.earlyCheckoutDesc"), placeholder: t("explain.earlyCheckoutPlaceholder") },
+    overtimeCheckout: { title: t("explain.overtimeCheckout"), desc: t("explain.overtimeCheckoutDesc"), placeholder: t("explain.overtimeCheckoutPlaceholder") },
+    geofenceCheckout: { title: t("explain.geofenceCheckout"), desc: t("explain.geofenceCheckoutDesc"), placeholder: t("explain.geofenceCheckoutPlaceholder") },
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -289,8 +473,6 @@ export default function CrewDashboardPage() {
             <SignOutIcon className="h-4 w-4" />
           </Button>
         </div>
-
-        
 
         {/* Quick Stats */}
         {!loading && (
@@ -366,7 +548,7 @@ export default function CrewDashboardPage() {
               </TabsTrigger>
             </TabsList>
             <TabsContent value="list" className="mt-4">
-              <CrewJobsList jobs={assignedJobs} activeCheckin={activeCheckin} gpsLoading={gpsLoading} onCheckIn={handleCheckIn} />
+              <CrewJobsList jobs={assignedJobs} activeCheckin={activeCheckin} gpsLoading={gpsLoading} onCheckIn={handleCheckIn} checkins={checkins} />
             </TabsContent>
             <TabsContent value="calendar" className="mt-4">
               <CrewCalendarView jobs={assignedJobs} checkins={checkins} />
@@ -381,32 +563,66 @@ export default function CrewDashboardPage() {
         )}
       </div>
 
-      {/* Overtime Dialog */}
-      <Dialog open={overtimeDialogOpen} onOpenChange={(open) => {
-        if (!open) { setOvertimeDialogOpen(false); setOvertimeExplanation(""); setPendingCheckoutCoords(null); }
+      {/* Unified Explanation Dialog */}
+      <Dialog open={explanationDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setExplanationDialogOpen(false);
+          setExplanationItems([]);
+          setExplanationTexts({ lateCheckin: "", earlyCheckout: "", overtimeCheckout: "", geofenceCheckout: "" });
+          setPendingCheckoutCoords(null);
+          setPendingCheckinJob(null);
+          setPendingAction(null);
+        }
       }}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-chart-warning" />
-              {t("overtime.title")}
+              {t("explain.title")}
             </DialogTitle>
             <DialogDescription>
-              {t("overtime.description")}
+              {t("explain.required")}
             </DialogDescription>
           </DialogHeader>
-          <Textarea
-            placeholder={t("overtime.placeholder")}
-            value={overtimeExplanation}
-            onChange={(e) => setOvertimeExplanation(e.target.value)}
-            rows={3}
-          />
+          <div className="space-y-4">
+            {explanationItems.map((item) => {
+              const labels = reasonLabels[item.reason];
+              return (
+                <div key={item.reason} className="space-y-2">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{labels.title}</p>
+                    <p className="text-xs text-muted-foreground">{labels.desc}</p>
+                    <p className="text-xs text-muted-foreground/70 mt-0.5 italic">{item.detail}</p>
+                  </div>
+                  <Textarea
+                    placeholder={labels.placeholder}
+                    value={explanationTexts[item.reason]}
+                    onChange={(e) => setExplanationTexts((prev) => ({ ...prev, [item.reason]: e.target.value }))}
+                    rows={2}
+                  />
+                </div>
+              );
+            })}
+          </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setOvertimeDialogOpen(false); setOvertimeExplanation(""); setPendingCheckoutCoords(null); }}>
+            <Button variant="outline" onClick={() => {
+              setExplanationDialogOpen(false);
+              setExplanationItems([]);
+              setPendingCheckoutCoords(null);
+              setPendingCheckinJob(null);
+              setPendingAction(null);
+            }}>
               Cancel
             </Button>
-            <Button onClick={handleOvertimeCheckout} disabled={!overtimeExplanation.trim() || gpsLoading === "checkout"}>
-              {gpsLoading === "checkout" ? t("checkin.gettingLocation") : t("overtime.submit")}
+            <Button
+              onClick={handleExplanationSubmit}
+              disabled={explanationItems.some((item) => !explanationTexts[item.reason].trim()) || gpsLoading === "checkout"}
+            >
+              {gpsLoading === "checkout"
+                ? t("checkin.gettingLocation")
+                : pendingAction === "checkout"
+                  ? t("explain.submitCheckout")
+                  : t("explain.submit")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -66,11 +66,32 @@ const translations = {
   // ─── Map ───
   "map.noSites": { en: "No job sites to display", es: "Sin sitios de trabajo" },
 
-  // ─── Overtime Dialog ───
+  // ─── Explanation Dialog ───
   "overtime.title": { en: "Overtime Explanation Required", es: "Se Requiere Explicación de Horas Extra" },
   "overtime.description": { en: "You've worked longer than the expected hours. Please explain why.", es: "Has trabajado más de las horas esperadas. Por favor explica por qué." },
   "overtime.placeholder": { en: "e.g. Client requested additional cleanup…", es: "ej. El cliente solicitó limpieza adicional…" },
   "overtime.submit": { en: "Submit & Check Out", es: "Enviar y Registrar Salida" },
+
+  "explain.title": { en: "Explanation Required", es: "Se Requiere Explicación" },
+  "explain.submit": { en: "Submit", es: "Enviar" },
+  "explain.submitCheckout": { en: "Submit & Check Out", es: "Enviar y Registrar Salida" },
+  "explain.required": { en: "Please provide an explanation for each item.", es: "Por favor proporciona una explicación para cada punto." },
+
+  "explain.lateCheckin": { en: "Late Check-In", es: "Registro Tardío" },
+  "explain.lateCheckinDesc": { en: "You checked in more than 15 minutes after the scheduled start time. Please explain.", es: "Te registraste más de 15 minutos después de la hora programada. Por favor explica." },
+  "explain.lateCheckinPlaceholder": { en: "e.g. Traffic delay, equipment issue…", es: "ej. Retraso por tráfico, problema con equipo…" },
+
+  "explain.earlyCheckout": { en: "Early Completion", es: "Finalización Anticipada" },
+  "explain.earlyCheckoutDesc": { en: "You completed the job in less than half the expected time. Please explain.", es: "Completaste el trabajo en menos de la mitad del tiempo esperado. Por favor explica." },
+  "explain.earlyCheckoutPlaceholder": { en: "e.g. Smaller scope than expected, efficient process…", es: "ej. Alcance menor al esperado, proceso eficiente…" },
+
+  "explain.overtimeCheckout": { en: "Overtime", es: "Horas Extra" },
+  "explain.overtimeCheckoutDesc": { en: "You worked 20% or more over the expected hours. Please explain.", es: "Trabajaste 20% o más sobre las horas esperadas. Por favor explica." },
+  "explain.overtimeCheckoutPlaceholder": { en: "e.g. Client requested additional work…", es: "ej. El cliente solicitó trabajo adicional…" },
+
+  "explain.geofenceCheckout": { en: "Off-Site Checkout", es: "Salida Fuera del Sitio" },
+  "explain.geofenceCheckoutDesc": { en: "You are checking out away from the job site. Please explain.", es: "Estás registrando salida fuera del sitio de trabajo. Por favor explica." },
+  "explain.geofenceCheckoutPlaceholder": { en: "e.g. Moved equipment to truck, client relocated…", es: "ej. Moví equipo al camión, el cliente se reubicó…" },
 
   // ─── Profile ───
   "profile.myInfo": { en: "My Info", es: "Mi Información" },
@@ -134,7 +155,6 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>("en");
   const [loading, setLoading] = useState(true);
 
-  // Load language preference from profile
   useEffect(() => {
     if (!user) { setLoading(false); return; }
     (async () => {
