@@ -29,7 +29,7 @@ import ServicesContent from "@/components/team/ServicesContent";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { Job } from "@/hooks/useJobs";
+
 
 function DeleteJobDialog({ job, onDelete }: { job: Job; onDelete: (id: string) => Promise<void> }) {
   const [open, setOpen] = useState(false);
