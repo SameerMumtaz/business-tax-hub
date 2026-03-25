@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -6,11 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Search, Camera, MapPin, ShieldCheck, ShieldAlert, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Search, Camera, MapPin, ShieldCheck, ShieldAlert, ChevronLeft, ChevronRight, CalendarDays, Languages, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isWithinGeofence } from "@/lib/geofence";
 import { getTodayDateOnlyKey } from "@/lib/dateOnly";
 import { startOfWeek, startOfMonth, endOfWeek, endOfMonth, format } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import type { CrewCheckin } from "@/hooks/useCrewCheckins";
 
 interface SiteInfo { id: string; name: string; latitude: number | null; longitude: number | null; geofence_radius: number | null; }
@@ -45,6 +48,98 @@ function getDateRange(range: DateRange, customFrom: string, customTo: string): {
 
 const PAGE_SIZE = 25;
 
+/* ── Translate button component ──────────────────── */
+function TranslateButton({ text, onTranslated }: { text: string; onTranslated: (translated: string) => void }) {
+  const [loading, setLoading] = useState(false);
+  const [translated, setTranslated] = useState<string | null>(null);
+
+  const handleTranslate = useCallback(async () => {
+    if (translated) {
+      setTranslated(null); // toggle back
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("translate", {
+        body: { text, targetLanguage: "English" },
+      });
+      if (error) throw error;
+      const result = data?.translated || text;
+      setTranslated(result);
+      onTranslated(result);
+    } catch (err: any) {
+      toast.error("Translation failed");
+      console.error("Translation error:", err);
+    }
+    setLoading(false);
+  }, [text, translated, onTranslated]);
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5 shrink-0"
+            onClick={handleTranslate}
+            disabled={loading}
+          >
+            {loading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Languages className={cn("h-3 w-3", translated ? "text-primary" : "text-muted-foreground")} />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          {translated ? "Show original" : "Translate to English"}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+/* ── Translatable text cell ──────────────────────── */
+function TranslatableText({ text }: { text: string }) {
+  const [displayText, setDisplayText] = useState(text);
+  const [isTranslated, setIsTranslated] = useState(false);
+
+  const handleTranslated = useCallback((translated: string) => {
+    if (isTranslated) {
+      setDisplayText(text);
+      setIsTranslated(false);
+    } else {
+      setDisplayText(translated);
+      setIsTranslated(true);
+    }
+  }, [text, isTranslated]);
+
+  // Simple heuristic: check if text might be in Spanish
+  const mightBeSpanish = /[áéíóúñ¿¡]/i.test(text) ||
+    /\b(el|la|los|las|de|del|en|con|por|para|que|como|más|muy|porque|cuando|también|trabajo|equipo|sitio|tiempo|retraso|tráfico|limpieza|cliente|adicional)\b/i.test(text);
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className={cn("text-xs", isTranslated && "italic text-primary")}>{displayText}</span>
+      {mightBeSpanish && (
+        <TranslateButton
+          text={text}
+          onTranslated={(translated) => {
+            if (isTranslated) {
+              setDisplayText(text);
+              setIsTranslated(false);
+            } else {
+              setDisplayText(translated);
+              setIsTranslated(true);
+            }
+          }}
+        />
+      )}
+    </span>
+  );
+}
+
 export default function AllCheckinsTable({ checkins, members, sites, jobs, photos }: Props) {
   const [search, setSearch] = useState("");
   const [filterMember, setFilterMember] = useState("all");
@@ -60,7 +155,6 @@ export default function AllCheckinsTable({ checkins, members, sites, jobs, photo
   const siteMap = useMemo(() => new Map(sites.map((s) => [s.id, s])), [sites]);
   const jobMap = useMemo(() => new Map(jobs.map((j) => [j.id, j])), [jobs]);
 
-  // Photo counts by job+date
   const photoCounts = useMemo(() => {
     const map = new Map<string, PhotoInfo[]>();
     for (const p of photos) {
@@ -167,47 +261,28 @@ export default function AllCheckinsTable({ checkins, members, sites, jobs, photo
           </div>
           {dateRange === "custom" && (
             <div className="flex items-center gap-2 pt-1">
-              <Input
-                type="date"
-                value={customFrom}
-                onChange={(e) => { setCustomFrom(e.target.value); setPage(0); }}
-                className="h-9 w-[150px]"
-              />
+              <Input type="date" value={customFrom} onChange={(e) => { setCustomFrom(e.target.value); setPage(0); }} className="h-9 w-[150px]" />
               <span className="text-xs text-muted-foreground">to</span>
-              <Input
-                type="date"
-                value={customTo}
-                onChange={(e) => { setCustomTo(e.target.value); setPage(0); }}
-                className="h-9 w-[150px]"
-              />
+              <Input type="date" value={customTo} onChange={(e) => { setCustomTo(e.target.value); setPage(0); }} className="h-9 w-[150px]" />
             </div>
           )}
           <div className="flex flex-wrap gap-2 pt-2">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search crew, site, or job…"
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-                className="pl-9 h-9"
-              />
+              <Input placeholder="Search crew, site, or job…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} className="pl-9 h-9" />
             </div>
             <Select value={filterMember} onValueChange={(v) => { setFilterMember(v); setPage(0); }}>
               <SelectTrigger className="w-[160px] h-9"><SelectValue placeholder="All crew" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All crew</SelectItem>
-                {uniqueMembers.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                ))}
+                {uniqueMembers.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={filterSite} onValueChange={(v) => { setFilterSite(v); setPage(0); }}>
               <SelectTrigger className="w-[160px] h-9"><SelectValue placeholder="All sites" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All sites</SelectItem>
-                {uniqueSites.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                ))}
+                {uniqueSites.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={filterStatus} onValueChange={(v) => { setFilterStatus(v); setPage(0); }}>
@@ -236,12 +311,13 @@ export default function AllCheckinsTable({ checkins, members, sites, jobs, photo
                   <TableHead className="text-center">Photos</TableHead>
                   <TableHead className="text-center">GPS</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Notes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {paged.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
                       No check-ins found
                     </TableCell>
                   </TableRow>
@@ -314,15 +390,9 @@ export default function AllCheckinsTable({ checkins, members, sites, jobs, photo
                         )}
                       </TableCell>
                       <TableCell className="text-center">
-                        {gps === "verified" && (
-                          <ShieldCheck className="h-4 w-4 text-emerald-500 mx-auto" />
-                        )}
-                        {gps === "outside" && (
-                          <ShieldAlert className="h-4 w-4 text-amber-500 mx-auto" />
-                        )}
-                        {gps === "unknown" && (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
+                        {gps === "verified" && <ShieldCheck className="h-4 w-4 text-emerald-500 mx-auto" />}
+                        {gps === "outside" && <ShieldAlert className="h-4 w-4 text-amber-500 mx-auto" />}
+                        {gps === "unknown" && <span className="text-xs text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell>
                         {c.flag_reason ? (
@@ -333,6 +403,18 @@ export default function AllCheckinsTable({ checkins, members, sites, jobs, photo
                           <Badge variant={c.status === "checked_in" ? "default" : "secondary"}>
                             {c.status === "checked_in" ? "On-Site" : "Completed"}
                           </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="max-w-[200px]">
+                        {(c.notes || c.flag_reason) ? (
+                          <div className="space-y-1">
+                            {c.notes && <TranslatableText text={c.notes} />}
+                            {c.flag_reason && !c.notes && (
+                              <TranslatableText text={c.flag_reason} />
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </TableCell>
                     </TableRow>
