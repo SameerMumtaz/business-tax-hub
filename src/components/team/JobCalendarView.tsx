@@ -257,6 +257,9 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
   const wasDragging = useRef(false);
   const [recurringDialogOpen, setRecurringDialogOpen] = useState(false);
   const [pendingRecurringMove, setPendingRecurringMove] = useState<{ job: Job; fromDate: string; toDate: string; newTime?: string | null } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Job | null>(null);
+  const [deleteConfirmed, setDeleteConfirmed] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Snapshot tracking for undo
   const jobSnapshotsRef = useRef<Map<string, { start_date: string; start_time: string | null; end_date: string | null }>>(new Map());
