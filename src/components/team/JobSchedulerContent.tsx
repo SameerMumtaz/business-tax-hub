@@ -927,23 +927,7 @@ export default function JobSchedulerContent() {
                           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEditJob(j)}>
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive">
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Delete Job?</AlertDialogTitle>
-                                <AlertDialogDescription>This will permanently delete "{j.title}" and all its assignments.</AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => deleteJob(j.id)}>Delete</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                          <DeleteJobDialog job={j} onDelete={deleteJob} />
                         </TableCell>
                       </TableRow>
                       );

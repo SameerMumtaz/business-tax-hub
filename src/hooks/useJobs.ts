@@ -187,7 +187,72 @@ export function useJobs() {
   };
 
   const deleteJob = async (id: string) => {
+    if (!user) return;
+
+    // 1. Get all timesheet entries linked to this job and reverse pay impacts
+    const { data: tsEntries } = await supabase
+      .from("timesheet_entries")
+      .select("id, worker_name, worker_type, total_pay, timesheet_id")
+      .eq("job_id", id);
+
+    if (tsEntries && tsEntries.length > 0) {
+      // Collect pay to reverse per worker
+      const payToReverse = new Map<string, number>();
+      for (const entry of tsEntries) {
+        const key = `${entry.worker_name}::${entry.worker_type}`;
+        payToReverse.set(key, (payToReverse.get(key) || 0) + entry.total_pay);
+      }
+
+      // Reverse contractor totals
+      for (const [key, amount] of payToReverse) {
+        const [name, type] = key.split("::");
+        if (type === "contractor" || type === "1099") {
+          const { data: contractor } = await supabase
+            .from("contractors")
+            .select("id, total_paid")
+            .eq("user_id", user.id)
+            .eq("name", name)
+            .maybeSingle();
+          if (contractor) {
+            await supabase.from("contractors").update({
+              total_paid: Math.max(0, (contractor.total_paid || 0) - amount),
+            }).eq("id", contractor.id);
+          }
+        } else {
+          const { data: employee } = await supabase
+            .from("employees")
+            .select("id, salary")
+            .eq("user_id", user.id)
+            .eq("name", name)
+            .maybeSingle();
+          if (employee) {
+            await supabase.from("employees").update({
+              salary: Math.max(0, (employee.salary || 0) - amount),
+            }).eq("id", employee.id);
+          }
+        }
+      }
+
+      // Delete timesheet entries for this job
+      await supabase.from("timesheet_entries").delete().in("id", tsEntries.map(e => e.id));
+    }
+
+    // 2. Delete crew checkins for this job
+    await supabase.from("crew_checkins").delete().eq("job_id", id);
+
+    // 3. Delete job photos
+    await supabase.from("job_photos").delete().eq("job_id", id);
+
+    // 4. Delete job expenses links
+    await supabase.from("job_expenses").delete().eq("job_id", id);
+
+    // 5. Unlink invoices referencing this job
+    await supabase.from("invoices").update({ job_id: null }).eq("job_id", id);
+
+    // 6. Delete assignments
     await supabase.from("job_assignments").delete().eq("job_id", id);
+
+    // 7. Delete the job itself
     const { error } = await supabase.from("jobs").delete().eq("id", id);
     if (error) {
       toast.error(error.message);
