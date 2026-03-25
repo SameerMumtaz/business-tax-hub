@@ -3,7 +3,7 @@ import { type Job, type JobSite, type JobAssignment, type CrewCheckinOccurrence 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ChevronLeft, ChevronRight, Clock, MapPin, AlertTriangle, Sparkles, GripVertical, Lock, Unlock, Copy, RefreshCw, Undo2, Save } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, MapPin, AlertTriangle, Sparkles, GripVertical, Lock, Unlock, Copy, RefreshCw, Undo2, Save, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
@@ -98,6 +98,7 @@ interface Props {
   teamMembers?: { id: string; name: string; pay_rate: number | null; worker_type: string }[];
   onJobClick?: (job: Job) => void;
   onJobMove?: (event: JobMoveEvent) => void;
+  onJobDelete?: (jobId: string) => Promise<void>;
   onDiscardEdits?: (revertData: { jobId: string; updates: Record<string, any> }[]) => void;
 }
 
@@ -241,7 +242,7 @@ function buildJobsByDate(jobs: Job[], checkins: CrewCheckinOccurrence[], rangeSt
   return map;
 }
 
-export default function JobCalendarView({ jobs, sites, assignments = [], checkins = [], teamMembers = [], onJobClick, onJobMove, onDiscardEdits }: Props) {
+export default function JobCalendarView({ jobs, sites, assignments = [], checkins = [], teamMembers = [], onJobClick, onJobMove, onJobDelete, onDiscardEdits }: Props) {
   const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
