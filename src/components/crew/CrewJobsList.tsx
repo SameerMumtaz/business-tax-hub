@@ -7,6 +7,7 @@ import { Camera, Navigation, Clock, LogIn, AlertTriangle, DollarSign, CalendarOf
 import { useLanguage } from "@/contexts/LanguageContext";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 import { formatDateOnly, getNextInstanceDate, isRecurringJobToday, getTodayDateOnlyKey, compareDateOnly, addDaysToDateOnly, parseDateOnlyLocal } from "@/lib/dateOnly";
+import type { CrewCheckin } from "@/hooks/useCrewCheckins";
 
 export interface AssignedJob {
   id: string;
@@ -36,6 +37,7 @@ interface Props {
   activeCheckin: any;
   gpsLoading: string | null;
   onCheckIn: (job: AssignedJob) => void;
+  checkins?: CrewCheckin[];
 }
 
 function getDirectionsUrl(lat: number | null, lng: number | null, address: string | null) {
@@ -81,13 +83,25 @@ function StartsInCountdown({ startTime }: { startTime: string }) {
   );
 }
 
-function JobCard({ job, activeCheckin, gpsLoading, onCheckIn, onPhotos, variant }: {
+/** Check if a one-time job was already completed today via checkins */
+function isJobCompletedToday(job: AssignedJob, checkins: CrewCheckin[]): boolean {
+  const today = getTodayDateOnlyKey();
+  return checkins.some(
+    (c) =>
+      c.job_id === job.id &&
+      c.status === "checked_out" &&
+      (c.occurrence_date === today || (!c.occurrence_date && c.check_in_time?.startsWith(today)))
+  );
+}
+
+function JobCard({ job, activeCheckin, gpsLoading, onCheckIn, onPhotos, variant, completedToday }: {
   job: AssignedJob;
   activeCheckin: any;
   gpsLoading: string | null;
   onCheckIn: (job: AssignedJob) => void;
   onPhotos: (id: string) => void;
   variant: "today" | "week" | "upcoming";
+  completedToday: boolean;
 }) {
   const { t } = useLanguage();
   const directionsUrl = getDirectionsUrl(job.site.latitude, job.site.longitude, job.site.address);
@@ -108,11 +122,15 @@ function JobCard({ job, activeCheckin, gpsLoading, onCheckIn, onPhotos, variant 
     return dayNames[d.getDay()] || "";
   };
 
-  const borderColor = variant === "today"
-    ? "border-l-4 border-l-primary"
-    : variant === "week"
-      ? "border-l-4 border-l-chart-info"
-      : "border-l-4 border-l-muted-foreground/30";
+  const isCompleted = completedToday || (job.status === "completed" && job.job_type !== "recurring");
+
+  const borderColor = isCompleted
+    ? "border-l-4 border-l-primary/50"
+    : variant === "today"
+      ? "border-l-4 border-l-primary"
+      : variant === "week"
+        ? "border-l-4 border-l-chart-info"
+        : "border-l-4 border-l-muted-foreground/30";
 
   return (
     <Card className={`${borderColor} overflow-hidden`}>
@@ -126,10 +144,10 @@ function JobCard({ job, activeCheckin, gpsLoading, onCheckIn, onPhotos, variant 
             </div>
           </div>
           <Badge
-            variant={job.status === "completed" ? "default" : "secondary"}
-            className={`text-[10px] shrink-0 ${job.status === "completed" ? "bg-primary text-primary-foreground" : ""}`}
+            variant={isCompleted ? "default" : "secondary"}
+            className={`text-[10px] shrink-0 ${isCompleted ? "bg-primary text-primary-foreground" : ""}`}
           >
-            {job.status}
+            {isCompleted ? t("jobs.completed") : job.status}
           </Badge>
         </div>
 
@@ -142,7 +160,7 @@ function JobCard({ job, activeCheckin, gpsLoading, onCheckIn, onPhotos, variant 
           )}
           {job.expectedHours != null && <span>{job.expectedHours}h</span>}
           {job.expectedPay != null && <span>${job.expectedPay.toFixed(0)}</span>}
-          {variant === "today" && job.start_time && job.status !== "completed" && !activeCheckin && (
+          {variant === "today" && job.start_time && !isCompleted && !activeCheckin && (
             <StartsInCountdown startTime={job.start_time} />
           )}
         </div>
@@ -155,7 +173,7 @@ function JobCard({ job, activeCheckin, gpsLoading, onCheckIn, onPhotos, variant 
         )}
 
         <div className="flex gap-2">
-          {job.status === "completed" && job.job_type !== "recurring" ? (
+          {isCompleted ? (
             <div className="flex-1 flex items-center gap-1.5 text-xs text-primary bg-accent px-3 py-2 rounded-md">
               <CheckCircle className="h-3.5 w-3.5" />
               {t("jobs.completed")}
@@ -191,11 +209,11 @@ function JobCard({ job, activeCheckin, gpsLoading, onCheckIn, onPhotos, variant 
   );
 }
 
-export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckIn }: Props) {
+export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckIn, checkins = [] }: Props) {
   const { t } = useLanguage();
   const [photosJobId, setPhotosJobId] = useState<string | null>(null);
 
-  const { todayJobs, thisWeekJobs, upcomingJobs } = useMemo(() => {
+  const { todayJobs, thisWeekJobs, upcomingJobs, completedTodaySet } = useMemo(() => {
     const today = getTodayDateOnlyKey();
     const dayOfWeek = parseDateOnlyLocal(today).getDay();
     const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
@@ -204,6 +222,17 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
     const todayArr: AssignedJob[] = [];
     const weekArr: AssignedJob[] = [];
     const upcomingArr: AssignedJob[] = [];
+
+    // Build set of job IDs completed today (via checkins)
+    const completed = new Set<string>();
+    for (const c of checkins) {
+      if (c.status === "checked_out" && c.job_id) {
+        const checkinDate = c.occurrence_date || c.check_in_time?.slice(0, 10);
+        if (checkinDate === today) {
+          completed.add(c.job_id);
+        }
+      }
+    }
 
     for (const job of jobs) {
       const instanceDate = getNextInstanceDate(job);
@@ -224,8 +253,17 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
     weekArr.sort(sortFn);
     upcomingArr.sort(sortFn);
 
-    return { todayJobs: todayArr, thisWeekJobs: weekArr, upcomingJobs: upcomingArr.slice(0, 3) };
-  }, [jobs]);
+    // Sort today: incomplete first, completed last
+    todayArr.sort((a, b) => {
+      const aComplete = completed.has(a.id) || (a.status === "completed" && a.job_type !== "recurring");
+      const bComplete = completed.has(b.id) || (b.status === "completed" && b.job_type !== "recurring");
+      if (aComplete && !bComplete) return 1;
+      if (!aComplete && bComplete) return -1;
+      return 0;
+    });
+
+    return { todayJobs: todayArr, thisWeekJobs: weekArr, upcomingJobs: upcomingArr.slice(0, 3), completedTodaySet: completed };
+  }, [jobs, checkins]);
 
   if (jobs.length === 0) {
     return (
@@ -249,7 +287,16 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
             {t("jobs.today")} — {todayJobs.length} {todayJobs.length !== 1 ? t("jobs.jobPlural") : t("jobs.job")}
           </h2>
           {todayJobs.map((job) => (
-            <JobCard key={job.id} job={job} activeCheckin={activeCheckin} gpsLoading={gpsLoading} onCheckIn={onCheckIn} onPhotos={setPhotosJobId} variant="today" />
+            <JobCard
+              key={job.id}
+              job={job}
+              activeCheckin={activeCheckin}
+              gpsLoading={gpsLoading}
+              onCheckIn={onCheckIn}
+              onPhotos={setPhotosJobId}
+              variant="today"
+              completedToday={completedTodaySet.has(job.id)}
+            />
           ))}
         </section>
       )}
@@ -258,7 +305,7 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
         <section className="space-y-2">
           <h2 className="text-sm font-medium text-muted-foreground">{t("jobs.thisWeek")}</h2>
           {thisWeekJobs.map((job) => (
-            <JobCard key={job.id} job={job} activeCheckin={activeCheckin} gpsLoading={gpsLoading} onCheckIn={onCheckIn} onPhotos={setPhotosJobId} variant="week" />
+            <JobCard key={job.id} job={job} activeCheckin={activeCheckin} gpsLoading={gpsLoading} onCheckIn={onCheckIn} onPhotos={setPhotosJobId} variant="week" completedToday={false} />
           ))}
         </section>
       )}
@@ -267,7 +314,7 @@ export default function CrewJobsList({ jobs, activeCheckin, gpsLoading, onCheckI
         <section className="space-y-2">
           <h2 className="text-sm font-medium text-muted-foreground">{t("jobs.upcoming")}</h2>
           {upcomingJobs.map((job) => (
-            <JobCard key={job.id} job={job} activeCheckin={activeCheckin} gpsLoading={gpsLoading} onCheckIn={onCheckIn} onPhotos={setPhotosJobId} variant="upcoming" />
+            <JobCard key={job.id} job={job} activeCheckin={activeCheckin} gpsLoading={gpsLoading} onCheckIn={onCheckIn} onPhotos={setPhotosJobId} variant="upcoming" completedToday={false} />
           ))}
           <p className="text-xs text-muted-foreground text-center pt-1">
             <CalendarDays className="h-3 w-3 inline mr-1" />
