@@ -32,7 +32,7 @@ export default function ClientsPage() {
   const { data: invoices = [] } = useInvoices();
   const { data: sales = [] } = useSales();
   const { data: expenses = [] } = useExpenses();
-  const { jobs } = useJobs();
+  const { jobs, sites: allSites } = useJobs();
   const addClient = useAddClient();
   const updateClient = useUpdateClient();
   const deleteClient = useDeleteClient();
@@ -266,6 +266,29 @@ export default function ClientsPage() {
                       ) : (
                         <div className="p-8 text-center text-muted-foreground">No invoices for this client yet.</div>
                       )}
+                    </div>
+                    <div className="rounded-lg border bg-card overflow-hidden">
+                      <div className="p-4 border-b"><h3 className="font-medium">Sites</h3></div>
+                      {(() => {
+                        const clientSites = allSites.filter(s => s.client_id === selectedClient.id);
+                        return clientSites.length > 0 ? (
+                          <div className="divide-y">
+                            {clientSites.map(s => (
+                              <div key={s.id} className="px-4 py-3 flex items-center gap-3">
+                                <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+                                <div className="min-w-0">
+                                  <p className="font-medium text-sm">{s.name}</p>
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    {[s.address, s.city, s.state].filter(Boolean).join(", ") || "No address"}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="p-8 text-center text-muted-foreground">No sites linked to this client.</div>
+                        );
+                      })()}
                     </div>
                     <div className="rounded-lg border bg-card p-4">
                       <ClientContactsPanel clientId={selectedClient.id} />
