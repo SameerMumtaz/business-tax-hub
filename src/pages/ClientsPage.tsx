@@ -246,6 +246,12 @@ export default function ClientsPage() {
                         </div>
                       </div>
                     </div>
+                    <div className="rounded-lg border bg-card p-4">
+                      <ClientContactsPanel clientId={selectedClient.id} />
+                    </div>
+                    <div className="rounded-lg border bg-card p-4">
+                      <ClientJobsPanel client={selectedClient} />
+                    </div>
                     <div className="rounded-lg border bg-card overflow-hidden">
                       <div className="p-4 border-b"><h3 className="font-medium">Invoices</h3></div>
                       {clientInvoices.length > 0 ? (
@@ -289,12 +295,6 @@ export default function ClientsPage() {
                           <div className="p-8 text-center text-muted-foreground">No sites linked to this client.</div>
                         );
                       })()}
-                    </div>
-                    <div className="rounded-lg border bg-card p-4">
-                      <ClientContactsPanel clientId={selectedClient.id} />
-                    </div>
-                    <div className="rounded-lg border bg-card p-4">
-                      <ClientJobsPanel client={selectedClient} />
                     </div>
                   </div>
                 ) : (
