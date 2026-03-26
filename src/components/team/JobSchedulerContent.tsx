@@ -19,7 +19,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, MapPin, Briefcase, Loader2, Pencil, Trash2, Camera, Calendar, UserCheck, Clock, Wrench, AlertTriangle } from "lucide-react";
+import { Plus, MapPin, Briefcase, Loader2, Pencil, Trash2, Camera, Calendar, UserCheck, Clock, Wrench, AlertTriangle, Search } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
