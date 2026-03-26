@@ -19,7 +19,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Plus, MapPin, Briefcase, Loader2, Pencil, Trash2, Camera, Calendar, UserCheck, Clock, Wrench, AlertTriangle } from "lucide-react";
+import { Plus, MapPin, Briefcase, Loader2, Pencil, Trash2, Camera, Calendar, UserCheck, Clock, Wrench, AlertTriangle, Search } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -132,7 +133,13 @@ export default function JobSchedulerContent() {
   const [editSiteLng, setEditSiteLng] = useState("");
   const [editSiteClientId, setEditSiteClientId] = useState("");
 
-  // Inline new site state (used inside job dialogs)
+  // Site filter state
+  const [siteSearch, setSiteSearch] = useState("");
+  const [siteFilterClient, setSiteFilterClient] = useState("all");
+  const [siteFilterCity, setSiteFilterCity] = useState("all");
+  const [siteFilterState, setSiteFilterState] = useState("all");
+  const [siteFilterHasJobs, setSiteFilterHasJobs] = useState(false);
+
   const [inlineNewSite, setInlineNewSite] = useState(false);
   const [inlineSiteName, setInlineSiteName] = useState("");
   const [inlineSiteAddress, setInlineSiteAddress] = useState("");
@@ -205,6 +212,26 @@ export default function JobSchedulerContent() {
     },
     enabled: !!user,
   });
+
+  // Derived: unique cities and states for site filters
+  const siteCities = useMemo(() => [...new Set(sites.map(s => s.city).filter(Boolean) as string[])].sort(), [sites]);
+  const siteStates = useMemo(() => [...new Set(sites.map(s => s.state).filter(Boolean) as string[])].sort(), [sites]);
+  const siteIdsWithJobs = useMemo(() => new Set(jobs.map(j => j.site_id)), [jobs]);
+
+  const filteredSites = useMemo(() => {
+    return sites.filter(s => {
+      if (siteSearch) {
+        const q = siteSearch.toLowerCase();
+        const match = [s.name, s.address, s.city, s.state, s.zip].some(f => f?.toLowerCase().includes(q));
+        if (!match) return false;
+      }
+      if (siteFilterClient !== "all" && s.client_id !== siteFilterClient) return false;
+      if (siteFilterCity !== "all" && s.city !== siteFilterCity) return false;
+      if (siteFilterState !== "all" && s.state !== siteFilterState) return false;
+      if (siteFilterHasJobs && !siteIdsWithJobs.has(s.id)) return false;
+      return true;
+    });
+  }, [sites, siteSearch, siteFilterClient, siteFilterCity, siteFilterState, siteFilterHasJobs, siteIdsWithJobs]);
 
   // Helper: get labor summary for a job
   const getLaborSummary = useCallback((job: Job) => {
@@ -1017,11 +1044,63 @@ export default function JobSchedulerContent() {
         </TabsContent>
         <TabsContent value="sites" className="mt-4">
           <Card>
-            <CardContent className="pt-6">
-              {sites.length === 0 ? (
+            <CardContent className="pt-6 space-y-4">
+              {/* Filter bar */}
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative flex-1 min-w-[180px] max-w-xs">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search sites…"
+                    value={siteSearch}
+                    onChange={e => setSiteSearch(e.target.value)}
+                    className="pl-9 h-9"
+                  />
+                </div>
+                <Select value={siteFilterClient} onValueChange={setSiteFilterClient}>
+                  <SelectTrigger className="w-[150px] h-9">
+                    <SelectValue placeholder="Client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Clients</SelectItem>
+                    {clients.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={siteFilterCity} onValueChange={setSiteFilterCity}>
+                  <SelectTrigger className="w-[130px] h-9">
+                    <SelectValue placeholder="City" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Cities</SelectItem>
+                    {siteCities.map(c => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={siteFilterState} onValueChange={setSiteFilterState}>
+                  <SelectTrigger className="w-[120px] h-9">
+                    <SelectValue placeholder="State" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All States</SelectItem>
+                    {siteStates.map(s => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-2">
+                  <Switch id="has-jobs" checked={siteFilterHasJobs} onCheckedChange={setSiteFilterHasJobs} />
+                  <Label htmlFor="has-jobs" className="text-sm cursor-pointer whitespace-nowrap">Has jobs</Label>
+                </div>
+              </div>
+
+              {filteredSites.length === 0 ? (
                 <div className="text-center py-12 space-y-2">
                   <MapPin className="h-12 w-12 mx-auto text-muted-foreground/50" />
-                  <p className="text-muted-foreground">No sites added yet</p>
+                  <p className="text-muted-foreground">
+                    {sites.length === 0 ? "No sites added yet" : "No sites match your filters"}
+                  </p>
                 </div>
               ) : (
                 <Table>
@@ -1036,7 +1115,7 @@ export default function JobSchedulerContent() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sites.map((s) => {
+                    {filteredSites.map((s) => {
                       const linkedClient = clients.find(c => c.id === s.client_id);
                       return (
                       <TableRow key={s.id}>
