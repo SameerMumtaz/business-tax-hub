@@ -214,7 +214,10 @@ export default function JobSchedulerContent() {
   });
 
   // Derived: unique cities and states for site filters
-  const siteCities = useMemo(() => [...new Set(sites.map(s => s.city).filter(Boolean) as string[])].sort(), [sites]);
+  const siteCities = useMemo(() => {
+    const filtered = siteFilterState !== "all" ? sites.filter(s => s.state === siteFilterState) : sites;
+    return [...new Set(filtered.map(s => s.city).filter(Boolean) as string[])].sort();
+  }, [sites, siteFilterState]);
   const siteStates = useMemo(() => [...new Set(sites.map(s => s.state).filter(Boolean) as string[])].sort(), [sites]);
   const siteIdsWithJobs = useMemo(() => new Set(jobs.map(j => j.site_id)), [jobs]);
 
