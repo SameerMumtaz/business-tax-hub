@@ -279,17 +279,21 @@ export default function ClientsPage() {
                         const clientSites = allSites.filter(s => s.client_id === selectedClient.id);
                         return clientSites.length > 0 ? (
                           <div className="divide-y">
-                            {clientSites.map(s => (
-                              <div key={s.id} className="px-4 py-3 flex items-center gap-3">
-                                <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
-                                <div className="min-w-0">
-                                  <p className="font-medium text-sm">{s.name}</p>
-                                  <p className="text-xs text-muted-foreground truncate">
-                                    {[s.address, s.city, s.state].filter(Boolean).join(", ") || "No address"}
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
+                            {clientSites.map(s => {
+                              const addr = [s.address, s.city, s.state].filter(Boolean).join(", ");
+                              const mapsUrl = addr ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}` : null;
+                              return (
+                                <a key={s.id} href={mapsUrl || "#"} target={mapsUrl ? "_blank" : undefined} rel="noopener noreferrer" className={`px-4 py-3 flex items-center gap-3 ${mapsUrl ? "hover:bg-muted/50 cursor-pointer transition-colors" : ""}`}>
+                                  <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-sm">{s.name}</p>
+                                    <p className="text-xs text-muted-foreground truncate">
+                                      {addr || "No address"}
+                                    </p>
+                                  </div>
+                                </a>
+                              );
+                            })}
                           </div>
                         ) : (
                           <div className="p-8 text-center text-muted-foreground">No sites linked to this client.</div>
