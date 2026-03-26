@@ -32,7 +32,7 @@ export default function ClientsPage() {
   const { data: invoices = [] } = useInvoices();
   const { data: sales = [] } = useSales();
   const { data: expenses = [] } = useExpenses();
-  const { jobs, sites: allSites } = useJobs();
+  const { jobs, sites: allSites, createSite } = useJobs();
   const addClient = useAddClient();
   const updateClient = useUpdateClient();
   const deleteClient = useDeleteClient();
@@ -41,8 +41,30 @@ export default function ClientsPage() {
   const [editClient, setEditClient] = useState<Client | null>(null);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [form, setForm] = useState({ name: "", email: "", phone: "", address: "", notes: "" });
+  const [addSiteOpen, setAddSiteOpen] = useState(false);
+  const [siteForm, setSiteForm] = useState({ name: "", address: "", city: "", state: "", zip: "", notes: "" });
 
   const resetForm = () => setForm({ name: "", email: "", phone: "", address: "", notes: "" });
+  const resetSiteForm = () => setSiteForm({ name: "", address: "", city: "", state: "", zip: "", notes: "" });
+
+  const handleCreateSite = () => {
+    if (!siteForm.name) { toast.error("Site name is required"); return; }
+    if (!selectedClient) return;
+    createSite({
+      name: siteForm.name,
+      address: siteForm.address || null,
+      city: siteForm.city || null,
+      state: siteForm.state || null,
+      zip: siteForm.zip || null,
+      notes: siteForm.notes || null,
+      client_id: selectedClient.id,
+      latitude: null,
+      longitude: null,
+      geofence_radius: null,
+    });
+    resetSiteForm();
+    setAddSiteOpen(false);
+  };
 
   const handleCreate = () => {
     if (!form.name) { toast.error("Client name is required"); return; }
@@ -274,7 +296,28 @@ export default function ClientsPage() {
                       )}
                     </div>
                     <div className="rounded-lg border bg-card overflow-hidden">
-                      <div className="p-4 border-b"><h3 className="font-medium">Sites</h3></div>
+                      <div className="p-4 border-b flex items-center justify-between">
+                        <h3 className="font-medium">Sites</h3>
+                        <Dialog open={addSiteOpen} onOpenChange={(o) => { setAddSiteOpen(o); if (!o) resetSiteForm(); }}>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" size="sm"><Plus className="h-3.5 w-3.5 mr-1" />Add Site</Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader><DialogTitle>Add Site for {selectedClient.name}</DialogTitle></DialogHeader>
+                            <div className="space-y-3">
+                              <Input placeholder="Site Name *" value={siteForm.name} onChange={e => setSiteForm({ ...siteForm, name: e.target.value })} />
+                              <Input placeholder="Address" value={siteForm.address} onChange={e => setSiteForm({ ...siteForm, address: e.target.value })} />
+                              <div className="grid grid-cols-3 gap-2">
+                                <Input placeholder="City" value={siteForm.city} onChange={e => setSiteForm({ ...siteForm, city: e.target.value })} />
+                                <Input placeholder="State" value={siteForm.state} onChange={e => setSiteForm({ ...siteForm, state: e.target.value })} />
+                                <Input placeholder="ZIP" value={siteForm.zip} onChange={e => setSiteForm({ ...siteForm, zip: e.target.value })} />
+                              </div>
+                              <Textarea placeholder="Notes" value={siteForm.notes} onChange={e => setSiteForm({ ...siteForm, notes: e.target.value })} />
+                            </div>
+                            <Button onClick={handleCreateSite} className="w-full">Save Site</Button>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
                       {(() => {
                         const clientSites = allSites.filter(s => s.client_id === selectedClient.id);
                         return clientSites.length > 0 ? (
