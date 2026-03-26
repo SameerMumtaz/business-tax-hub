@@ -527,16 +527,20 @@ export default function JobSchedulerContent() {
               )}
               <Input placeholder="Job title" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
               <Input placeholder="Description (optional)" value={jobDesc} onChange={(e) => setJobDesc(e.target.value)} />
+              <Select value={jobClientId} onValueChange={(v) => { setJobClientId(v); setJobSiteId(""); }}>
+                <SelectTrigger><UserCheck className="h-3.5 w-3.5 mr-2" /><SelectValue placeholder="Select client (optional)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No client</SelectItem>
+                  {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
               {!inlineNewSite ? (
                 <SiteCombobox
                   sites={sites}
                   value={jobSiteId}
-                  onSelect={(v) => {
-                    setJobSiteId(v);
-                    const site = sites.find(s => s.id === v);
-                    if (site?.client_id && !jobClientId) setJobClientId(site.client_id);
-                  }}
+                  onSelect={(v) => setJobSiteId(v)}
                   onAddNew={() => setInlineNewSite(true)}
+                  clientId={jobClientId && jobClientId !== "none" ? jobClientId : undefined}
                 />
               ) : (
                 <div className="space-y-2 rounded-md border p-3">
@@ -562,13 +566,6 @@ export default function JobSchedulerContent() {
                   <SelectItem value="one_time">One-time</SelectItem>
                   <SelectItem value="recurring">Recurring</SelectItem>
                   <SelectItem value="multi_day">Multi-day</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={jobClientId} onValueChange={setJobClientId}>
-                <SelectTrigger><UserCheck className="h-3.5 w-3.5 mr-2" /><SelectValue placeholder="Link to client (optional)" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No client</SelectItem>
-                  {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
               <div className="grid grid-cols-2 gap-2">
