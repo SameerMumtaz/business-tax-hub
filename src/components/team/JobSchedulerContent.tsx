@@ -213,6 +213,26 @@ export default function JobSchedulerContent() {
     enabled: !!user,
   });
 
+  // Derived: unique cities and states for site filters
+  const siteCities = useMemo(() => [...new Set(sites.map(s => s.city).filter(Boolean) as string[])].sort(), [sites]);
+  const siteStates = useMemo(() => [...new Set(sites.map(s => s.state).filter(Boolean) as string[])].sort(), [sites]);
+  const siteIdsWithJobs = useMemo(() => new Set(jobs.map(j => j.site_id)), [jobs]);
+
+  const filteredSites = useMemo(() => {
+    return sites.filter(s => {
+      if (siteSearch) {
+        const q = siteSearch.toLowerCase();
+        const match = [s.name, s.address, s.city, s.state, s.zip].some(f => f?.toLowerCase().includes(q));
+        if (!match) return false;
+      }
+      if (siteFilterClient !== "all" && s.client_id !== siteFilterClient) return false;
+      if (siteFilterCity !== "all" && s.city !== siteFilterCity) return false;
+      if (siteFilterState !== "all" && s.state !== siteFilterState) return false;
+      if (siteFilterHasJobs && !siteIdsWithJobs.has(s.id)) return false;
+      return true;
+    });
+  }, [sites, siteSearch, siteFilterClient, siteFilterCity, siteFilterState, siteFilterHasJobs, siteIdsWithJobs]);
+
   // Helper: get labor summary for a job
   const getLaborSummary = useCallback((job: Job) => {
     const jobAssigns = assignments.filter((a) => a.job_id === job.id);
