@@ -47,9 +47,27 @@ export default function ClientsPage() {
   const resetForm = () => setForm({ name: "", email: "", phone: "", address: "", notes: "" });
   const resetSiteForm = () => setSiteForm({ name: "", address: "", city: "", state: "", zip: "", notes: "" });
 
-  const handleCreateSite = () => {
+  const handleCreateSite = async () => {
     if (!siteForm.name) { toast.error("Site name is required"); return; }
     if (!selectedClient) return;
+
+    let latitude: number | null = null;
+    let longitude: number | null = null;
+
+    const addressParts = [siteForm.address, siteForm.city, siteForm.state, siteForm.zip].filter(Boolean).join(", ");
+    if (addressParts) {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressParts)}&limit=1`);
+        const data = await res.json();
+        if (data?.[0]) {
+          latitude = parseFloat(data[0].lat);
+          longitude = parseFloat(data[0].lon);
+        }
+      } catch {
+        // silently continue without coordinates
+      }
+    }
+
     createSite({
       name: siteForm.name,
       address: siteForm.address || null,
@@ -58,8 +76,8 @@ export default function ClientsPage() {
       zip: siteForm.zip || null,
       notes: siteForm.notes || null,
       client_id: selectedClient.id,
-      latitude: null,
-      longitude: null,
+      latitude,
+      longitude,
       geofence_radius: null,
     });
     resetSiteForm();
