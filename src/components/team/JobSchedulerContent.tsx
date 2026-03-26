@@ -133,7 +133,13 @@ export default function JobSchedulerContent() {
   const [editSiteLng, setEditSiteLng] = useState("");
   const [editSiteClientId, setEditSiteClientId] = useState("");
 
-  // Inline new site state (used inside job dialogs)
+  // Site filter state
+  const [siteSearch, setSiteSearch] = useState("");
+  const [siteFilterClient, setSiteFilterClient] = useState("all");
+  const [siteFilterCity, setSiteFilterCity] = useState("all");
+  const [siteFilterState, setSiteFilterState] = useState("all");
+  const [siteFilterHasJobs, setSiteFilterHasJobs] = useState(false);
+
   const [inlineNewSite, setInlineNewSite] = useState(false);
   const [inlineSiteName, setInlineSiteName] = useState("");
   const [inlineSiteAddress, setInlineSiteAddress] = useState("");
