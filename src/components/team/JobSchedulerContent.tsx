@@ -214,7 +214,10 @@ export default function JobSchedulerContent() {
   });
 
   // Derived: unique cities and states for site filters
-  const siteCities = useMemo(() => [...new Set(sites.map(s => s.city).filter(Boolean) as string[])].sort(), [sites]);
+  const siteCities = useMemo(() => {
+    const filtered = siteFilterState !== "all" ? sites.filter(s => s.state === siteFilterState) : sites;
+    return [...new Set(filtered.map(s => s.city).filter(Boolean) as string[])].sort();
+  }, [sites, siteFilterState]);
   const siteStates = useMemo(() => [...new Set(sites.map(s => s.state).filter(Boolean) as string[])].sort(), [sites]);
   const siteIdsWithJobs = useMemo(() => new Set(jobs.map(j => j.site_id)), [jobs]);
 
@@ -1067,18 +1070,7 @@ export default function JobSchedulerContent() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Select value={siteFilterCity} onValueChange={setSiteFilterCity}>
-                  <SelectTrigger className="w-[130px] h-9">
-                    <SelectValue placeholder="City" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Cities</SelectItem>
-                    {siteCities.map(c => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={siteFilterState} onValueChange={setSiteFilterState}>
+                <Select value={siteFilterState} onValueChange={(v) => { setSiteFilterState(v); setSiteFilterCity("all"); }}>
                   <SelectTrigger className="w-[120px] h-9">
                     <SelectValue placeholder="State" />
                   </SelectTrigger>
@@ -1089,6 +1081,19 @@ export default function JobSchedulerContent() {
                     ))}
                   </SelectContent>
                 </Select>
+                {siteFilterState !== "all" && (
+                  <Select value={siteFilterCity} onValueChange={setSiteFilterCity}>
+                    <SelectTrigger className="w-[130px] h-9">
+                      <SelectValue placeholder="City" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Cities</SelectItem>
+                      {siteCities.map(c => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 <div className="flex items-center gap-2">
                   <Switch id="has-jobs" checked={siteFilterHasJobs} onCheckedChange={setSiteFilterHasJobs} />
                   <Label htmlFor="has-jobs" className="text-sm cursor-pointer whitespace-nowrap">Has jobs</Label>
