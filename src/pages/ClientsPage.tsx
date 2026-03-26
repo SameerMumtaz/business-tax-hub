@@ -32,7 +32,7 @@ export default function ClientsPage() {
   const { data: invoices = [] } = useInvoices();
   const { data: sales = [] } = useSales();
   const { data: expenses = [] } = useExpenses();
-  const { jobs } = useJobs();
+  const { jobs, sites: allSites } = useJobs();
   const addClient = useAddClient();
   const updateClient = useUpdateClient();
   const deleteClient = useDeleteClient();
