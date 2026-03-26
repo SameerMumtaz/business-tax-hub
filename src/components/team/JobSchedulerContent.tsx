@@ -1044,11 +1044,63 @@ export default function JobSchedulerContent() {
         </TabsContent>
         <TabsContent value="sites" className="mt-4">
           <Card>
-            <CardContent className="pt-6">
-              {sites.length === 0 ? (
+            <CardContent className="pt-6 space-y-4">
+              {/* Filter bar */}
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative flex-1 min-w-[180px] max-w-xs">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search sites…"
+                    value={siteSearch}
+                    onChange={e => setSiteSearch(e.target.value)}
+                    className="pl-9 h-9"
+                  />
+                </div>
+                <Select value={siteFilterClient} onValueChange={setSiteFilterClient}>
+                  <SelectTrigger className="w-[150px] h-9">
+                    <SelectValue placeholder="Client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Clients</SelectItem>
+                    {clients.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={siteFilterCity} onValueChange={setSiteFilterCity}>
+                  <SelectTrigger className="w-[130px] h-9">
+                    <SelectValue placeholder="City" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Cities</SelectItem>
+                    {siteCities.map(c => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={siteFilterState} onValueChange={setSiteFilterState}>
+                  <SelectTrigger className="w-[120px] h-9">
+                    <SelectValue placeholder="State" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All States</SelectItem>
+                    {siteStates.map(s => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-2">
+                  <Switch id="has-jobs" checked={siteFilterHasJobs} onCheckedChange={setSiteFilterHasJobs} />
+                  <Label htmlFor="has-jobs" className="text-sm cursor-pointer whitespace-nowrap">Has jobs</Label>
+                </div>
+              </div>
+
+              {filteredSites.length === 0 ? (
                 <div className="text-center py-12 space-y-2">
                   <MapPin className="h-12 w-12 mx-auto text-muted-foreground/50" />
-                  <p className="text-muted-foreground">No sites added yet</p>
+                  <p className="text-muted-foreground">
+                    {sites.length === 0 ? "No sites added yet" : "No sites match your filters"}
+                  </p>
                 </div>
               ) : (
                 <Table>
@@ -1063,7 +1115,7 @@ export default function JobSchedulerContent() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sites.map((s) => {
+                    {filteredSites.map((s) => {
                       const linkedClient = clients.find(c => c.id === s.client_id);
                       return (
                       <TableRow key={s.id}>
