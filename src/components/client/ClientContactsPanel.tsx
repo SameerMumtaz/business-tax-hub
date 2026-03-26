@@ -160,8 +160,8 @@ export default function ClientContactsPanel({ clientId }: Props) {
                   {c.role_title && <span className="text-xs text-muted-foreground">· {c.role_title}</span>}
                 </div>
                 <div className="flex flex-wrap gap-3 text-xs text-muted-foreground pl-5">
-                  {c.phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{c.phone}</span>}
-                  {c.email && <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{c.email}</span>}
+                  {c.phone && <a href={`tel:${c.phone}`} className="flex items-center gap-1 hover:text-primary transition-colors"><Phone className="h-3 w-3" />{c.phone}</a>}
+                  {c.email && <a href={`mailto:${c.email}`} className="flex items-center gap-1 hover:text-primary transition-colors"><Mail className="h-3 w-3" />{c.email}</a>}
                 </div>
                 {c.notes && <p className="text-xs text-muted-foreground pl-5 mt-0.5">{c.notes}</p>}
               </div>
