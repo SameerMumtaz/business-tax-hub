@@ -17,6 +17,7 @@ import {
 import { Plus, MapPin, Briefcase, Loader2, Trash2, Calendar, Clock, Link2, Unlink, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import JobBudgetFields, { getExpectedProfit } from "@/components/job/JobBudgetFields";
+import SiteCombobox from "@/components/SiteCombobox";
 
 const STATUS_COLORS: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
   scheduled: "default",
@@ -379,18 +380,11 @@ export default function ClientJobsPanel({ client }: Props) {
             </div>
 
             {addressMode === "existing" && (
-              <Select value={selectedSiteId} onValueChange={setSelectedSiteId}>
-                <SelectTrigger><SelectValue placeholder="Select site" /></SelectTrigger>
-                <SelectContent>
-                  {/* Show client sites first, then others */}
-                  {clientSites.length > 0 && clientSites.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>⭐ {s.name}</SelectItem>
-                  ))}
-                  {sites.filter(s => s.client_id !== client.id).map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SiteCombobox
+                sites={[...clientSites, ...sites.filter(s => s.client_id !== client.id)]}
+                value={selectedSiteId}
+                onSelect={setSelectedSiteId}
+              />
             )}
 
             {addressMode === "new" && (
