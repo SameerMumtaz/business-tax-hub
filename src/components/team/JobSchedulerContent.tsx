@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import JobPhotosByDate from "@/components/job/JobPhotosByDate";
+import SiteCombobox from "@/components/SiteCombobox";
 import ServicesContent from "@/components/team/ServicesContent";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -527,20 +528,16 @@ export default function JobSchedulerContent() {
               <Input placeholder="Job title" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
               <Input placeholder="Description (optional)" value={jobDesc} onChange={(e) => setJobDesc(e.target.value)} />
               {!inlineNewSite ? (
-                <Select value={jobSiteId} onValueChange={(v) => {
-                  if (v === "__new__") { setInlineNewSite(true); return; }
-                  setJobSiteId(v);
-                  const site = sites.find(s => s.id === v);
-                  if (site?.client_id && !jobClientId) setJobClientId(site.client_id);
-                }}>
-                  <SelectTrigger><SelectValue placeholder="Select site" /></SelectTrigger>
-                  <SelectContent>
-                    {sites.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                    <SelectItem value="__new__" className="text-primary font-medium">
-                      <span className="flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> Add New Site</span>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                <SiteCombobox
+                  sites={sites}
+                  value={jobSiteId}
+                  onSelect={(v) => {
+                    setJobSiteId(v);
+                    const site = sites.find(s => s.id === v);
+                    if (site?.client_id && !jobClientId) setJobClientId(site.client_id);
+                  }}
+                  onAddNew={() => setInlineNewSite(true)}
+                />
               ) : (
                 <div className="space-y-2 rounded-md border p-3">
                   <p className="text-sm font-medium">New Site</p>
@@ -657,18 +654,12 @@ export default function JobSchedulerContent() {
             <Input placeholder="Job title" value={editJobTitle} onChange={(e) => setEditJobTitle(e.target.value)} />
             <Input placeholder="Description (optional)" value={editJobDesc} onChange={(e) => setEditJobDesc(e.target.value)} />
             {!inlineNewSite ? (
-              <Select value={editJobSiteId} onValueChange={(v) => {
-                if (v === "__new__") { setInlineNewSite(true); return; }
-                setEditJobSiteId(v);
-              }}>
-                <SelectTrigger><SelectValue placeholder="Select site" /></SelectTrigger>
-                <SelectContent>
-                  {sites.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                  <SelectItem value="__new__" className="text-primary font-medium">
-                    <span className="flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> Add New Site</span>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <SiteCombobox
+                sites={sites}
+                value={editJobSiteId}
+                onSelect={(v) => setEditJobSiteId(v)}
+                onAddNew={() => setInlineNewSite(true)}
+              />
             ) : (
               <div className="space-y-2 rounded-md border p-3">
                 <p className="text-sm font-medium">New Site</p>
