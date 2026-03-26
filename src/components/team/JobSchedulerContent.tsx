@@ -650,12 +650,20 @@ export default function JobSchedulerContent() {
           <div className="space-y-3 pt-2">
             <Input placeholder="Job title" value={editJobTitle} onChange={(e) => setEditJobTitle(e.target.value)} />
             <Input placeholder="Description (optional)" value={editJobDesc} onChange={(e) => setEditJobDesc(e.target.value)} />
+            <Select value={editJobClientId} onValueChange={(v) => { setEditJobClientId(v); setEditJobSiteId(""); }}>
+              <SelectTrigger><UserCheck className="h-3.5 w-3.5 mr-2" /><SelectValue placeholder="Select client (optional)" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No client</SelectItem>
+                {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
             {!inlineNewSite ? (
               <SiteCombobox
                 sites={sites}
                 value={editJobSiteId}
                 onSelect={(v) => setEditJobSiteId(v)}
                 onAddNew={() => setInlineNewSite(true)}
+                clientId={editJobClientId && editJobClientId !== "none" ? editJobClientId : undefined}
               />
             ) : (
               <div className="space-y-2 rounded-md border p-3">
@@ -681,13 +689,6 @@ export default function JobSchedulerContent() {
                 <SelectItem value="one_time">One-time</SelectItem>
                 <SelectItem value="recurring">Recurring</SelectItem>
                 <SelectItem value="multi_day">Multi-day</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={editJobClientId} onValueChange={setEditJobClientId}>
-              <SelectTrigger><UserCheck className="h-3.5 w-3.5 mr-2" /><SelectValue placeholder="Link to client (optional)" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No client</SelectItem>
-                {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
             <div className="grid grid-cols-2 gap-2">
