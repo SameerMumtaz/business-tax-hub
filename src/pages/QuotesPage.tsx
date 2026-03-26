@@ -3,6 +3,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { useQuotes, useAddQuote, useUpdateQuoteStatus, useDeleteQuote, useConvertQuoteToInvoice, useConvertQuoteToJob, Quote } from "@/hooks/useQuotes";
 import { useClients } from "@/hooks/useClients";
 import { useJobs } from "@/hooks/useJobs";
+import SiteCombobox from "@/components/SiteCombobox";
 import { useJobTemplates } from "@/hooks/useJobTemplates";
 import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -336,12 +337,12 @@ ${q.notes ? `\nNotes: ${q.notes}` : ""}
           <DialogContent>
             <DialogHeader><DialogTitle>Convert Quote to Job</DialogTitle></DialogHeader>
             <p className="text-sm text-muted-foreground mb-3">Select a job site for "{jobDialogQuote?.title}"</p>
-            <Select value={selectedSiteId} onValueChange={setSelectedSiteId}>
-              <SelectTrigger><SelectValue placeholder="Select Job Site" /></SelectTrigger>
-              <SelectContent>
-                {sites.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <SiteCombobox
+              sites={sites}
+              value={selectedSiteId}
+              onSelect={setSelectedSiteId}
+              placeholder="Select Job Site"
+            />
             {sites.length === 0 && <p className="text-xs text-muted-foreground">No job sites found. Create one in Team → Job Scheduler first.</p>}
             <Button onClick={handleConvertJob} disabled={!selectedSiteId} className="w-full mt-2">Create Job</Button>
           </DialogContent>
