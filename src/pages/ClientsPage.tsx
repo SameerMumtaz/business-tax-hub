@@ -270,10 +270,6 @@ export default function ClientsPage() {
                     <div className="rounded-lg border bg-card overflow-hidden">
                       <div className="p-4 border-b"><h3 className="font-medium">Sites</h3></div>
                       {(() => {
-                        const { sites } = jobs ? { sites: [] } : { sites: [] };
-                        return null;
-                      })()}
-                      {(() => {
                         const clientSites = allSites.filter(s => s.client_id === selectedClient.id);
                         return clientSites.length > 0 ? (
                           <div className="divide-y">
