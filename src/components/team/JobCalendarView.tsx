@@ -442,7 +442,8 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     if (a?.latitude && a?.longitude && b?.latitude && b?.longitude) {
       const miles = haversineDistanceMiles(a.latitude, a.longitude, b.latitude, b.longitude);
       if (miles <= 0) return MIN_BUFFER_MINUTES;
-      const drivingMinutes = (miles / 30) * 60; // ~30 mph average
+      // Use 45 mph average (realistic for suburban/mixed driving) + 5 min buffer for parking/setup
+      const drivingMinutes = (miles / 45) * 60 + 5;
       return Math.max(MIN_BUFFER_MINUTES, Math.ceil(drivingMinutes / 5) * 5);
     }
     return MIN_BUFFER_MINUTES;
