@@ -443,16 +443,18 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     if (dropIndex >= dayJobs.length) {
       const lastJob = dayJobs[dayJobs.length - 1];
       if (!lastJob?.start_time) return DEFAULT_START;
+      const buffer = getTravelBuffer(lastJob.site_id, movedJobSiteId);
       const prevEnd = getJobEndMinutes(lastJob);
-      const newStart = roundTo5Min(prevEnd + BUFFER_MINUTES);
+      const newStart = roundTo5Min(prevEnd + buffer);
       return minsToTimeStr(Math.min(newStart, 23 * 60 + 59));
     }
 
     // Drop BETWEEN two jobs
     const prevJob = dayJobs[dropIndex - 1];
     if (!prevJob?.start_time) return DEFAULT_START;
+    const buffer = getTravelBuffer(prevJob.site_id, movedJobSiteId);
     const prevEnd = getJobEndMinutes(prevJob);
-    const newStart = roundTo5Min(prevEnd + BUFFER_MINUTES);
+    const newStart = roundTo5Min(prevEnd + buffer);
     return minsToTimeStr(newStart);
   };
 
