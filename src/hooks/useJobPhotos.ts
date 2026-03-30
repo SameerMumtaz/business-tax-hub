@@ -170,12 +170,13 @@ export function useJobPhotos(
       if (insertError) throw insertError;
 
       toast.success("Photo uploaded");
+      onPhotoUploaded?.(urlData.publicUrl, photoType);
       fetchPhotos();
     } catch (err: any) {
       toast.error(err.message || "Upload failed");
     }
     setUploading(false);
-  }, [user, jobId, occurrenceDate, fetchPhotos]);
+  }, [user, jobId, occurrenceDate, fetchPhotos, onPhotoUploaded]);
 
   const updateCaption = useCallback(async (photoId: string, caption: string) => {
     const { error } = await supabase
