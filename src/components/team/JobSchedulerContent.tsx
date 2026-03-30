@@ -393,7 +393,9 @@ export default function JobSchedulerContent() {
     // Auto-assign default crew from template
     if (newJobId && pendingDefaultCrew.length > 0) {
       for (const crew of pendingDefaultCrew) {
-        await assignWorker(newJobId, crew.worker_id, crew.worker_name, "1099", 0, 0, null);
+        const member = teamMembers.find((m) => m.id === crew.worker_id);
+        const workerType = member?.worker_type || "1099";
+        await assignWorker(newJobId, crew.worker_id, crew.worker_name, workerType, 0, 0, null);
       }
     }
 
