@@ -191,6 +191,7 @@ export default function JobSchedulerContent() {
   const [editJobLaborAmount, setEditJobLaborAmount] = useState("");
   const [editJobLaborHours, setEditJobLaborHours] = useState("");
   const [editJobLaborRate, setEditJobLaborRate] = useState("");
+  const [editJobBillingInterval, setEditJobBillingInterval] = useState("");
 
   // Photos dialog state
   const [photosJobId, setPhotosJobId] = useState<string | null>(null);
