@@ -559,6 +559,8 @@ export default function CrewDashboardPage() {
             <CrewStatusWidgets
               jobs={assignedJobs}
               activeCheckin={activeCheckin}
+              checkins={checkins}
+              payRate={payRate}
             />
           )}
         </div>
