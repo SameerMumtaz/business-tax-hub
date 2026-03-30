@@ -478,6 +478,32 @@ export default function CrewDashboardPage() {
         }
       }
 
+      // Post flagged checkout + explanations to chat
+      if (user && teamMemberId) {
+        const activeJobForChat = assignedJobs.find((j) => j.id === activeCheckin.job_id);
+        const elapsed = ((Date.now() - new Date(activeCheckin.check_in_time).getTime()) / 3600000).toFixed(1);
+        const time = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        const explanationLines = explanationItems.map(item => {
+          const text = explanationTexts[item.reason].trim();
+          const labels: Record<string, string> = {
+            earlyCheckout: "⏰ Early completion",
+            overtimeCheckout: "⏱️ Overtime",
+            geofenceCheckout: "📍 Off-site checkout",
+          };
+          return `${labels[item.reason] || item.reason}: ${text}`;
+        });
+        const chatMsg = [
+          `🏁 Checked out of "${activeJobForChat?.title || "job"}" — ${elapsed}h worked, ${time}`,
+          ...explanationLines,
+        ].join("\n");
+        await postCrewChatMessage(
+          user.id,
+          teamMemberId,
+          chatMsg,
+          { job_id: activeCheckin.job_id, job_site_id: activeCheckin.job_site_id, occurrence_date: activeCheckin.occurrence_date }
+        );
+      }
+
       setGpsLoading(null);
     }
 
