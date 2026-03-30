@@ -117,6 +117,20 @@ export default function JobSchedulerContent() {
   const { templates, refetch: refetchTemplates } = useJobTemplates();
   const [tab, setTab] = useState("calendar");
 
+  // Weather - compute centroid of sites with coordinates
+  const weatherCenter = useMemo(() => {
+    const withCoords = sites.filter(s => s.latitude && s.longitude);
+    if (withCoords.length === 0) return { lat: null, lng: null };
+    const lat = withCoords.reduce((s, site) => s + (site.latitude || 0), 0) / withCoords.length;
+    const lng = withCoords.reduce((s, site) => s + (site.longitude || 0), 0) / withCoords.length;
+    return { lat, lng };
+  }, [sites]);
+  const { data: weatherData } = useWeatherForecast(weatherCenter.lat, weatherCenter.lng);
+
+  // Undo state
+  const undoDataRef = useRef<{ id: string; start_date: string; end_date: string | null }[]>([]);
+  const [clientNotifyData, setClientNotifyData] = useState<{ open: boolean; clients: AffectedClient[]; type: "raincheck" | "rebalance" }>({ open: false, clients: [], type: "raincheck" });
+
   // Create site state
   const [siteOpen, setSiteOpen] = useState(false);
   const [siteName, setSiteName] = useState("");
