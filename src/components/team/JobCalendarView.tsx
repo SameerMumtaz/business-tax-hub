@@ -268,8 +268,9 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
   // Filter state
   const [filterCrewId, setFilterCrewId] = useState<string>("all");
   const [filterSiteId, setFilterSiteId] = useState<string>("all");
+  const [filterJobTitle, setFilterJobTitle] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
-  const hasActiveFilters = filterCrewId !== "all" || filterSiteId !== "all";
+  const hasActiveFilters = filterCrewId !== "all" || filterSiteId !== "all" || filterJobTitle !== "all";
 
   // Snapshot tracking for undo
   const jobSnapshotsRef = useRef<Map<string, { start_date: string; start_time: string | null; end_date: string | null }>>(new Map());
@@ -350,6 +351,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     allJobsByDate.forEach((dayJobs, dateStr) => {
       const matching = dayJobs.filter((job) => {
         if (filterSiteId !== "all" && job.site_id !== filterSiteId) return false;
+        if (filterJobTitle !== "all" && job.title !== filterJobTitle) return false;
         if (filterCrewId !== "all") {
           const jobAssigns = assignments.filter((a) => a.job_id === job.id);
           if (!jobAssigns.some((a) => a.worker_id === filterCrewId)) return false;
@@ -359,7 +361,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
       if (matching.length > 0) filtered.set(dateStr, matching);
     });
     return filtered;
-  }, [allJobsByDate, hasActiveFilters, filterSiteId, filterCrewId, assignments]);
+  }, [allJobsByDate, hasActiveFilters, filterSiteId, filterJobTitle, filterCrewId, assignments]);
   const todayStr = toDateStr(new Date());
   const goBack = () => viewMode === "week" ? setCurrentDate((d) => addDays(d, -7)) : setCurrentDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
   const goForward = () => viewMode === "week" ? setCurrentDate((d) => addDays(d, 7)) : setCurrentDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
@@ -642,7 +644,19 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     return sites.slice().sort((a, b) => a.name.localeCompare(b.name));
   }, [sites]);
 
-  const clearFilters = () => { setFilterCrewId("all"); setFilterSiteId("all"); };
+  const jobTitleOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const list: string[] = [];
+    for (const j of jobs) {
+      if (!seen.has(j.title)) {
+        seen.add(j.title);
+        list.push(j.title);
+      }
+    }
+    return list.sort((a, b) => a.localeCompare(b));
+  }, [jobs]);
+
+  const clearFilters = () => { setFilterCrewId("all"); setFilterSiteId("all"); setFilterJobTitle("all"); };
 
   return (
     <>
@@ -664,7 +678,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
                 <Filter className="h-3.5 w-3.5 mr-1" />Filter
                 {hasActiveFilters && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-destructive-foreground text-[9px] flex items-center justify-center">
-                    {(filterCrewId !== "all" ? 1 : 0) + (filterSiteId !== "all" ? 1 : 0)}
+                   {(filterCrewId !== "all" ? 1 : 0) + (filterSiteId !== "all" ? 1 : 0) + (filterJobTitle !== "all" ? 1 : 0)}
                   </span>
                 )}
               </Button>
@@ -706,6 +720,17 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
                   ))}
                 </SelectContent>
               </Select>
+              <Select value={filterJobTitle} onValueChange={setFilterJobTitle}>
+                <SelectTrigger className="h-8 w-[180px] text-xs">
+                  <SelectValue placeholder="All jobs/services" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All jobs / services</SelectItem>
+                  {jobTitleOptions.map((t) => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {hasActiveFilters && (
                 <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" onClick={clearFilters}>
                   <X className="h-3.5 w-3.5 mr-1" />Clear filters
@@ -725,6 +750,12 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
               {filterSiteId !== "all" && (
                 <Badge variant="secondary" className="text-xs gap-1 cursor-pointer" onClick={() => setFilterSiteId("all")}>
                   {siteOptions.find((s) => s.id === filterSiteId)?.name || "Site"}
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
+              {filterJobTitle !== "all" && (
+                <Badge variant="secondary" className="text-xs gap-1 cursor-pointer" onClick={() => setFilterJobTitle("all")}>
+                  {filterJobTitle}
                   <X className="h-3 w-3" />
                 </Badge>
               )}
