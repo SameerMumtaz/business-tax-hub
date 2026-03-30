@@ -3,10 +3,12 @@ import { type Job, type JobSite, type JobAssignment, type CrewCheckinOccurrence 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ChevronLeft, ChevronRight, Clock, MapPin, AlertTriangle, Sparkles, GripVertical, Lock, Unlock, Copy, RefreshCw, Undo2, Save, Trash2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ChevronLeft, ChevronRight, Clock, MapPin, AlertTriangle, Sparkles, GripVertical, Lock, Unlock, Copy, RefreshCw, Undo2, Save, Trash2, Filter, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 
 function parseLocalDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -263,6 +265,12 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
   const [deleteConfirmed, setDeleteConfirmed] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Filter state
+  const [filterCrewId, setFilterCrewId] = useState<string>("all");
+  const [filterSiteId, setFilterSiteId] = useState<string>("all");
+  const [showFilters, setShowFilters] = useState(false);
+  const hasActiveFilters = filterCrewId !== "all" || filterSiteId !== "all";
+
   // Snapshot tracking for undo
   const jobSnapshotsRef = useRef<Map<string, { start_date: string; start_time: string | null; end_date: string | null }>>(new Map());
   const [movedJobIds, setMovedJobIds] = useState<Set<string>>(new Set());
@@ -333,7 +341,25 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     return { weekDays: days, rangeStart: startOfDay(days[0]), rangeEnd: endOfDay(days[days.length - 1]) };
   }, [viewMode, currentDate]);
 
-  const jobsByDate = useMemo(() => buildJobsByDate(jobs, checkins, rangeStart, rangeEnd), [jobs, checkins, rangeStart, rangeEnd]);
+  const allJobsByDate = useMemo(() => buildJobsByDate(jobs, checkins, rangeStart, rangeEnd), [jobs, checkins, rangeStart, rangeEnd]);
+
+  // Apply filters to jobsByDate
+  const jobsByDate = useMemo(() => {
+    if (!hasActiveFilters) return allJobsByDate;
+    const filtered = new Map<string, CalendarJob[]>();
+    allJobsByDate.forEach((dayJobs, dateStr) => {
+      const matching = dayJobs.filter((job) => {
+        if (filterSiteId !== "all" && job.site_id !== filterSiteId) return false;
+        if (filterCrewId !== "all") {
+          const jobAssigns = assignments.filter((a) => a.job_id === job.id);
+          if (!jobAssigns.some((a) => a.worker_id === filterCrewId)) return false;
+        }
+        return true;
+      });
+      if (matching.length > 0) filtered.set(dateStr, matching);
+    });
+    return filtered;
+  }, [allJobsByDate, hasActiveFilters, filterSiteId, filterCrewId, assignments]);
   const todayStr = toDateStr(new Date());
   const goBack = () => viewMode === "week" ? setCurrentDate((d) => addDays(d, -7)) : setCurrentDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
   const goForward = () => viewMode === "week" ? setCurrentDate((d) => addDays(d, 7)) : setCurrentDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
@@ -570,5 +596,160 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
       return <div key={dateStr} className={cn("border-r border-b border-border min-h-[80px] p-1 transition-colors", isToday && "bg-primary/5", isDragTarget && "bg-primary/10 ring-1 ring-inset ring-primary", isGapSuggestion && dragJob && "bg-emerald-500/5")} onDragOver={(e) => handleDragOver(e, dateStr)} onDragLeave={handleDragLeave} onDrop={(e) => handleDrop(e, dateStr)} onClick={() => { setCurrentDate(day); setViewMode("week"); }}><div className="flex items-center justify-between"><span className={cn("text-xs font-medium w-5 h-5 flex items-center justify-center rounded-full", isToday && "bg-primary text-primary-foreground")}>{day.getDate()}</span>{hours > 0 && <span className="text-[9px] font-mono text-muted-foreground">{hours.toFixed(0)}h</span>}</div>{hours > 0 && <div className="mt-0.5 h-0.5 rounded-full bg-muted overflow-hidden"><div className={cn("h-full rounded-full", getWorkloadBarColor(hours))} style={{ width: `${Math.min(100, (hours / 12) * 100)}%` }} /></div>}<div className="mt-0.5 space-y-0.5 overflow-y-auto max-h-[120px]">{dayJobs.map((job) => { const displayStatus = job._displayStatus || job.status; return <div key={`${job.id}-${dateStr}`} draggable={editMode && displayStatus !== "completed" && job.status !== "cancelled"} onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, job, dateStr); }} onDragEnd={handleDragEnd} onClick={(e) => { e.stopPropagation(); if (!wasDragging.current) onJobClick?.(job); }} className={cn("rounded px-1 py-0 text-[9px] leading-tight truncate border cursor-pointer", STATUS_BG[displayStatus] || STATUS_BG.scheduled)}><span className={cn("font-medium", STATUS_TEXT[displayStatus] || STATUS_TEXT.scheduled)}>{job.title}</span></div>; })}</div></div>; })}</div></>;
   };
 
-  return <><Card><CardContent className="pt-4 px-2 sm:px-6"><div className="flex items-center justify-between mb-3 flex-wrap gap-2"><div className="flex items-center gap-1 sm:gap-2"><Button variant="outline" size="icon" className="h-8 w-8" onClick={goBack}><ChevronLeft className="h-4 w-4" /></Button><Button variant="outline" size="icon" className="h-8 w-8" onClick={goForward}><ChevronRight className="h-4 w-4" /></Button><h3 className="text-sm sm:text-base font-semibold ml-1 sm:ml-2">{headerLabel}</h3></div><div className="flex items-center gap-1.5"><Button variant="ghost" size="sm" className="text-xs h-7" onClick={goToday}>Today</Button>{editMode ? (<>{hasEdits && <Button variant="outline" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={handleDiscardEdits}><Undo2 className="h-3.5 w-3.5 mr-1" />Discard</Button>}<Button variant="default" size="sm" className="h-7 text-xs" onClick={hasEdits ? handleSaveEdits : () => setEditMode(false)}><Save className="h-3.5 w-3.5 mr-1" />{hasEdits ? "Save" : "Done"}</Button></>) : (<Button variant="outline" size="sm" className="h-7 text-xs" onClick={enterEditMode}><Lock className="h-3.5 w-3.5 mr-1" />Edit schedule</Button>)}<Button variant={viewMode === "week" ? "default" : "outline"} size="sm" className="h-7 text-xs" onClick={() => setViewMode("week")}>Week</Button><Button variant={viewMode === "month" ? "default" : "outline"} size="sm" className="h-7 text-xs" onClick={() => setViewMode("month")}>Month</Button></div></div>{viewMode === "week" ? renderWeekView() : renderMonthView()}</CardContent></Card><Dialog open={recurringDialogOpen} onOpenChange={setRecurringDialogOpen}><DialogContent><DialogHeader><DialogTitle>Move recurring job</DialogTitle><DialogDescription>Choose whether to move only this occurrence or shift the whole recurring series.</DialogDescription></DialogHeader><DialogFooter className="gap-2 sm:gap-0"><Button variant="outline" onClick={() => handleRecurringChoice("this")}><Copy className="h-4 w-4 mr-2" />This instance only</Button><Button onClick={() => handleRecurringChoice("all")}><RefreshCw className="h-4 w-4 mr-2" />All future instances</Button></DialogFooter></DialogContent></Dialog>{deleteTarget && onJobDelete && <Dialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) { setDeleteTarget(null); setDeleteConfirmed(false); } }}><DialogContent><DialogHeader><DialogTitle className="flex items-center gap-2">{deleteTarget.status === "completed" && <AlertTriangle className="h-5 w-5 text-amber-500" />}Delete Job?</DialogTitle><DialogDescription className="space-y-2"><span className="block">This will permanently delete "<strong>{deleteTarget.title}</strong>" and cascade-remove all assignments, timesheet entries (reversing pay), check-in records, and photos.</span>{deleteTarget.status === "completed" && <div className="mt-3 p-3 rounded-md bg-destructive/10 border border-destructive/20"><p className="text-sm font-medium text-destructive mb-2">⚠️ This job is completed. Deleting it will reverse all pay allocated to crew for this job.</p><label className="flex items-start gap-2 cursor-pointer"><input type="checkbox" checked={deleteConfirmed} onChange={(e) => setDeleteConfirmed(e.target.checked)} className="mt-0.5" /><span className="text-sm leading-tight">I understand and want to proceed</span></label></div>}</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => { setDeleteTarget(null); setDeleteConfirmed(false); }} disabled={deleting}>Cancel</Button><Button variant="destructive" disabled={deleting || (deleteTarget.status === "completed" && !deleteConfirmed)} onClick={async () => { setDeleting(true); await onJobDelete(deleteTarget.id); setDeleting(false); setDeleteTarget(null); setDeleteConfirmed(false); }}>{deleting ? "Deleting…" : "Delete Job"}</Button></DialogFooter></DialogContent></Dialog>}</>;
+
+  // Build unique crew and site lists for filter dropdowns
+  const crewOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const list: { id: string; name: string }[] = [];
+    assignments.forEach((a) => {
+      if (!seen.has(a.worker_id)) {
+        seen.add(a.worker_id);
+        list.push({ id: a.worker_id, name: a.worker_name });
+      }
+    });
+    return list.sort((a, b) => a.name.localeCompare(b.name));
+  }, [assignments]);
+
+  const siteOptions = useMemo(() => {
+    return sites.slice().sort((a, b) => a.name.localeCompare(b.name));
+  }, [sites]);
+
+  const clearFilters = () => { setFilterCrewId("all"); setFilterSiteId("all"); };
+
+  return (
+    <>
+      <Card>
+        <CardContent className="pt-4 px-2 sm:px-6">
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={goBack}><ChevronLeft className="h-4 w-4" /></Button>
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={goForward}><ChevronRight className="h-4 w-4" /></Button>
+              <h3 className="text-sm sm:text-base font-semibold ml-1 sm:ml-2">{headerLabel}</h3>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant={showFilters || hasActiveFilters ? "default" : "ghost"}
+                size="sm"
+                className="text-xs h-7 relative"
+                onClick={() => setShowFilters(!showFilters)}
+              >
+                <Filter className="h-3.5 w-3.5 mr-1" />Filter
+                {hasActiveFilters && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-destructive-foreground text-[9px] flex items-center justify-center">
+                    {(filterCrewId !== "all" ? 1 : 0) + (filterSiteId !== "all" ? 1 : 0)}
+                  </span>
+                )}
+              </Button>
+              <Button variant="ghost" size="sm" className="text-xs h-7" onClick={goToday}>Today</Button>
+              {editMode ? (
+                <>
+                  {hasEdits && <Button variant="outline" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={handleDiscardEdits}><Undo2 className="h-3.5 w-3.5 mr-1" />Discard</Button>}
+                  <Button variant="default" size="sm" className="h-7 text-xs" onClick={hasEdits ? handleSaveEdits : () => setEditMode(false)}><Save className="h-3.5 w-3.5 mr-1" />{hasEdits ? "Save" : "Done"}</Button>
+                </>
+              ) : (
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={enterEditMode}><Lock className="h-3.5 w-3.5 mr-1" />Edit schedule</Button>
+              )}
+              <Button variant={viewMode === "week" ? "default" : "outline"} size="sm" className="h-7 text-xs" onClick={() => setViewMode("week")}>Week</Button>
+              <Button variant={viewMode === "month" ? "default" : "outline"} size="sm" className="h-7 text-xs" onClick={() => setViewMode("month")}>Month</Button>
+            </div>
+          </div>
+
+          {showFilters && (
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <Select value={filterCrewId} onValueChange={setFilterCrewId}>
+                <SelectTrigger className="h-8 w-[180px] text-xs">
+                  <SelectValue placeholder="All crew" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All crew members</SelectItem>
+                  {crewOptions.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filterSiteId} onValueChange={setFilterSiteId}>
+                <SelectTrigger className="h-8 w-[180px] text-xs">
+                  <SelectValue placeholder="All sites" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All sites</SelectItem>
+                  {siteOptions.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {hasActiveFilters && (
+                <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" onClick={clearFilters}>
+                  <X className="h-3.5 w-3.5 mr-1" />Clear filters
+                </Button>
+              )}
+            </div>
+          )}
+
+          {hasActiveFilters && !showFilters && (
+            <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+              {filterCrewId !== "all" && (
+                <Badge variant="secondary" className="text-xs gap-1 cursor-pointer" onClick={() => setFilterCrewId("all")}>
+                  {crewOptions.find((c) => c.id === filterCrewId)?.name || "Crew"}
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
+              {filterSiteId !== "all" && (
+                <Badge variant="secondary" className="text-xs gap-1 cursor-pointer" onClick={() => setFilterSiteId("all")}>
+                  {siteOptions.find((s) => s.id === filterSiteId)?.name || "Site"}
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
+            </div>
+          )}
+
+          {viewMode === "week" ? renderWeekView() : renderMonthView()}
+        </CardContent>
+      </Card>
+
+      <Dialog open={recurringDialogOpen} onOpenChange={setRecurringDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Move recurring job</DialogTitle>
+            <DialogDescription>Choose whether to move only this occurrence or shift the whole recurring series.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => handleRecurringChoice("this")}><Copy className="h-4 w-4 mr-2" />This instance only</Button>
+            <Button onClick={() => handleRecurringChoice("all")}><RefreshCw className="h-4 w-4 mr-2" />All future instances</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {deleteTarget && onJobDelete && (
+        <Dialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) { setDeleteTarget(null); setDeleteConfirmed(false); } }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {deleteTarget.status === "completed" && <AlertTriangle className="h-5 w-5 text-amber-500" />}
+                Delete Job?
+              </DialogTitle>
+              <DialogDescription className="space-y-2">
+                <span className="block">This will permanently delete &quot;<strong>{deleteTarget.title}</strong>&quot; and cascade-remove all assignments, timesheet entries (reversing pay), check-in records, and photos.</span>
+                {deleteTarget.status === "completed" && (
+                  <div className="mt-3 p-3 rounded-md bg-destructive/10 border border-destructive/20">
+                    <p className="text-sm font-medium text-destructive mb-2">⚠️ This job is completed. Deleting it will reverse all pay allocated to crew for this job.</p>
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input type="checkbox" checked={deleteConfirmed} onChange={(e) => setDeleteConfirmed(e.target.checked)} className="mt-0.5" />
+                      <span className="text-sm leading-tight">I understand and want to proceed</span>
+                    </label>
+                  </div>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setDeleteTarget(null); setDeleteConfirmed(false); }} disabled={deleting}>Cancel</Button>
+              <Button variant="destructive" disabled={deleting || (deleteTarget.status === "completed" && !deleteConfirmed)} onClick={async () => { setDeleting(true); await onJobDelete(deleteTarget.id); setDeleting(false); setDeleteTarget(null); setDeleteConfirmed(false); }}>
+                {deleting ? "Deleting…" : "Delete Job"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
+  );
 }
