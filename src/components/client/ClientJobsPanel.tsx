@@ -171,6 +171,7 @@ export default function ClientJobsPanel({ client }: Props) {
         job_type: jobType,
         recurring_interval: jobType === "recurring" ? jobInterval || null : null,
         recurring_end_date: null,
+        billing_interval: jobType === "recurring" && jobBillingInterval && jobBillingInterval !== "none" ? jobBillingInterval : null,
         invoice_id: null,
         description: jobDesc || null,
         start_time: jobStartTime || null,

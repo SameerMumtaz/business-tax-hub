@@ -64,6 +64,7 @@ export default function BookingRequestsPanel() {
       job_type: "one_time",
       recurring_interval: null,
       recurring_end_date: null,
+      billing_interval: null,
       invoice_id: null,
       client_id: null,
       price: req.price || 0,
