@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Cloud, Clock, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Cloud, Clock, TrendingUp, TrendingDown, Minus, DollarSign, CheckCircle2 } from "lucide-react";
 import { useWeatherForecast, type DailyWeather } from "@/hooks/useWeatherForecast";
 import { getTodayDateOnlyKey, getNextInstanceDate } from "@/lib/dateOnly";
 import type { AssignedJob } from "@/components/crew/CrewJobsList";
@@ -9,6 +9,8 @@ interface Props {
   activeCheckin: any;
   siteLat?: number | null;
   siteLng?: number | null;
+  checkins?: any[];
+  payRate?: number | null;
 }
 
 function timeToMinutes(t: string): number {
@@ -24,14 +26,13 @@ function formatCountdown(totalMinutes: number): string {
   return `${m}m`;
 }
 
-export default function CrewStatusWidgets({ jobs, activeCheckin, siteLat, siteLng }: Props) {
+export default function CrewStatusWidgets({ jobs, activeCheckin, siteLat, siteLng, checkins, payRate }: Props) {
   const todayKey = getTodayDateOnlyKey();
   const [nowMinutes, setNowMinutes] = useState(() => {
     const n = new Date();
     return n.getHours() * 60 + n.getMinutes();
   });
 
-  // Update clock every 30s
   useEffect(() => {
     const update = () => {
       const n = new Date();
@@ -43,10 +44,7 @@ export default function CrewStatusWidgets({ jobs, activeCheckin, siteLat, siteLn
 
   // Weather — use centroid of today's job sites
   const centroid = useMemo(() => {
-    const todayJobs = jobs.filter(j => {
-      const d = getNextInstanceDate(j);
-      return d === todayKey;
-    });
+    const todayJobs = jobs.filter(j => getNextInstanceDate(j) === todayKey);
     const lats: number[] = [];
     const lngs: number[] = [];
     todayJobs.forEach(j => {
@@ -68,21 +66,41 @@ export default function CrewStatusWidgets({ jobs, activeCheckin, siteLat, siteLn
   // Today's jobs sorted by start_time
   const todayJobsSorted = useMemo(() => {
     return jobs
-      .filter(j => {
-        const d = getNextInstanceDate(j);
-        return d === todayKey && j.status !== "completed";
-      })
+      .filter(j => getNextInstanceDate(j) === todayKey)
       .filter(j => j.start_time)
       .sort((a, b) => (a.start_time || "").localeCompare(b.start_time || ""));
   }, [jobs, todayKey]);
 
-  // Next job (upcoming, not currently checked into)
+  // All today's jobs (including completed, for progress)
+  const allTodayJobs = useMemo(() => {
+    return jobs.filter(j => getNextInstanceDate(j) === todayKey);
+  }, [jobs, todayKey]);
+
+  const completedCount = allTodayJobs.filter(j => j.status === "completed").length;
+  const totalCount = allTodayJobs.length;
+
+  // Today's earnings from checkins
+  const todayEarnings = useMemo(() => {
+    if (!checkins || !payRate) return null;
+    const todayHours = checkins
+      .filter(c => (c.occurrence_date || c.check_in_time?.slice(0, 10)) === todayKey)
+      .reduce((sum: number, c: any) => {
+        if (c.total_hours && c.total_hours > 0) return sum + c.total_hours;
+        if (c.check_out_time) return sum + Math.max(0, (new Date(c.check_out_time).getTime() - new Date(c.check_in_time).getTime()) / 3600000);
+        if (c.status === "checked_in") return sum + Math.max(0, (Date.now() - new Date(c.check_in_time).getTime()) / 3600000);
+        return sum;
+      }, 0);
+    return Math.round(todayHours * payRate * 100) / 100;
+  }, [checkins, payRate, todayKey]);
+
+  // Next job
   const nextJob = useMemo(() => {
     const activeJobId = activeCheckin?.job_id;
     return todayJobsSorted.find(j => {
       if (j.id === activeJobId) return false;
+      if (j.status === "completed") return false;
       const startMin = j.start_time ? timeToMinutes(j.start_time) : 0;
-      return startMin > nowMinutes - 5; // within 5 min grace
+      return startMin > nowMinutes - 5;
     });
   }, [todayJobsSorted, activeCheckin, nowMinutes]);
 
@@ -90,10 +108,9 @@ export default function CrewStatusWidgets({ jobs, activeCheckin, siteLat, siteLn
     ? Math.max(0, timeToMinutes(nextJob.start_time) - nowMinutes)
     : null;
 
-  // Schedule pace: compare where we "should" be vs where we are
+  // Schedule pace
   const paceStatus = useMemo<{ label: string; color: string; icon: typeof TrendingUp }>(() => {
     if (!activeCheckin || todayJobsSorted.length === 0) {
-      // Not checked in — are we late for first job?
       if (todayJobsSorted.length > 0 && todayJobsSorted[0].start_time) {
         const firstStart = timeToMinutes(todayJobsSorted[0].start_time);
         if (nowMinutes > firstStart + 10) {
@@ -103,27 +120,22 @@ export default function CrewStatusWidgets({ jobs, activeCheckin, siteLat, siteLn
       return { label: "On track", color: "text-primary", icon: Minus };
     }
 
-    // Currently checked in — compute expected finish vs actual elapsed
     const checkinTime = new Date(activeCheckin.check_in_time);
     const elapsedMinutes = (Date.now() - checkinTime.getTime()) / 60_000;
     const expectedMinutes = (activeCheckin.expected_hours || 1) * 60;
 
-    // How far through the current job should we be?
     const activeJob = todayJobsSorted.find(j => j.id === activeCheckin.job_id);
     if (!activeJob?.start_time) {
       return { label: "On track", color: "text-primary", icon: Minus };
     }
 
     const scheduledStart = timeToMinutes(activeJob.start_time);
-    const scheduledEnd = scheduledStart + expectedMinutes;
-    const actualProgress = elapsedMinutes / expectedMinutes; // 0-1+
-    const scheduleProgress = (nowMinutes - scheduledStart) / expectedMinutes; // 0-1+
+    const actualProgress = elapsedMinutes / expectedMinutes;
+    const scheduleProgress = (nowMinutes - scheduledStart) / expectedMinutes;
 
-    // If we're more than 15% ahead
     if (actualProgress > scheduleProgress + 0.15) {
       return { label: "Ahead", color: "text-emerald-600", icon: TrendingUp };
     }
-    // If we're more than 15% behind
     if (actualProgress < scheduleProgress - 0.15) {
       return { label: "Behind", color: "text-destructive", icon: TrendingDown };
     }
@@ -133,12 +145,31 @@ export default function CrewStatusWidgets({ jobs, activeCheckin, siteLat, siteLn
   const PaceIcon = paceStatus.icon;
 
   return (
-    <div className="flex items-center gap-3 text-xs flex-wrap">
+    <div className="flex items-center gap-2 text-xs flex-wrap">
       {/* Weather */}
       {todayWeather && (
         <div className="flex items-center gap-1.5 bg-muted/50 rounded-full px-3 py-1.5">
           <span className="text-base leading-none">{todayWeather.icon}</span>
           <span className="text-muted-foreground font-medium">{todayWeather.label}</span>
+        </div>
+      )}
+
+      {/* Jobs Remaining */}
+      {totalCount > 0 && (
+        <div className="flex items-center gap-1.5 bg-muted/50 rounded-full px-3 py-1.5">
+          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+          <span className="text-muted-foreground">
+            <span className="font-semibold text-foreground">{completedCount}/{totalCount}</span> done
+          </span>
+        </div>
+      )}
+
+      {/* Today's Earnings */}
+      {todayEarnings !== null && (
+        <div className="flex items-center gap-1.5 bg-muted/50 rounded-full px-3 py-1.5">
+          <DollarSign className="h-3.5 w-3.5 text-emerald-600" />
+          <span className="font-semibold text-foreground">${todayEarnings.toFixed(0)}</span>
+          <span className="text-muted-foreground">today</span>
         </div>
       )}
 
