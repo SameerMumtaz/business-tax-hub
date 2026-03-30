@@ -147,11 +147,18 @@ export default function CrewAssignmentPanel({
   const selectedConflicts = selectedWorker ? workerConflicts.get(selectedWorker) : undefined;
   const hasConflict = !!selectedConflicts && selectedConflicts.length > 0;
 
-  // Initialize day picker when entering add mode for multi-day
+  // Initialize day picker and pre-fill hours from estimated_hours when entering add mode
   const startAdding = () => {
     setAdding(true);
     if (isMultiDay) {
       setSelectedDays(new Set(allJobDays)); // default: all days
+      // Pre-fill hours per day from job's estimated hours
+      if (job.estimated_hours && job.estimated_hours > 0 && allJobDays.length > 0) {
+        const hpd = Math.round((job.estimated_hours / allJobDays.length) * 10) / 10;
+        setHoursPerDay(String(hpd));
+      }
+    } else if (job.estimated_hours && job.estimated_hours > 0) {
+      setHoursPerDay(String(job.estimated_hours));
     }
   };
 
