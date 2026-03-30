@@ -8,6 +8,10 @@ export interface DailyWeather {
   icon: string;
   isRainDay: boolean;
   isStormDay: boolean;
+  tempHighF: number;
+  tempLowF: number;
+  /** Hour (0-23) when rain first appears, or null */
+  rainStartHour: number | null;
 }
 
 const WEATHER_INFO: Record<number, { label: string; icon: string }> = {
@@ -41,12 +45,16 @@ const RAIN_CODES = new Set([51, 53, 55, 61, 63, 65, 80, 81, 82]);
 const STORM_CODES = new Set([82, 95, 96, 99]);
 const HEAVY_PRECIP_MM = 5;
 
+function cToF(c: number): number {
+  return Math.round(c * 9 / 5 + 32);
+}
+
 export function useWeatherForecast(lat?: number | null, lng?: number | null) {
   return useQuery({
     queryKey: ["weather-forecast", lat?.toFixed(2), lng?.toFixed(2)],
     queryFn: async (): Promise<Map<string, DailyWeather>> => {
       const res = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=weathercode,precipitation_sum&timezone=auto&forecast_days=14`
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=weathercode,precipitation_sum,temperature_2m_max,temperature_2m_min&hourly=precipitation&timezone=auto&forecast_days=14`
       );
       if (!res.ok) return new Map();
       const data = await res.json();
@@ -54,6 +62,21 @@ export function useWeatherForecast(lat?: number | null, lng?: number | null) {
       const dates: string[] = data.daily?.time || [];
       const codes: number[] = data.daily?.weathercode || [];
       const precip: number[] = data.daily?.precipitation_sum || [];
+      const tempMax: number[] = data.daily?.temperature_2m_max || [];
+      const tempMin: number[] = data.daily?.temperature_2m_min || [];
+
+      // Build hourly rain lookup per date
+      const hourlyTimes: string[] = data.hourly?.time || [];
+      const hourlyPrecip: number[] = data.hourly?.precipitation || [];
+      const rainStartByDate = new Map<string, number>();
+      for (let i = 0; i < hourlyTimes.length; i++) {
+        const d = hourlyTimes[i].slice(0, 10);
+        if (!rainStartByDate.has(d) && (hourlyPrecip[i] || 0) > 0.1) {
+          const hour = parseInt(hourlyTimes[i].slice(11, 13), 10);
+          rainStartByDate.set(d, hour);
+        }
+      }
+
       dates.forEach((date, i) => {
         const info = WEATHER_INFO[codes[i]] || { label: "Unknown", icon: "" };
         map.set(date, {
@@ -63,6 +86,9 @@ export function useWeatherForecast(lat?: number | null, lng?: number | null) {
           ...info,
           isRainDay: RAIN_CODES.has(codes[i]) || (precip[i] || 0) > HEAVY_PRECIP_MM,
           isStormDay: STORM_CODES.has(codes[i]),
+          tempHighF: cToF(tempMax[i] ?? 0),
+          tempLowF: cToF(tempMin[i] ?? 0),
+          rainStartHour: rainStartByDate.get(date) ?? null,
         });
       });
       return map;
