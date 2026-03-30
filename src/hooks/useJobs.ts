@@ -166,7 +166,7 @@ export function useJobs() {
     return data?.id;
   };
 
-  const syncAssignmentHoursToJob = async (jobId: string, newEstimatedHours: number | null) => {
+  const syncAssignmentHoursToJob = async (jobId: string, newEstimatedHours: number | null, oldEstimatedHours: number | null = null) => {
     if (!newEstimatedHours || newEstimatedHours <= 0) return;
     const jobAssignments = assignments.filter(a => a.job_id === jobId);
     if (jobAssignments.length === 0) return;
@@ -182,6 +182,12 @@ export function useJobs() {
             return Math.max(1, Math.round((e.getTime() - s.getTime()) / 86400000) + 1);
           })())
         : 1;
+
+      // Only auto-update if: hours are 0, or hours match the old estimated (not manually overridden)
+      const wasAutoFilled = a.assigned_hours <= 0
+        || (oldEstimatedHours && Math.abs(a.assigned_hours - oldEstimatedHours) < 0.01);
+      if (!wasAutoFilled) continue;
+
       const hpd = Math.round((newEstimatedHours / dayCount) * 10) / 10;
       const totalHrs = hpd * dayCount;
       await supabase.from("job_assignments").update({
@@ -192,15 +198,16 @@ export function useJobs() {
   };
 
   const updateJob = async (id: string, updates: Partial<Job>) => {
+    const oldJob = jobs.find(j => j.id === id);
     const { error } = await supabase.from("jobs").update(updates).eq("id", id);
     if (error) {
       toast.error(error.message);
       return;
     }
 
-    // If estimated_hours changed, sync all assignments
+    // If estimated_hours changed, sync all assignments (preserve manually set hours)
     if (updates.estimated_hours !== undefined) {
-      await syncAssignmentHoursToJob(id, updates.estimated_hours ?? null);
+      await syncAssignmentHoursToJob(id, updates.estimated_hours ?? null, oldJob?.estimated_hours ?? null);
     }
 
     fetchAll();
@@ -389,16 +396,35 @@ export function useJobs() {
   };
 
   const assignWorker = async (jobId: string, workerId: string, workerName: string, workerType: string, assignedHours: number = 0, hoursPerDay: number = 0, assignedDays: string[] | null = null) => {
+    // Auto-fill from job's estimated_hours if no hours provided
+    let finalHours = assignedHours;
+    let finalHpd = hoursPerDay;
+    if (finalHours <= 0) {
+      const job = jobs.find(j => j.id === jobId);
+      if (job?.estimated_hours && job.estimated_hours > 0) {
+        const isMultiDay = job.end_date && job.end_date !== job.start_date;
+        const dayCount = isMultiDay
+          ? (assignedDays?.length || (() => {
+              const s = new Date(job.start_date);
+              const e = new Date(job.end_date!);
+              return Math.max(1, Math.round((e.getTime() - s.getTime()) / 86400000) + 1);
+            })())
+          : 1;
+        finalHpd = Math.round((job.estimated_hours / dayCount) * 10) / 10;
+        finalHours = finalHpd * dayCount;
+      }
+    }
+
     const { error } = await supabase.from("job_assignments").insert({
       job_id: jobId, worker_id: workerId, worker_name: workerName, worker_type: workerType,
-      assigned_hours: assignedHours, hours_per_day: hoursPerDay, assigned_days: assignedDays,
+      assigned_hours: finalHours, hours_per_day: finalHpd, assigned_days: assignedDays,
     } as any);
     if (error) {
       toast.error(error.message);
       return;
     }
 
-    await syncAssignmentToTimesheets(jobId, workerId, workerName, workerType, assignedHours);
+    await syncAssignmentToTimesheets(jobId, workerId, workerName, workerType, finalHours);
 
     toast.success("Worker assigned");
     fetchAll();
