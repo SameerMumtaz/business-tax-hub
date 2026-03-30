@@ -166,7 +166,7 @@ export function useJobs() {
     return data?.id;
   };
 
-  const syncAssignmentHoursToJob = async (jobId: string, newEstimatedHours: number | null) => {
+  const syncAssignmentHoursToJob = async (jobId: string, newEstimatedHours: number | null, oldEstimatedHours: number | null = null) => {
     if (!newEstimatedHours || newEstimatedHours <= 0) return;
     const jobAssignments = assignments.filter(a => a.job_id === jobId);
     if (jobAssignments.length === 0) return;
@@ -182,6 +182,12 @@ export function useJobs() {
             return Math.max(1, Math.round((e.getTime() - s.getTime()) / 86400000) + 1);
           })())
         : 1;
+
+      // Only auto-update if: hours are 0, or hours match the old estimated (not manually overridden)
+      const wasAutoFilled = a.assigned_hours <= 0
+        || (oldEstimatedHours && Math.abs(a.assigned_hours - oldEstimatedHours) < 0.01);
+      if (!wasAutoFilled) continue;
+
       const hpd = Math.round((newEstimatedHours / dayCount) * 10) / 10;
       const totalHrs = hpd * dayCount;
       await supabase.from("job_assignments").update({
