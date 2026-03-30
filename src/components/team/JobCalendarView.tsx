@@ -268,8 +268,9 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
   // Filter state
   const [filterCrewId, setFilterCrewId] = useState<string>("all");
   const [filterSiteId, setFilterSiteId] = useState<string>("all");
+  const [filterJobTitle, setFilterJobTitle] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
-  const hasActiveFilters = filterCrewId !== "all" || filterSiteId !== "all";
+  const hasActiveFilters = filterCrewId !== "all" || filterSiteId !== "all" || filterJobTitle !== "all";
 
   // Snapshot tracking for undo
   const jobSnapshotsRef = useRef<Map<string, { start_date: string; start_time: string | null; end_date: string | null }>>(new Map());
