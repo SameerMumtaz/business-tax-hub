@@ -570,18 +570,6 @@ export default function CrewDashboardPage() {
           <QuickStats checkins={checkins} payRate={payRate} jobs={assignedJobs} />
         )}
 
-        {/* Optimize Route Button */}
-        {!loading && !activeCheckin && todayJobs.length >= 2 && (
-          <Button
-            variant="outline"
-            className="w-full gap-2 border-primary/30 hover:bg-primary/5"
-            onClick={handleOptimizeRoute}
-            disabled={routeLoading}
-          >
-            <Navigation className="h-4 w-4 text-primary" />
-            Optimize Today's Route
-          </Button>
-        )}
 
         {/* Active Check-in Card */}
         {activeCheckin && (
@@ -654,7 +642,18 @@ export default function CrewDashboardPage() {
                 <UserCircle className="h-4 w-4 shrink-0" /> <span className="truncate text-xs sm:text-sm">{t("tab.profile")}</span>
               </TabsTrigger>
             </TabsList>
-            <TabsContent value="list" className="mt-4">
+            <TabsContent value="list" className="mt-4 space-y-4">
+              {!activeCheckin && todayJobs.length >= 2 && (
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 border-primary/30 hover:bg-primary/5"
+                  onClick={handleOptimizeRoute}
+                  disabled={routeLoading}
+                >
+                  <Navigation className="h-4 w-4 text-primary" />
+                  Optimize Today's Route
+                </Button>
+              )}
               <CrewJobsList jobs={assignedJobs} activeCheckin={activeCheckin} gpsLoading={gpsLoading} onCheckIn={handleCheckIn} checkins={checkins} />
             </TabsContent>
             <TabsContent value="calendar" className="mt-4">
