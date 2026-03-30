@@ -42,9 +42,9 @@ function minutesToTime(m: number): string {
   return `${String(h).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
 }
 
-/** Snap to nearest 5 minutes */
+/** Snap up to nearest 5 minutes (consistent with client-side ceil) */
 function snapTo5(minutes: number): number {
-  return Math.round(minutes / 5) * 5;
+  return Math.ceil(minutes / 5) * 5;
 }
 
 Deno.serve(async (req) => {
