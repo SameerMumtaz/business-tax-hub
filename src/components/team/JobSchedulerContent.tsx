@@ -653,6 +653,12 @@ export default function JobSchedulerContent() {
       }
     }
 
+    // Cascade recalculate subsequent jobs on the same day
+    if (newJobId && jobStart) {
+      await refetch();
+      setTimeout(() => runCascade(newJobId, jobStart), 500);
+    }
+
     setJobOpen(false);
     setJobTitle(""); setJobSiteId(""); setJobType("one_time");
     setJobStart(""); setJobEnd(""); setJobInterval(""); setJobDesc("");
