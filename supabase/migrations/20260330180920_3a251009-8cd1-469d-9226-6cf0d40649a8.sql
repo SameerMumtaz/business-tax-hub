@@ -1,0 +1,1 @@
+ALTER TABLE public.client_contacts ADD COLUMN priority integer NOT NULL DEFAULT 0;
