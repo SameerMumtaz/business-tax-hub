@@ -567,7 +567,88 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
   };
   const getDayHours = (dateStr: string) => (jobsByDate.get(dateStr) || []).reduce((s, j) => s + (j.estimated_hours || 2), 0);
 
+  // ── Crew Utilization Bars ──
+  const crewUtilization = useMemo(() => {
+    if (viewMode !== "week") return [];
+    const crewMap = new Map<string, { name: string; hours: number }>();
+    weekDays.forEach((day) => {
+      const dateStr = toDateStr(day);
+      const dayJobs = jobsByDate.get(dateStr) || [];
+      dayJobs.forEach((job) => {
+        const jobAssigns = assignments.filter((a) => a.job_id === job.id);
+        const hoursPerWorker = (job.estimated_hours || 2) / Math.max(1, jobAssigns.length || 1);
+        jobAssigns.forEach((a) => {
+          const existing = crewMap.get(a.worker_id) || { name: a.worker_name.split(" ")[0], hours: 0 };
+          existing.hours += hoursPerWorker;
+          crewMap.set(a.worker_id, existing);
+        });
+        if (jobAssigns.length === 0) {
+          // Unassigned jobs don't count toward anyone
+        }
+      });
+    });
+    return Array.from(crewMap.entries())
+      .map(([id, data]) => ({ id, ...data }))
+      .sort((a, b) => b.hours - a.hours);
+  }, [viewMode, weekDays, jobsByDate, assignments]);
 
+  // ── Weekly Revenue Ticker ──
+  const weekRevenue = useMemo(() => {
+    if (viewMode !== "week") return null;
+    let total = 0;
+    const seen = new Set<string>();
+    weekDays.forEach((day) => {
+      const dateStr = toDateStr(day);
+      const dayJobs = jobsByDate.get(dateStr) || [];
+      dayJobs.forEach((job) => {
+        // For recurring jobs, count price per occurrence
+        if (job.job_type === "recurring") {
+          total += job.price || 0;
+        } else if (!seen.has(job.id)) {
+          seen.add(job.id);
+          total += job.price || 0;
+        }
+      });
+    });
+    return total;
+  }, [viewMode, weekDays, jobsByDate]);
+
+  // ── Smart Conflict Detection (persistent, not just during drag) ──
+  const persistentConflicts = useMemo(() => {
+    if (viewMode !== "week") return new Map<string, string>();
+    const conflictMap = new Map<string, string>(); // jobId-dateStr → conflict message
+    weekDays.forEach((day) => {
+      const dateStr = toDateStr(day);
+      const dayJobs = sortJobs(jobsByDate.get(dateStr) || []);
+      for (let i = 0; i < dayJobs.length; i++) {
+        const jobA = dayJobs[i];
+        if (!jobA.start_time) continue;
+        const aAssigns = assignments.filter((a) => a.job_id === jobA.id);
+        const aCrewIds = new Set(aAssigns.map((a) => a.worker_id));
+        const [hA, mA] = jobA.start_time.split(":").map(Number);
+        const aStart = hA * 60 + mA;
+        const aEnd = aStart + Math.round((jobA.estimated_hours || 1) * 60);
+
+        for (let j = i + 1; j < dayJobs.length; j++) {
+          const jobB = dayJobs[j];
+          if (!jobB.start_time) continue;
+          const bAssigns = assignments.filter((a) => a.job_id === jobB.id);
+          const overlap = bAssigns.filter((a) => aCrewIds.has(a.worker_id));
+          if (overlap.length === 0) continue;
+
+          const [hB, mB] = jobB.start_time.split(":").map(Number);
+          const bStart = hB * 60 + mB;
+
+          if (aEnd > bStart) {
+            const msg = `${overlap.map(a => a.worker_name.split(" ")[0]).join(", ")} double-booked`;
+            conflictMap.set(`${jobA.id}-${dateStr}`, msg);
+            conflictMap.set(`${jobB.id}-${dateStr}`, msg);
+          }
+        }
+      }
+    });
+    return conflictMap;
+  }, [viewMode, weekDays, jobsByDate, assignments]);
 
   const dayHeaders = isMobile ? ["M", "T", "W", "T", "F", "S", "S"] : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
