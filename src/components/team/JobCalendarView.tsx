@@ -987,6 +987,91 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Rebalance Preview Dialog */}
+      {showRebalancePreview && rebalancePlan && onRebalanceWeek && (() => {
+        const RebalancePreviewDialog = require("@/components/team/RebalancePreviewDialog").default;
+        return null;
+      })()}
+      {showRebalancePreview && rebalancePlan && onRebalanceWeek && (
+        <Dialog open={showRebalancePreview} onOpenChange={(v) => { if (!v) { setShowRebalancePreview(false); setRebalancePlan(null); } }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Scale className="h-5 w-5 text-primary" />
+                Rebalance Preview
+              </DialogTitle>
+              <DialogDescription>
+                {rebalancePlan.moves.length} job{rebalancePlan.moves.length !== 1 ? "s" : ""} will be redistributed across the week.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-6">
+                {["Before", "After"].map((label) => {
+                  const data = label === "Before" ? rebalancePlan.dayHoursBefore : rebalancePlan.dayHoursAfter;
+                  const maxH = Math.max(...rebalancePlan.dayHoursBefore.map(d => d.hours), ...rebalancePlan.dayHoursAfter.map(d => d.hours), rebalancePlan.targetMax, 1);
+                  return (
+                    <div key={label}>
+                      <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">{label}</p>
+                      <div className="space-y-2">
+                        {data.map(d => (
+                          <div key={d.dateStr} className="flex items-center gap-2">
+                            <span className="text-[11px] font-medium w-8 text-right text-muted-foreground">{d.dayLabel}</span>
+                            <div className="flex-1 h-5 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className={cn("h-full rounded-full transition-all", d.hours > rebalancePlan.targetMax ? "bg-destructive" : label === "After" ? "bg-emerald-500" : "bg-primary")}
+                                style={{ width: `${Math.max(2, (d.hours / maxH) * 100)}%` }}
+                              />
+                            </div>
+                            <span className={cn("text-[11px] font-mono w-10 text-right", d.hours > rebalancePlan.targetMax ? "text-destructive font-bold" : label === "After" ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>{d.hours.toFixed(1)}h</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                <div className="h-px flex-1 border-t border-dashed border-muted-foreground/30" />
+                <span>Target max: {rebalancePlan.targetMax.toFixed(1)}h / day</span>
+                <div className="h-px flex-1 border-t border-dashed border-muted-foreground/30" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">Changes</p>
+                <div className="max-h-[150px] overflow-y-auto space-y-1">
+                  {rebalancePlan.moves.map((m, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm py-1.5 px-2 rounded bg-muted/50">
+                      <span className="font-medium truncate flex-1">{m.title}</span>
+                      <span className="text-[11px] font-mono text-muted-foreground">{m.hours}h</span>
+                      <span className="text-xs text-muted-foreground">{m.fromDate}</span>
+                      <span className="text-xs text-muted-foreground">→</span>
+                      <span className="text-xs font-medium text-primary">{m.toDate}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setShowRebalancePreview(false); setRebalancePlan(null); }} disabled={rebalanceLoading}>Cancel</Button>
+              <Button
+                disabled={rebalanceLoading}
+                onClick={async () => {
+                  setRebalanceLoading(true);
+                  const ws = toDateStr(weekDays[0]);
+                  const we = toDateStr(weekDays[weekDays.length - 1]);
+                  await onRebalanceWeek(ws, we);
+                  setRebalanceLoading(false);
+                  setShowRebalancePreview(false);
+                  setRebalancePlan(null);
+                }}
+              >
+                <Scale className="h-4 w-4 mr-2" />
+                {rebalanceLoading ? "Rebalancing…" : `Apply ${rebalancePlan.moves.length} changes`}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 }
