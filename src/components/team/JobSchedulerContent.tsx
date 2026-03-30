@@ -1296,6 +1296,8 @@ export default function JobSchedulerContent() {
               const formattedDate = parseD(newDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
               toast.success(`"${job.title}" ${resolvedTime ? 'rescheduled' : 'moved'} to ${formattedDate}${resolvedTime ? ' at ' + resolvedTime : ''}`);
               await notifyAssignedCrew(jobId, job.title, `This job has been ${resolvedTime ? 'rescheduled' : 'moved'} to ${formattedDate}${resolvedTime ? ' at ' + resolvedTime : ''}.`);
+              await refetch();
+              setTimeout(() => runCascade(jobId, newDate), 500);
             }}
             onDiscardEdits={async (revertData) => {
               for (const { jobId, updates } of revertData) {
