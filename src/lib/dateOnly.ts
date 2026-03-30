@@ -156,12 +156,18 @@ export function getNextInstanceDate(job: {
   let cursor = job.start_date;
 
   while (compareDateOnly(cursor, todayKey) < 0 && compareDateOnly(cursor, horizon) <= 0) {
-    if (job.recurring_interval === "monthly") {
-      cursor = addMonthsToDateOnly(cursor, 1);
-    } else if (job.recurring_interval === "weekly") {
+    if (job.recurring_interval === "weekly") {
       cursor = addDaysToDateOnly(cursor, 7);
     } else if (job.recurring_interval === "biweekly") {
       cursor = addDaysToDateOnly(cursor, 14);
+    } else if (job.recurring_interval === "monthly") {
+      cursor = addMonthsToDateOnly(cursor, 1);
+    } else if (job.recurring_interval === "quarterly") {
+      cursor = addMonthsToDateOnly(cursor, 3);
+    } else if (job.recurring_interval === "biannual") {
+      cursor = addMonthsToDateOnly(cursor, 6);
+    } else if (job.recurring_interval === "annual") {
+      cursor = addMonthsToDateOnly(cursor, 12);
     } else {
       break;
     }
