@@ -49,6 +49,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const locations: Location[] = body.locations;
+    console.log("route-matrix: received", locations?.length, "locations");
 
     if (!locations || !Array.isArray(locations) || locations.length < 2) {
       return new Response(JSON.stringify({ error: "At least 2 locations required" }), {
