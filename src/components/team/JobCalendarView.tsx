@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import FilterCombobox from "@/components/FilterCombobox";
 import { ChevronLeft, ChevronRight, Clock, MapPin, AlertTriangle, Sparkles, GripVertical, Lock, Unlock, Copy, RefreshCw, Undo2, Save, Trash2, Filter, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -640,20 +641,24 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     return list.sort((a, b) => a.name.localeCompare(b.name));
   }, [assignments]);
 
-  const siteOptions = useMemo(() => {
-    return sites.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const siteFilterOptions = useMemo(() => {
+    return sites.slice().sort((a, b) => a.name.localeCompare(b.name)).map((s) => ({
+      value: s.id,
+      label: s.name,
+      sublabel: [s.address, s.city, s.state].filter(Boolean).join(", ") || undefined,
+    }));
   }, [sites]);
 
-  const jobTitleOptions = useMemo(() => {
+  const jobTitleFilterOptions = useMemo(() => {
     const seen = new Set<string>();
-    const list: string[] = [];
+    const list: { value: string; label: string }[] = [];
     for (const j of jobs) {
       if (!seen.has(j.title)) {
         seen.add(j.title);
-        list.push(j.title);
+        list.push({ value: j.title, label: j.title });
       }
     }
-    return list.sort((a, b) => a.localeCompare(b));
+    return list.sort((a, b) => a.label.localeCompare(b.label));
   }, [jobs]);
 
   const clearFilters = () => { setFilterCrewId("all"); setFilterSiteId("all"); setFilterJobTitle("all"); };
@@ -698,39 +703,30 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
 
           {showFilters && (
             <div className="flex items-center gap-2 mb-3 flex-wrap">
-              <Select value={filterCrewId} onValueChange={setFilterCrewId}>
-                <SelectTrigger className="h-8 w-[180px] text-xs">
-                  <SelectValue placeholder="All crew" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All crew members</SelectItem>
-                  {crewOptions.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={filterSiteId} onValueChange={setFilterSiteId}>
-                <SelectTrigger className="h-8 w-[180px] text-xs">
-                  <SelectValue placeholder="All sites" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All sites</SelectItem>
-                  {siteOptions.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={filterJobTitle} onValueChange={setFilterJobTitle}>
-                <SelectTrigger className="h-8 w-[180px] text-xs">
-                  <SelectValue placeholder="All jobs/services" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All jobs / services</SelectItem>
-                  {jobTitleOptions.map((t) => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <FilterCombobox
+                options={crewOptions.map((c) => ({ value: c.id, label: c.name }))}
+                value={filterCrewId}
+                onSelect={setFilterCrewId}
+                allLabel="All crew members"
+                placeholder="Search crew…"
+                className="w-[180px]"
+              />
+              <FilterCombobox
+                options={siteFilterOptions}
+                value={filterSiteId}
+                onSelect={setFilterSiteId}
+                allLabel="All sites"
+                placeholder="Search sites…"
+                className="w-[200px]"
+              />
+              <FilterCombobox
+                options={jobTitleFilterOptions}
+                value={filterJobTitle}
+                onSelect={setFilterJobTitle}
+                allLabel="All jobs / services"
+                placeholder="Search jobs…"
+                className="w-[200px]"
+              />
               {hasActiveFilters && (
                 <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" onClick={clearFilters}>
                   <X className="h-3.5 w-3.5 mr-1" />Clear filters
@@ -749,7 +745,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
               )}
               {filterSiteId !== "all" && (
                 <Badge variant="secondary" className="text-xs gap-1 cursor-pointer" onClick={() => setFilterSiteId("all")}>
-                  {siteOptions.find((s) => s.id === filterSiteId)?.name || "Site"}
+                  {siteFilterOptions.find((s) => s.value === filterSiteId)?.label || "Site"}
                   <X className="h-3 w-3" />
                 </Badge>
               )}
