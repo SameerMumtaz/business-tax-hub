@@ -6,12 +6,13 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import JobBudgetFields from "@/components/job/JobBudgetFields";
-import { Plus, Pencil, Trash2, Briefcase, Clock, DollarSign, Users } from "lucide-react";
+import { Plus, Pencil, Trash2, Briefcase, Clock, DollarSign, Users, Repeat } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 
 export default function ServicesContent() {
@@ -45,11 +46,11 @@ export default function ServicesContent() {
   const [laborHours, setLaborHours] = useState("");
   const [laborRate, setLaborRate] = useState("");
   const [selectedCrew, setSelectedCrew] = useState<{ worker_id: string; worker_name: string }[]>([]);
-
+  const [recurrence, setRecurrence] = useState("");
   const resetForm = () => {
     setTitle(""); setDescription(""); setEstHours(""); setPrice("");
     setMaterialBudget(""); setLaborType("amount"); setLaborAmount("");
-    setLaborHours(""); setLaborRate(""); setSelectedCrew([]);
+    setLaborHours(""); setLaborRate(""); setSelectedCrew([]); setRecurrence("");
     setEditing(null);
   };
 
@@ -67,6 +68,7 @@ export default function ServicesContent() {
     setLaborHours(t.labor_budget_hours ? String(t.labor_budget_hours) : "");
     setLaborRate(t.labor_budget_rate ? String(t.labor_budget_rate) : "");
     setSelectedCrew(t.default_crew || []);
+    setRecurrence(t.recurrence_interval || "");
     setDialogOpen(true);
   };
 
@@ -82,6 +84,7 @@ export default function ServicesContent() {
       labor_budget_amount: Number(laborAmount) || 0,
       labor_budget_hours: Number(laborHours) || 0,
       labor_budget_rate: Number(laborRate) || 0,
+      recurrence_interval: recurrence && recurrence !== "none" ? recurrence : null,
       default_crew: selectedCrew,
     };
     if (editing) {
@@ -163,6 +166,11 @@ export default function ServicesContent() {
                       <Clock className="h-3 w-3" />{t.estimated_hours}h
                     </Badge>
                   )}
+                  {t.recurrence_interval && (
+                    <Badge variant="secondary" className="gap-1">
+                      <Repeat className="h-3 w-3" />{t.recurrence_interval}
+                    </Badge>
+                  )}
                   {t.default_crew.length > 0 && (
                     <Badge variant="secondary" className="gap-1">
                       <Users className="h-3 w-3" />{t.default_crew.length} crew
@@ -188,6 +196,23 @@ export default function ServicesContent() {
               <Input type="number" min="0.5" step="0.5" placeholder="e.g. 4" value={estHours} onChange={(e) => setEstHours(e.target.value)} />
             </div>
 
+            <div>
+              <label className="text-xs text-muted-foreground">Recurrence</label>
+              <Select value={recurrence} onValueChange={setRecurrence}>
+                <SelectTrigger>
+                  <SelectValue placeholder="One-time (no recurrence)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">One-time (no recurrence)</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="quarterly">Quarterly</SelectItem>
+                  <SelectItem value="biannual">Bi-annual</SelectItem>
+                  <SelectItem value="annual">Annual</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <JobBudgetFields
               price={price} materialBudget={materialBudget}
               laborBudgetType={laborType} laborBudgetAmount={laborAmount}

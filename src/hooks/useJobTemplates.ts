@@ -15,6 +15,7 @@ export interface JobTemplate {
   labor_budget_amount: number;
   labor_budget_hours: number;
   labor_budget_rate: number;
+  recurrence_interval: string | null;
   default_crew: { worker_id: string; worker_name: string }[];
   created_at: string;
   updated_at: string;
@@ -55,6 +56,7 @@ export function useJobTemplates() {
       labor_budget_amount: t.labor_budget_amount,
       labor_budget_hours: t.labor_budget_hours,
       labor_budget_rate: t.labor_budget_rate,
+      recurrence_interval: t.recurrence_interval,
       default_crew: t.default_crew as any,
     });
     if (error) { toast.error("Failed to create template"); return; }

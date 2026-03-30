@@ -883,6 +883,7 @@ export type Database = {
           labor_budget_type: string
           material_budget: number
           price: number
+          recurrence_interval: string | null
           title: string
           updated_at: string
           user_id: string
@@ -899,6 +900,7 @@ export type Database = {
           labor_budget_type?: string
           material_budget?: number
           price?: number
+          recurrence_interval?: string | null
           title: string
           updated_at?: string
           user_id: string
@@ -915,6 +917,7 @@ export type Database = {
           labor_budget_type?: string
           material_budget?: number
           price?: number
+          recurrence_interval?: string | null
           title?: string
           updated_at?: string
           user_id?: string

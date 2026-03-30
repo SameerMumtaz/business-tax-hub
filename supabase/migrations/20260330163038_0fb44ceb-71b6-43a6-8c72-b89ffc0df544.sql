@@ -1,0 +1,1 @@
+ALTER TABLE public.job_templates ADD COLUMN recurrence_interval text DEFAULT null;
