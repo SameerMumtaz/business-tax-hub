@@ -937,6 +937,48 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
             </div>
           )}
 
+          {/* ── Weekly Stats Bar: Revenue + Crew Utilization ── */}
+          {viewMode === "week" && (crewUtilization.length > 0 || (weekRevenue != null && weekRevenue > 0)) && (
+            <div className="mb-3 rounded-lg border border-border bg-muted/30 px-3 py-2 space-y-2">
+              {/* Revenue ticker */}
+              {weekRevenue != null && weekRevenue > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Week Revenue</span>
+                  <span className="text-sm font-bold text-foreground">${weekRevenue.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                </div>
+              )}
+              {/* Crew utilization bars */}
+              {crewUtilization.length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Crew Load</span>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                    {crewUtilization.map((crew) => {
+                      const cap = 40; // weekly capacity hours
+                      const pct = Math.min(100, (crew.hours / cap) * 100);
+                      const isOver = crew.hours > cap;
+                      const isHeavy = crew.hours > 32;
+                      return (
+                        <div key={crew.id} className="flex items-center gap-2 min-w-[140px]" title={`${crew.name}: ${crew.hours.toFixed(1)}h / ${cap}h`}>
+                          <span className="text-[11px] font-medium text-foreground w-16 truncate">{crew.name}</span>
+                          <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden min-w-[60px]">
+                            <div
+                              className={cn(
+                                "h-full rounded-full transition-all",
+                                isOver ? "bg-destructive" : isHeavy ? "bg-amber-500" : "bg-primary"
+                              )}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className={cn("text-[10px] font-mono tabular-nums", isOver ? "text-destructive font-bold" : "text-muted-foreground")}>{crew.hours.toFixed(1)}h</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {viewMode === "week" ? renderWeekView() : renderMonthView()}
         </CardContent>
       </Card>
