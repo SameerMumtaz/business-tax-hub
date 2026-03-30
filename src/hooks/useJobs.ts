@@ -480,6 +480,19 @@ export function useJobs() {
 
     await syncAssignmentToTimesheets(jobId, workerId, workerName, workerType, finalHours);
 
+    // Notify the crew member via their crew channel
+    if (user) {
+      const job = jobs.find(j => j.id === jobId);
+      if (job) {
+        const siteName = sites.find(s => s.id === job.site_id)?.name;
+        await notifyCrewOfJobChange(user.id, [workerId], "created", {
+          jobId, jobTitle: job.title, siteName,
+          startDate: job.start_date, startTime: job.start_time,
+          estimatedHours: finalHours || job.estimated_hours,
+        });
+      }
+    }
+
     toast.success("Worker assigned");
     fetchAll();
   };
