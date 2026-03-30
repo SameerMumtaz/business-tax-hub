@@ -6,6 +6,7 @@ import { useCrewCheckins } from "@/hooks/useCrewCheckins";
 import { useGeofenceMonitor } from "@/hooks/useGeofenceMonitor";
 import { useJobPhotos } from "@/hooks/useJobPhotos";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useRouteOptimization, type OptimizedRoute } from "@/hooks/useRouteOptimization";
 import { getCurrentPosition, isWithinGeofence, haversineDistance } from "@/lib/geofence";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import { CheckCircle, Clock, LogOut, List, CalendarDays, MapPin as MapIcon, LogOut as SignOutIcon, UserCircle, AlertTriangle, Camera, Briefcase, DollarSign, Timer } from "lucide-react";
+import { CheckCircle, Clock, LogOut, List, CalendarDays, MapPin as MapIcon, LogOut as SignOutIcon, UserCircle, AlertTriangle, Camera, Briefcase, DollarSign, Timer, Navigation } from "lucide-react";
 import { toast } from "sonner";
 
 import CrewJobsList, { type AssignedJob } from "@/components/crew/CrewJobsList";
@@ -21,6 +22,7 @@ import CrewCalendarView from "@/components/crew/CrewCalendarView";
 import CrewMapView from "@/components/crew/CrewMapView";
 import CrewProfileTab from "@/components/crew/CrewProfileTab";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
+import RouteOptimizationDialog from "@/components/route/RouteOptimizationDialog";
 import { parseDateOnlyLocal, getTodayDateOnlyKey, getNextInstanceDate, isRecurringJobToday, addDaysToDateOnly, compareDateOnly } from "@/lib/dateOnly";
 
 /* ── Live elapsed timer ─────────────────────────────── */
@@ -129,11 +131,15 @@ export default function CrewDashboardPage() {
   const { t } = useLanguage();
   const greeting = useGreeting();
   const { checkins, activeCheckin, checkIn, checkOut, refetch } = useCrewCheckins();
+  const { loading: routeLoading, optimizeRoute, submitRequest } = useRouteOptimization();
   const [assignedJobs, setAssignedJobs] = useState<AssignedJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [gpsLoading, setGpsLoading] = useState<string | null>(null);
   const [payRate, setPayRate] = useState<number | null>(null);
   const [firstName, setFirstName] = useState<string | null>(null);
+  const [routeDialogOpen, setRouteDialogOpen] = useState(false);
+  const [optimizedRoute, setOptimizedRoute] = useState<OptimizedRoute | null>(null);
+  const [routeSubmitting, setRouteSubmitting] = useState(false);
 
   // Unified explanation dialog state
   const [explanationDialogOpen, setExplanationDialogOpen] = useState(false);
@@ -449,6 +455,77 @@ export default function CrewDashboardPage() {
 
   const activeJob = activeCheckin ? assignedJobs.find((j) => j.id === activeCheckin.job_id) : null;
 
+  /* ── Route Optimization ──────────────────────────── */
+  const todayKey = getTodayDateOnlyKey();
+  const todayJobs = useMemo(() => {
+    return assignedJobs.filter((j) => {
+      const instanceDate = getNextInstanceDate(j);
+      return instanceDate === todayKey && j.status !== "completed";
+    }).sort((a, b) => {
+      if (a.start_time && b.start_time) return a.start_time.localeCompare(b.start_time);
+      return 0;
+    });
+  }, [assignedJobs, todayKey]);
+
+  const handleOptimizeRoute = async () => {
+    if (todayJobs.length < 2) {
+      toast.error("Need at least 2 jobs today to optimize route");
+      return;
+    }
+
+    setRouteDialogOpen(true);
+    setOptimizedRoute(null);
+
+    try {
+      const pos = await getCurrentPosition();
+      const currentLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+
+      const siteMap = new Map<string, { id: string; name: string; lat: number; lng: number }>();
+      for (const job of todayJobs) {
+        if (job.site.latitude && job.site.longitude) {
+          siteMap.set(job.site.id, {
+            id: job.site.id,
+            name: job.site.name,
+            lat: job.site.latitude,
+            lng: job.site.longitude,
+          });
+        }
+      }
+
+      const routeJobs = todayJobs.map((j) => ({
+        id: j.id,
+        title: j.title,
+        site_id: j.site.id,
+        start_time: j.start_time,
+        estimated_hours: j.expectedHours,
+      }));
+
+      const result = await optimizeRoute(currentLoc, routeJobs, siteMap);
+      setOptimizedRoute(result);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to get location");
+      setRouteDialogOpen(false);
+    }
+  };
+
+  const handleSubmitRoute = async () => {
+    if (!optimizedRoute || !teamMemberId || !businessUserId) return;
+    setRouteSubmitting(true);
+    try {
+      const pos = await getCurrentPosition();
+      const success = await submitRequest(
+        teamMemberId,
+        businessUserId,
+        todayKey,
+        pos.coords.latitude,
+        pos.coords.longitude,
+        optimizedRoute,
+      );
+      if (success) setRouteDialogOpen(false);
+    } catch {}
+    setRouteSubmitting(false);
+  };
+
   const reasonLabels: Record<ExplanationReason, { title: string; desc: string; placeholder: string }> = {
     lateCheckin: { title: t("explain.lateCheckin"), desc: t("explain.lateCheckinDesc"), placeholder: t("explain.lateCheckinPlaceholder") },
     earlyCheckout: { title: t("explain.earlyCheckout"), desc: t("explain.earlyCheckoutDesc"), placeholder: t("explain.earlyCheckoutPlaceholder") },
@@ -477,6 +554,19 @@ export default function CrewDashboardPage() {
         {/* Quick Stats */}
         {!loading && (
           <QuickStats checkins={checkins} payRate={payRate} jobs={assignedJobs} />
+        )}
+
+        {/* Optimize Route Button */}
+        {!loading && !activeCheckin && todayJobs.length >= 2 && (
+          <Button
+            variant="outline"
+            className="w-full gap-2 border-primary/30 hover:bg-primary/5"
+            onClick={handleOptimizeRoute}
+            disabled={routeLoading}
+          >
+            <Navigation className="h-4 w-4 text-primary" />
+            Optimize Today's Route
+          </Button>
         )}
 
         {/* Active Check-in Card */}
@@ -627,6 +717,16 @@ export default function CrewDashboardPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Route Optimization Dialog */}
+      <RouteOptimizationDialog
+        open={routeDialogOpen}
+        onOpenChange={setRouteDialogOpen}
+        route={optimizedRoute}
+        loading={routeLoading}
+        onSubmit={handleSubmitRoute}
+        submitting={routeSubmitting}
+      />
     </div>
   );
 }

@@ -13,6 +13,7 @@ import CheckInProgressWidget from "./CheckInProgressWidget";
 import TodayScheduledVsActual from "./TodayScheduledVsActual";
 import TodayJobs from "@/components/dashboard/TodayJobs";
 import AllCheckinsTable from "./AllCheckinsTable";
+import RouteRequestsPanel from "@/components/route/RouteRequestsPanel";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -322,6 +323,9 @@ export default function CrewMapContent() {
           <Download className="h-4 w-4 mr-2" />Export CSV
         </Button>
       </div>
+
+      {/* Route Optimization Requests */}
+      <RouteRequestsPanel />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="md:col-span-2 lg:col-span-2">

@@ -36,6 +36,7 @@ import ServicesContent from "@/components/team/ServicesContent";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import RouteRequestsPanel from "@/components/route/RouteRequestsPanel";
 
 
 function DeleteJobDialog({ job, onDelete }: { job: Job; onDelete: (id: string) => Promise<void> }) {
@@ -1328,7 +1329,8 @@ export default function JobSchedulerContent() {
           <TabsTrigger value="sites">Sites</TabsTrigger>
           <TabsTrigger value="services"><Wrench className="h-3.5 w-3.5 mr-1" />Services</TabsTrigger>
         </TabsList>
-        <TabsContent value="calendar" className="mt-4">
+        <TabsContent value="calendar" className="mt-4 space-y-4">
+          <RouteRequestsPanel onScheduleUpdate={refetch} />
           <JobCalendarView
             jobs={jobs}
             sites={sites}
