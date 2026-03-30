@@ -131,11 +131,15 @@ export default function CrewDashboardPage() {
   const { t } = useLanguage();
   const greeting = useGreeting();
   const { checkins, activeCheckin, checkIn, checkOut, refetch } = useCrewCheckins();
+  const { loading: routeLoading, optimizeRoute, submitRequest } = useRouteOptimization();
   const [assignedJobs, setAssignedJobs] = useState<AssignedJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [gpsLoading, setGpsLoading] = useState<string | null>(null);
   const [payRate, setPayRate] = useState<number | null>(null);
   const [firstName, setFirstName] = useState<string | null>(null);
+  const [routeDialogOpen, setRouteDialogOpen] = useState(false);
+  const [optimizedRoute, setOptimizedRoute] = useState<OptimizedRoute | null>(null);
+  const [routeSubmitting, setRouteSubmitting] = useState(false);
 
   // Unified explanation dialog state
   const [explanationDialogOpen, setExplanationDialogOpen] = useState(false);
