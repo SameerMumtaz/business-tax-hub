@@ -154,15 +154,16 @@ export function useJobs() {
     fetchAll();
   };
 
-  const createJob = async (job: Omit<Job, "id" | "created_at" | "updated_at" | "user_id">) => {
+  const createJob = async (job: Omit<Job, "id" | "created_at" | "updated_at" | "user_id">): Promise<string | undefined> => {
     if (!user) return;
-    const { error } = await supabase.from("jobs").insert({ ...job, user_id: user.id });
+    const { data, error } = await supabase.from("jobs").insert({ ...job, user_id: user.id }).select("id").single();
     if (error) {
       toast.error(error.message);
       return;
     }
     toast.success("Job created");
     fetchAll();
+    return data?.id;
   };
 
   const updateJob = async (id: string, updates: Partial<Job>) => {
