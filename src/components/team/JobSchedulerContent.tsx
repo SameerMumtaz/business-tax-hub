@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
+import { getJobDateKeysInRange } from "@/lib/dateOnly";
 import JobBudgetFields from "@/components/job/JobBudgetFields";
 import CrewAssignmentPanel from "@/components/job/CrewAssignmentPanel";
 import { useJobs, type Job, type JobSite } from "@/hooks/useJobs";
@@ -387,7 +388,19 @@ export default function JobSchedulerContent() {
     return Math.max(10, Math.ceil(drivingMinutes / 5) * 5); // Round up to nearest 5 min, min 10
   }, []);
 
-  // Calculate smart start time when crew has prior jobs on same day
+  // Check if a job occurs on a given date (handles recurring + multi-day)
+  const jobOccursOnDate = useCallback((j: Job, dateStr: string): boolean => {
+    if (j.job_type === "recurring" && j.recurring_interval) {
+      const keys = getJobDateKeysInRange(j, dateStr, dateStr);
+      return keys.includes(dateStr);
+    }
+    // One-time or multi-day: check if dateStr is within [start_date, end_date]
+    if (j.start_date === dateStr) return true;
+    if (j.end_date && j.start_date <= dateStr && j.end_date >= dateStr) return true;
+    return false;
+  }, []);
+
+  // Calculate the earliest valid start time for crew on a given date
   const computeSmartStartTime = useCallback((
     startDate: string,
     newSiteId: string,
@@ -398,8 +411,8 @@ export default function JobSchedulerContent() {
 
     // Find all jobs on the same date that involve any of the crew members
     const sameDayJobs = jobs.filter(j => {
-      if (j.start_date !== startDate) return false;
       if (!j.start_time) return false;
+      if (!jobOccursOnDate(j, startDate)) return false;
       // Check if any crew member is assigned to this job
       const jobAssigns = assignments.filter(a => a.job_id === j.id);
       return jobAssigns.some(a => crewIds.includes(a.worker_id));
@@ -447,28 +460,44 @@ export default function JobSchedulerContent() {
     const hh = String(Math.floor(capped / 60)).padStart(2, "0");
     const mm = String(capped % 60).padStart(2, "0");
     return `${hh}:${mm}`;
-  }, [jobs, assignments, sites, haversineDistance, estimateTravelMinutes]);
+  }, [jobs, assignments, sites, haversineDistance, estimateTravelMinutes, jobOccursOnDate]);
+
+  // Helper to format time for display
+  const formatSmartTime = (time: string) => {
+    const [sh, sm] = time.split(":").map(Number);
+    const ampm = sh >= 12 ? "PM" : "AM";
+    const h12 = sh % 12 || 12;
+    return `${h12}:${String(sm).padStart(2, "0")} ${ampm}`;
+  };
 
   const handleCreateJob = async () => {
     if (!jobTitle.trim() || !jobSiteId || !jobStart) {
       toast.error("Title, site, and start date are required"); return;
     }
 
-    // Smart start time: if no start time specified and there are default crew, calculate it
+    // Always enforce smart scheduling when crew is assigned
     let resolvedStartTime = jobStartTime || null;
-    if (!resolvedStartTime && pendingDefaultCrew.length > 0) {
+    if (pendingDefaultCrew.length > 0) {
       const crewIds = pendingDefaultCrew.map(c => c.worker_id);
       const smart = computeSmartStartTime(jobStart, jobSiteId, crewIds, jobEstHours ? Number(jobEstHours) : null);
       if (smart) {
-        resolvedStartTime = smart;
-        // Format for user-friendly display
-        const [sh, sm] = smart.split(":").map(Number);
-        const ampm = sh >= 12 ? "PM" : "AM";
-        const h12 = sh % 12 || 12;
-        toast.info(`Start time auto-set to ${h12}:${String(sm).padStart(2, "0")} ${ampm} based on crew's prior jobs and travel time`);
+        if (!resolvedStartTime) {
+          // No manual time — auto-set
+          resolvedStartTime = smart;
+          toast.info(`Start time auto-set to ${formatSmartTime(smart)} based on crew's prior jobs and travel time`);
+        } else {
+          // Manual time provided — check if it conflicts (starts before crew is available)
+          const [mh, mm] = resolvedStartTime.split(":").map(Number);
+          const manualMin = mh * 60 + mm;
+          const [sh, smm] = smart.split(":").map(Number);
+          const smartMin = sh * 60 + smm;
+          if (manualMin < smartMin) {
+            resolvedStartTime = smart;
+            toast.warning(`Start time adjusted to ${formatSmartTime(smart)} — crew isn't available until then (prior job + travel time)`);
+          }
+        }
       }
     }
-
     const newJobId = await createJob({
       title: jobTitle, site_id: jobSiteId, start_date: jobStart,
       end_date: jobEnd || null, status: "scheduled", job_type: jobType,
