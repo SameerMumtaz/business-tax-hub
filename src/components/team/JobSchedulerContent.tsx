@@ -518,6 +518,11 @@ export default function JobSchedulerContent() {
                   setJobLaborAmount(t.labor_budget_amount ? String(t.labor_budget_amount) : "");
                   setJobLaborHours(t.labor_budget_hours ? String(t.labor_budget_hours) : "");
                   setJobLaborRate(t.labor_budget_rate ? String(t.labor_budget_rate) : "");
+                  if (t.recurrence_interval) {
+                    setJobType("recurring");
+                    setJobInterval(t.recurrence_interval);
+                  }
+                  setJobBillingInterval(t.billing_interval || "");
                 }}>
                   <SelectTrigger className="border-dashed">
                     <Briefcase className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
