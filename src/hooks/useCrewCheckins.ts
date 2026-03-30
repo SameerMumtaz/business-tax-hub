@@ -237,6 +237,31 @@ export function useCrewCheckins() {
         _job_id: checkin.job_id,
         _new_status: "completed",
       });
+
+      // Trigger early completion schedule shift if applicable
+      if (
+        checkin.expected_hours &&
+        checkin.expected_hours > 0 &&
+        roundedHours >= checkin.expected_hours * 0.5 &&
+        (checkin.expected_hours - roundedHours) * 60 >= 30 &&
+        teamMemberId &&
+        businessUserId
+      ) {
+        try {
+          await supabase.functions.invoke("early-completion-shift", {
+            body: {
+              checkin_id: checkinId,
+              team_member_id: teamMemberId,
+              business_user_id: businessUserId,
+              job_id: checkin.job_id,
+              actual_hours: roundedHours,
+              estimated_hours: checkin.expected_hours,
+            },
+          });
+        } catch (err) {
+          console.warn("Early completion shift failed:", err);
+        }
+      }
     }
 
     if (flagReason) {
