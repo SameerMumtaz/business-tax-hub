@@ -279,6 +279,11 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
   const [deleteConfirmed, setDeleteConfirmed] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Raincheck & Rebalance state
+  const [raincheckDate, setRaincheckDate] = useState<string | null>(null);
+  const [raincheckLoading, setRaincheckLoading] = useState(false);
+  const [rebalanceLoading, setRebalanceLoading] = useState(false);
+
   // Filter state
   const [filterCrewId, setFilterCrewId] = useState<string>("all");
   const [filterSiteId, setFilterSiteId] = useState<string>("all");
