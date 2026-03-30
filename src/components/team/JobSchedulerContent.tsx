@@ -1256,6 +1256,8 @@ export default function JobSchedulerContent() {
                 await updateJob(jobId, updates);
                 toast.success(`"${job.title}" moved to ${computedTime}`);
                 await notifyAssignedCrew(jobId, job.title, `Your job time has been updated to ${computedTime}.`);
+                await refetch();
+                setTimeout(() => runCascade(jobId, newDate), 500);
                 return;
               }
 
