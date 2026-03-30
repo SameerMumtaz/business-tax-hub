@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
+import { notifyCrewOfJobChange } from "@/lib/crewJobNotify";
 import { getJobDateKeysInRange } from "@/lib/dateOnly";
 import JobBudgetFields from "@/components/job/JobBudgetFields";
 import CrewAssignmentPanel from "@/components/job/CrewAssignmentPanel";
@@ -6,7 +7,7 @@ import { useJobs, type Job, type JobSite } from "@/hooks/useJobs";
 import { useClients } from "@/hooks/useClients";
 import { useAuth } from "@/hooks/useAuth";
 import { useJobTemplates } from "@/hooks/useJobTemplates";
-import JobCalendarView, { type JobMoveEvent } from "@/components/team/JobCalendarView";
+import JobCalendarView, { type JobMoveEvent, type RaincheckResult, type RebalanceResult } from "@/components/team/JobCalendarView";
 import { useJobPhotos } from "@/hooks/useJobPhotos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -599,6 +600,182 @@ export default function JobSchedulerContent() {
     }
   }, [jobs, assignments, sites, haversineDistance, estimateTravelMinutes, jobOccursOnDate, updateJobsBatch, formatSmartTime]);
 
+  // ── Raincheck Day ──
+  const handleRaincheckDay = useCallback(async (dateStr: string): Promise<RaincheckResult | null> => {
+    const dayJobs = jobs.filter(j => {
+      if (j.status === "completed" || j.status === "cancelled") return false;
+      if (j.job_type === "recurring") return false;
+      return jobOccursOnDate(j, dateStr);
+    });
+    if (dayJobs.length === 0) {
+      toast.info("No eligible jobs to raincheck on this day");
+      return null;
+    }
+    const parseD = (s: string) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+    const fmtD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+    const candidates: { date: string; hours: number }[] = [];
+    for (let i = 1; i <= 14; i++) {
+      const cursor = parseD(dateStr);
+      cursor.setDate(cursor.getDate() + i);
+      const dow = cursor.getDay();
+      if (dow >= 1 && dow <= 5) {
+        const candDateStr = fmtD(cursor);
+        const existingHours = jobs
+          .filter(j => j.status !== "cancelled" && jobOccursOnDate(j, candDateStr))
+          .reduce((s, j) => s + (j.estimated_hours || 2), 0);
+        candidates.push({ date: candDateStr, hours: existingHours });
+      }
+    }
+    candidates.sort((a, b) => a.hours - b.hours);
+    const targetDate = candidates[0]?.date;
+    if (!targetDate) { toast.error("Could not find an available weekday"); return null; }
+
+    const batchUpdates = dayJobs.map(j => {
+      const upd: Record<string, any> = { start_date: targetDate };
+      if (j.end_date && j.end_date !== j.start_date) {
+        const diffDays = Math.round((parseD(j.end_date).getTime() - parseD(j.start_date).getTime()) / 86400000);
+        const newEnd = parseD(targetDate);
+        newEnd.setDate(newEnd.getDate() + diffDays);
+        upd.end_date = fmtD(newEnd);
+      }
+      return { id: j.id, updates: upd as Partial<Job> };
+    });
+    await updateJobsBatch(batchUpdates);
+
+    if (user) {
+      for (const j of dayJobs) {
+        const workerIds = assignments.filter(a => a.job_id === j.id).map(a => a.worker_id);
+        if (workerIds.length > 0) {
+          const siteName = sites.find(s => s.id === j.site_id)?.name;
+          await notifyCrewOfJobChange(user.id, workerIds, "rescheduled", {
+            jobId: j.id, jobTitle: j.title, siteName,
+            startDate: targetDate, startTime: j.start_time,
+          }, { oldDate: dateStr, oldTime: j.start_time });
+        }
+      }
+    }
+
+    const movedJobs = dayJobs.map(j => ({
+      title: j.title,
+      clientName: j.client_id ? clients.find(c => c.id === j.client_id)?.name : undefined,
+    }));
+    const clientJobs = movedJobs.filter(j => j.clientName);
+    if (clientJobs.length > 0) {
+      const uniqueClients = [...new Set(clientJobs.map(j => j.clientName))];
+      toast.info(`📧 Remember to notify ${uniqueClients.length} client${uniqueClients.length !== 1 ? "s" : ""}: ${uniqueClients.join(", ")}`, { duration: 10000 });
+    }
+
+    await refetch();
+    return { moved: dayJobs.length, targetDate, movedJobs };
+  }, [jobs, assignments, sites, clients, user, jobOccursOnDate, updateJobsBatch, refetch]);
+
+  // ── Auto-Rebalance Week ──
+  const handleRebalanceWeek = useCallback(async (weekStartStr: string, weekEndStr: string): Promise<RebalanceResult | null> => {
+    const parseD = (s: string) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+    const fmtD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+    const weekStart = parseD(weekStartStr);
+    const wDays: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + i);
+      wDays.push(fmtD(d));
+    }
+
+    const dayBuckets = wDays.map(ds => {
+      const dJobs = jobs.filter(j => {
+        if (j.status === "completed" || j.status === "cancelled") return false;
+        if (j.job_type === "recurring") return false;
+        return jobOccursOnDate(j, ds);
+      });
+      return { dateStr: ds, jobs: dJobs, totalHours: dJobs.reduce((s, j) => s + (j.estimated_hours || 2), 0) };
+    });
+
+    const workingDays = dayBuckets.slice(0, 5);
+    const totalWeekHours = workingDays.reduce((s, b) => s + b.totalHours, 0);
+    const activeDayCount = Math.max(1, workingDays.filter(d => d.totalHours > 0).length || 5);
+    const targetMax = Math.max(8, (totalWeekHours / activeDayCount) * 1.2);
+
+    const overloaded = workingDays.filter(d => d.totalHours > targetMax);
+    if (overloaded.length === 0) {
+      toast.info("Schedule looks balanced — no changes needed");
+      return null;
+    }
+
+    const moves: { jobId: string; title: string; fromDate: string; toDate: string }[] = [];
+    const runningHours = new Map(workingDays.map(d => [d.dateStr, d.totalHours]));
+
+    for (const day of overloaded) {
+      const sortedJobs = [...day.jobs].sort((a, b) => (b.estimated_hours || 2) - (a.estimated_hours || 2));
+      for (const job of sortedJobs) {
+        if ((runningHours.get(day.dateStr) || 0) <= targetMax) break;
+        const jobHours = job.estimated_hours || 2;
+        let bestDay: string | null = null;
+        let bestHours = Infinity;
+        for (const wd of workingDays) {
+          if (wd.dateStr === day.dateStr) continue;
+          const wdHours = runningHours.get(wd.dateStr) || 0;
+          if (wdHours + jobHours <= targetMax && wdHours < bestHours) {
+            bestHours = wdHours;
+            bestDay = wd.dateStr;
+          }
+        }
+        if (bestDay) {
+          moves.push({ jobId: job.id, title: job.title, fromDate: day.dateStr, toDate: bestDay });
+          runningHours.set(day.dateStr, (runningHours.get(day.dateStr) || 0) - jobHours);
+          runningHours.set(bestDay, (runningHours.get(bestDay) || 0) + jobHours);
+        }
+      }
+    }
+
+    if (moves.length === 0) {
+      toast.info("Schedule is already as balanced as possible");
+      return null;
+    }
+
+    const batchUpdates = moves.map(m => {
+      const job = jobs.find(j => j.id === m.jobId)!;
+      const upd: Record<string, any> = { start_date: m.toDate };
+      if (job.end_date && job.end_date !== job.start_date) {
+        const diffDays = Math.round((parseD(job.end_date).getTime() - parseD(job.start_date).getTime()) / 86400000);
+        const newEnd = parseD(m.toDate);
+        newEnd.setDate(newEnd.getDate() + diffDays);
+        upd.end_date = fmtD(newEnd);
+      }
+      return { id: m.jobId, updates: upd as Partial<Job> };
+    });
+    await updateJobsBatch(batchUpdates);
+
+    if (user) {
+      for (const m of moves) {
+        const job = jobs.find(j => j.id === m.jobId);
+        if (!job) continue;
+        const workerIds = assignments.filter(a => a.job_id === m.jobId).map(a => a.worker_id);
+        if (workerIds.length > 0) {
+          const siteName = sites.find(s => s.id === job.site_id)?.name;
+          await notifyCrewOfJobChange(user.id, workerIds, "rescheduled", {
+            jobId: m.jobId, jobTitle: job.title, siteName,
+            startDate: m.toDate, startTime: job.start_time,
+          }, { oldDate: m.fromDate, oldTime: job.start_time });
+        }
+      }
+    }
+
+    await refetch();
+
+    const details = moves.map(m => ({
+      title: m.title,
+      fromDate: parseD(m.fromDate).toLocaleDateString("en-US", { weekday: "short" }),
+      toDate: parseD(m.toDate).toLocaleDateString("en-US", { weekday: "short" }),
+    }));
+    toast.success(`Rebalanced: ${moves.length} job${moves.length !== 1 ? "s" : ""} redistributed`, {
+      description: details.map(d => `• ${d.title}: ${d.fromDate} → ${d.toDate}`).join("\n"),
+      duration: 8000,
+    });
+    return { moves: moves.length, details };
+  }, [jobs, assignments, sites, user, jobOccursOnDate, updateJobsBatch, refetch]);
+
   const handleCreateJob = async () => {
     if (!jobTitle.trim() || !jobSiteId || !jobStart) {
       toast.error("Title, site, and start date are required"); return;
@@ -1119,6 +1296,8 @@ export default function JobSchedulerContent() {
             teamMembers={teamMembers}
             onJobClick={(j) => openEditJob(j)}
             onJobDelete={deleteJob}
+            onRaincheckDay={handleRaincheckDay}
+            onRebalanceWeek={handleRebalanceWeek}
             onJobMove={async (evt: JobMoveEvent) => {
               const { jobId, newDate, newTime, fromDate, dropIndex, recurringMode, sourceJob, instanceDate } = evt;
               const parseD = (s: string) => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };

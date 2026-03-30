@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import FilterCombobox from "@/components/FilterCombobox";
-import { ChevronLeft, ChevronRight, Clock, MapPin, AlertTriangle, Sparkles, GripVertical, Lock, Unlock, Copy, RefreshCw, Undo2, Save, Trash2, Filter, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, MapPin, AlertTriangle, Sparkles, GripVertical, Lock, Unlock, Copy, RefreshCw, Undo2, Save, Trash2, Filter, X, CloudRain, Scale } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
@@ -93,6 +93,17 @@ export interface JobMoveEvent {
   instanceDate?: string;
 }
 
+export interface RaincheckResult {
+  moved: number;
+  targetDate: string;
+  movedJobs: { title: string; clientName?: string }[];
+}
+
+export interface RebalanceResult {
+  moves: number;
+  details: { title: string; fromDate: string; toDate: string }[];
+}
+
 interface Props {
   jobs: Job[];
   sites: JobSite[];
@@ -103,6 +114,8 @@ interface Props {
   onJobMove?: (event: JobMoveEvent) => void;
   onJobDelete?: (jobId: string) => Promise<void>;
   onDiscardEdits?: (revertData: { jobId: string; updates: Record<string, any> }[]) => void;
+  onRaincheckDay?: (dateStr: string) => Promise<RaincheckResult | null>;
+  onRebalanceWeek?: (weekStartStr: string, weekEndStr: string) => Promise<RebalanceResult | null>;
 }
 
 type ViewMode = "week" | "month";
@@ -247,7 +260,7 @@ function buildJobsByDate(jobs: Job[], checkins: CrewCheckinOccurrence[], rangeSt
   return map;
 }
 
-export default function JobCalendarView({ jobs, sites, assignments = [], checkins = [], teamMembers = [], onJobClick, onJobMove, onJobDelete, onDiscardEdits }: Props) {
+export default function JobCalendarView({ jobs, sites, assignments = [], checkins = [], teamMembers = [], onJobClick, onJobMove, onJobDelete, onDiscardEdits, onRaincheckDay, onRebalanceWeek }: Props) {
   const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -265,6 +278,11 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
   const [deleteTarget, setDeleteTarget] = useState<Job | null>(null);
   const [deleteConfirmed, setDeleteConfirmed] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Raincheck & Rebalance state
+  const [raincheckDate, setRaincheckDate] = useState<string | null>(null);
+  const [raincheckLoading, setRaincheckLoading] = useState(false);
+  const [rebalanceLoading, setRebalanceLoading] = useState(false);
 
   // Filter state
   const [filterCrewId, setFilterCrewId] = useState<string>("all");
@@ -560,7 +578,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
           const isGapSuggestion = gapSuggestions.includes(dateStr) && dragJob !== null;
           const isCurrentMonth = day.getMonth() === currentDate.getMonth();
           return (
-            <div key={dateStr} className={cn("rounded-lg border transition-all flex flex-col", isToday && "ring-2 ring-primary/50", isDragTarget && showConflicts.length > 0 && "ring-2 ring-red-500/60 bg-red-500/5", isDragTarget && showConflicts.length === 0 && "ring-2 ring-primary/60 bg-primary/5", isGapSuggestion && !isDragTarget && "ring-2 ring-emerald-500/40 bg-emerald-500/5", !isDragTarget && !isGapSuggestion && "border-border bg-card", !isCurrentMonth && "opacity-50")} onDragOver={(e) => handleDragOver(e, dateStr)} onDragLeave={handleDragLeave} onDrop={(e) => handleDrop(e, dateStr)}>
+            <div key={dateStr} className={cn("group/day rounded-lg border transition-all flex flex-col", isToday && "ring-2 ring-primary/50", isDragTarget && showConflicts.length > 0 && "ring-2 ring-red-500/60 bg-red-500/5", isDragTarget && showConflicts.length === 0 && "ring-2 ring-primary/60 bg-primary/5", isGapSuggestion && !isDragTarget && "ring-2 ring-emerald-500/40 bg-emerald-500/5", !isDragTarget && !isGapSuggestion && "border-border bg-card", !isCurrentMonth && "opacity-50")} onDragOver={(e) => handleDragOver(e, dateStr)} onDragLeave={handleDragLeave} onDrop={(e) => handleDrop(e, dateStr)}>
               <div className={cn("px-2 py-1.5 border-b border-border/50 flex-shrink-0", workload.color)}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
@@ -568,7 +586,18 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
                     <span className={cn("text-xs font-medium", isMobile && "hidden")}>{day.toLocaleDateString("en-US", { weekday: "short" })}</span>
                     <span className={cn("w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center", isToday ? "bg-primary text-primary-foreground" : "text-foreground")}>{day.getDate()}</span>
                   </div>
-                  {hours > 0 && <span className="text-[10px] font-mono text-muted-foreground">{hours.toFixed(1)}h</span>}
+                  <div className="flex items-center gap-1">
+                    {hours > 0 && <span className="text-[10px] font-mono text-muted-foreground">{hours.toFixed(1)}h</span>}
+                    {onRaincheckDay && dayJobs.filter(j => (j._displayStatus || j.status) !== "completed" && j.status !== "cancelled").length > 0 && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setRaincheckDate(dateStr); }}
+                        className="opacity-0 group-hover/day:opacity-100 transition-opacity p-0.5 rounded hover:bg-destructive/10"
+                        title="Raincheck this day"
+                      >
+                        <CloudRain className="h-3.5 w-3.5 text-blue-500" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="mt-1 h-1 rounded-full bg-muted overflow-hidden"><div className={cn("h-full rounded-full transition-all", getWorkloadBarColor(hours))} style={{ width: `${Math.min(100, (hours / 12) * 100)}%` }} /></div>
                 {isGapSuggestion && !isDragTarget && <div className="mt-1 flex items-center gap-1 text-[9px] text-emerald-600 dark:text-emerald-400 font-medium"><Sparkles className="h-3 w-3" />Suggested</div>}
@@ -701,6 +730,24 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
               ) : (
                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={enterEditMode}><Lock className="h-3.5 w-3.5 mr-1" />Edit schedule</Button>
               )}
+              {onRebalanceWeek && viewMode === "week" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={rebalanceLoading}
+                  onClick={async () => {
+                    setRebalanceLoading(true);
+                    const ws = toDateStr(weekDays[0]);
+                    const we = toDateStr(weekDays[weekDays.length - 1]);
+                    await onRebalanceWeek(ws, we);
+                    setRebalanceLoading(false);
+                  }}
+                >
+                  <Scale className="h-3.5 w-3.5 mr-1" />
+                  {rebalanceLoading ? "Rebalancing…" : "Rebalance"}
+                </Button>
+              )}
               <Button variant={viewMode === "week" ? "default" : "outline"} size="sm" className="h-7 text-xs" onClick={() => setViewMode("week")}>Week</Button>
               <Button variant={viewMode === "month" ? "default" : "outline"} size="sm" className="h-7 text-xs" onClick={() => setViewMode("month")}>Month</Button>
             </div>
@@ -805,6 +852,70 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
               <Button variant="outline" onClick={() => { setDeleteTarget(null); setDeleteConfirmed(false); }} disabled={deleting}>Cancel</Button>
               <Button variant="destructive" disabled={deleting || (deleteTarget.status === "completed" && !deleteConfirmed)} onClick={async () => { setDeleting(true); await onJobDelete(deleteTarget.id); setDeleting(false); setDeleteTarget(null); setDeleteConfirmed(false); }}>
                 {deleting ? "Deleting…" : "Delete Job"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Raincheck Day Confirmation Dialog */}
+      {raincheckDate && onRaincheckDay && (
+        <Dialog open={!!raincheckDate} onOpenChange={(v) => { if (!v) setRaincheckDate(null); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CloudRain className="h-5 w-5 text-blue-500" />
+                Raincheck Day
+              </DialogTitle>
+              <DialogDescription className="space-y-2">
+                <span className="block">
+                  Move all scheduled jobs from <strong>{parseLocalDate(raincheckDate).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}</strong> to the next available weekday.
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {(() => {
+                    const dayJobs = (allJobsByDate.get(raincheckDate) || []).filter(j => (j._displayStatus || j.status) !== "completed" && j.status !== "cancelled" && j.job_type !== "recurring");
+                    return `${dayJobs.length} job${dayJobs.length !== 1 ? "s" : ""} will be rescheduled. Crew and clients will be notified.`;
+                  })()}
+                </span>
+                <div className="mt-2 max-h-[200px] overflow-y-auto space-y-1">
+                  {(allJobsByDate.get(raincheckDate) || [])
+                    .filter(j => (j._displayStatus || j.status) !== "completed" && j.status !== "cancelled" && j.job_type !== "recurring")
+                    .map(j => (
+                      <div key={j.id} className="text-sm flex items-center gap-2 py-1 px-2 rounded bg-muted/50">
+                        <span className="font-medium truncate">{j.title}</span>
+                        {j.start_time && <span className="text-xs text-muted-foreground">{formatTime12(j.start_time)}</span>}
+                        {j.estimated_hours && <span className="text-xs text-muted-foreground font-mono">{j.estimated_hours}h</span>}
+                      </div>
+                    ))
+                  }
+                  {(allJobsByDate.get(raincheckDate) || []).filter(j => j.job_type === "recurring" && (j._displayStatus || j.status) !== "completed").length > 0 && (
+                    <p className="text-xs text-muted-foreground italic px-2 pt-1">
+                      ↻ Recurring jobs are not moved — they'll appear on the next occurrence automatically.
+                    </p>
+                  )}
+                </div>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRaincheckDate(null)} disabled={raincheckLoading}>Cancel</Button>
+              <Button
+                disabled={raincheckLoading}
+                onClick={async () => {
+                  setRaincheckLoading(true);
+                  const result = await onRaincheckDay(raincheckDate);
+                  setRaincheckLoading(false);
+                  setRaincheckDate(null);
+                  if (result) {
+                    const targetFormatted = parseLocalDate(result.targetDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                    toast.success(`${result.moved} job${result.moved !== 1 ? "s" : ""} rainchecked to ${targetFormatted}`, {
+                      description: result.movedJobs.map(j => `• ${j.title}${j.clientName ? ` (${j.clientName})` : ""}`).join("\n"),
+                      duration: 8000,
+                    });
+                  }
+                }}
+              >
+                <CloudRain className="h-4 w-4 mr-2" />
+                {raincheckLoading ? "Moving jobs…" : "Raincheck Day"}
               </Button>
             </DialogFooter>
           </DialogContent>
