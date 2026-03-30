@@ -169,6 +169,159 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_channel_members: {
+        Row: {
+          channel_id: string
+          id: string
+          joined_at: string
+          last_read_at: string | null
+          role: string
+          user_id: string
+        }
+        Insert: {
+          channel_id: string
+          id?: string
+          joined_at?: string
+          last_read_at?: string | null
+          role?: string
+          user_id: string
+        }
+        Update: {
+          channel_id?: string
+          id?: string
+          joined_at?: string
+          last_read_at?: string | null
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_channel_members_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "chat_channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_channels: {
+        Row: {
+          business_user_id: string
+          created_at: string
+          created_by: string
+          crew_member_id: string | null
+          description: string | null
+          id: string
+          name: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          business_user_id: string
+          created_at?: string
+          created_by: string
+          crew_member_id?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          business_user_id?: string
+          created_at?: string
+          created_by?: string
+          crew_member_id?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_channels_crew_member_id_fkey"
+            columns: ["crew_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_messages: {
+        Row: {
+          channel_id: string
+          content: string | null
+          created_at: string
+          id: string
+          is_pinned: boolean
+          job_id: string | null
+          job_site_id: string | null
+          occurrence_date: string | null
+          parent_message_id: string | null
+          photo_url: string | null
+          sender_id: string
+          updated_at: string
+        }
+        Insert: {
+          channel_id: string
+          content?: string | null
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          job_id?: string | null
+          job_site_id?: string | null
+          occurrence_date?: string | null
+          parent_message_id?: string | null
+          photo_url?: string | null
+          sender_id: string
+          updated_at?: string
+        }
+        Update: {
+          channel_id?: string
+          content?: string | null
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          job_id?: string | null
+          job_site_id?: string | null
+          occurrence_date?: string | null
+          parent_message_id?: string | null
+          photo_url?: string | null
+          sender_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "chat_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_job_site_id_fkey"
+            columns: ["job_site_id"]
+            isOneToOne: false
+            referencedRelation: "job_sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_parent_message_id_fkey"
+            columns: ["parent_message_id"]
+            isOneToOne: false
+            referencedRelation: "chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_contacts: {
         Row: {
           client_id: string
@@ -1930,6 +2083,14 @@ export type Database = {
       get_team_role: {
         Args: { _business_id: string; _user_id: string }
         Returns: string
+      }
+      is_channel_business_owner: {
+        Args: { _channel_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_channel_member: {
+        Args: { _channel_id: string; _user_id: string }
+        Returns: boolean
       }
       is_team_member_of: {
         Args: { _business_user_id: string; _user_id: string }
