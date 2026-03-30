@@ -712,6 +712,13 @@ export default function JobSchedulerContent() {
       labor_budget_rate: Number(editJobLaborRate) || 0,
     });
     setEditJobOpen(false);
+
+    // Cascade recalculate on the edited job's date
+    if (editJob) {
+      const cascadeDate = editJobStart || editJob.start_date;
+      await refetch();
+      setTimeout(() => runCascade(editJob.id, cascadeDate), 500);
+    }
   };
 
   const siteMap = new Map(sites.map((s) => [s.id, s]));
