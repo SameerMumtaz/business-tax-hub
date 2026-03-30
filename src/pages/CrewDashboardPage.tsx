@@ -650,6 +650,9 @@ export default function CrewDashboardPage() {
             <TabsContent value="map" className="mt-4">
               <CrewMapView jobs={assignedJobs} />
             </TabsContent>
+            <TabsContent value="messages" className="mt-4">
+              <CrewChatTab />
+            </TabsContent>
             <TabsContent value="profile" className="mt-4">
               <CrewProfileTab />
             </TabsContent>
