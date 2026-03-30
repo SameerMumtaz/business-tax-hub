@@ -341,7 +341,25 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     return { weekDays: days, rangeStart: startOfDay(days[0]), rangeEnd: endOfDay(days[days.length - 1]) };
   }, [viewMode, currentDate]);
 
-  const jobsByDate = useMemo(() => buildJobsByDate(jobs, checkins, rangeStart, rangeEnd), [jobs, checkins, rangeStart, rangeEnd]);
+  const allJobsByDate = useMemo(() => buildJobsByDate(jobs, checkins, rangeStart, rangeEnd), [jobs, checkins, rangeStart, rangeEnd]);
+
+  // Apply filters to jobsByDate
+  const jobsByDate = useMemo(() => {
+    if (!hasActiveFilters) return allJobsByDate;
+    const filtered = new Map<string, CalendarJob[]>();
+    allJobsByDate.forEach((dayJobs, dateStr) => {
+      const matching = dayJobs.filter((job) => {
+        if (filterSiteId !== "all" && job.site_id !== filterSiteId) return false;
+        if (filterCrewId !== "all") {
+          const jobAssigns = assignments.filter((a) => a.job_id === job.id);
+          if (!jobAssigns.some((a) => a.worker_id === filterCrewId)) return false;
+        }
+        return true;
+      });
+      if (matching.length > 0) filtered.set(dateStr, matching);
+    });
+    return filtered;
+  }, [allJobsByDate, hasActiveFilters, filterSiteId, filterCrewId, assignments]);
   const todayStr = toDateStr(new Date());
   const goBack = () => viewMode === "week" ? setCurrentDate((d) => addDays(d, -7)) : setCurrentDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
   const goForward = () => viewMode === "week" ? setCurrentDate((d) => addDays(d, 7)) : setCurrentDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
