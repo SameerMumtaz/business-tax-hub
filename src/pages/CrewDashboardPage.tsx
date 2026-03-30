@@ -285,12 +285,32 @@ export default function CrewDashboardPage() {
       }
       const result = await checkIn(job.id, job.site.id, lat, lng, job.expectedHours, instanceDate);
 
-      // If late, save the note and flag + notify
+      // Post check-in to chat
+      if (user && teamMemberId) {
+        const time = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        await postCrewChatMessage(
+          user.id,
+          teamMemberId,
+          `✅ Checked in to "${job.title}" at ${job.site.name} — ${time}`,
+          { job_id: job.id, job_site_id: job.site.id, occurrence_date: instanceDate }
+        );
+      }
+
+      // If late, save the note and flag + notify + post to chat
       if (lateNote && result) {
         await supabase
           .from("crew_checkins")
           .update({ notes: `Late check-in: ${lateNote}`, flag_reason: `Late check-in` } as any)
           .eq("id", (result as any).id);
+
+        if (user && teamMemberId) {
+          await postCrewChatMessage(
+            user.id,
+            teamMemberId,
+            `⚠️ Late check-in for "${job.title}"\nReason: ${lateNote}`,
+            { job_id: job.id, job_site_id: job.site.id, occurrence_date: instanceDate }
+          );
+        }
 
         // Notify admin/manager
         if (businessUserId && teamMemberId) {
