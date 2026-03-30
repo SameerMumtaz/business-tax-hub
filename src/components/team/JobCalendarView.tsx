@@ -375,7 +375,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     return a.start_time.localeCompare(b.start_time);
   });
 
-  const BUFFER_MINUTES = 20;
+  const MIN_BUFFER_MINUTES = 10;
   const DEFAULT_START = "08:00";
 
   const roundTo5Min = (totalMinutes: number): number => Math.round(totalMinutes / 5) * 5;
@@ -397,7 +397,32 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     return h * 60 + m;
   };
 
-  const computeTimeForIndex = (dateStr: string, dropIndex: number, excludeJobId?: string, movedJobDurationHours?: number): string | null => {
+  // Haversine distance in miles between two GPS coordinates
+  const haversineDistanceMiles = useCallback((lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 3958.8;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }, []);
+
+  // Estimate travel buffer in minutes between two sites
+  const getTravelBuffer = useCallback((siteIdA: string | undefined, siteIdB: string | undefined): number => {
+    if (!siteIdA || !siteIdB || siteIdA === siteIdB) return MIN_BUFFER_MINUTES;
+    const a = siteMap.get(siteIdA);
+    const b = siteMap.get(siteIdB);
+    if (a?.latitude && a?.longitude && b?.latitude && b?.longitude) {
+      const miles = haversineDistanceMiles(a.latitude, a.longitude, b.latitude, b.longitude);
+      if (miles <= 0) return MIN_BUFFER_MINUTES;
+      const drivingMinutes = (miles / 30) * 60; // ~30 mph average
+      return Math.max(MIN_BUFFER_MINUTES, Math.ceil(drivingMinutes / 5) * 5);
+    }
+    return MIN_BUFFER_MINUTES;
+  }, [siteMap, haversineDistanceMiles]);
+
+  const computeTimeForIndex = (dateStr: string, dropIndex: number, excludeJobId?: string, movedJobDurationHours?: number, movedJobSiteId?: string): string | null => {
     const dayJobs = sortJobs((jobsByDate.get(dateStr) || []).filter((j) => j.id !== excludeJobId));
     const movedDurationMins = Math.round((movedJobDurationHours || 1) * 60);
 
@@ -408,8 +433,9 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     if (dropIndex <= 0) {
       const firstJob = dayJobs[0];
       if (!firstJob?.start_time) return DEFAULT_START;
+      const buffer = getTravelBuffer(movedJobSiteId, firstJob.site_id);
       const nextStart = getJobStartMinutes(firstJob);
-      const newStart = roundTo5Min(nextStart - movedDurationMins - BUFFER_MINUTES);
+      const newStart = roundTo5Min(nextStart - movedDurationMins - buffer);
       return minsToTimeStr(Math.max(0, newStart));
     }
 
@@ -417,16 +443,18 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     if (dropIndex >= dayJobs.length) {
       const lastJob = dayJobs[dayJobs.length - 1];
       if (!lastJob?.start_time) return DEFAULT_START;
+      const buffer = getTravelBuffer(lastJob.site_id, movedJobSiteId);
       const prevEnd = getJobEndMinutes(lastJob);
-      const newStart = roundTo5Min(prevEnd + BUFFER_MINUTES);
+      const newStart = roundTo5Min(prevEnd + buffer);
       return minsToTimeStr(Math.min(newStart, 23 * 60 + 59));
     }
 
     // Drop BETWEEN two jobs
     const prevJob = dayJobs[dropIndex - 1];
     if (!prevJob?.start_time) return DEFAULT_START;
+    const buffer = getTravelBuffer(prevJob.site_id, movedJobSiteId);
     const prevEnd = getJobEndMinutes(prevJob);
-    const newStart = roundTo5Min(prevEnd + BUFFER_MINUTES);
+    const newStart = roundTo5Min(prevEnd + buffer);
     return minsToTimeStr(newStart);
   };
 
@@ -478,7 +506,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     if (!dragJob) return;
     const sameDay = dateStr === dragStartDate.current;
     const movedDuration = dragJob.estimated_hours || 1;
-    const newTime = typeof dropIdx === "number" ? computeTimeForIndex(dateStr, dropIdx, dragJob.id, movedDuration) : undefined;
+    const newTime = typeof dropIdx === "number" ? computeTimeForIndex(dateStr, dropIdx, dragJob.id, movedDuration, dragJob.site_id) : undefined;
     if (sameDay && newTime === undefined) { clearDragState(); return; }
     if (dragJob.job_type === "recurring") {
       setPendingRecurringMove({ job: dragJob, fromDate: dragStartDate.current || dateStr, toDate: dateStr, newTime });

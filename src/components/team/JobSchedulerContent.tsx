@@ -1074,22 +1074,38 @@ export default function JobSchedulerContent() {
 
                 let computedTime = newTime ?? job.start_time ?? "08:00";
 
+                // Calculate travel-aware buffer between previous job and moved job
+                const getTravelBuf = (fromSiteId: string, toSiteId: string) => {
+                  if (fromSiteId === toSiteId) return 10;
+                  const fromSite = sites.find(s => s.id === fromSiteId);
+                  const toSite = sites.find(s => s.id === toSiteId);
+                  if (fromSite?.latitude && fromSite?.longitude && toSite?.latitude && toSite?.longitude) {
+                    const dist = haversineDistance(fromSite.latitude, fromSite.longitude, toSite.latitude, toSite.longitude);
+                    return estimateTravelMinutes(dist);
+                  }
+                  return 10;
+                };
+
                 if (previousJob?.start_time && nextJob?.start_time) {
                   const previousStart = toMinutes(previousJob.start_time);
                   const previousDuration = Math.max(30, Math.round((previousJob.estimated_hours || 1) * 60));
-                  const earliestStart = previousStart + previousDuration;
+                  const bufferAfterPrev = getTravelBuf(previousJob.site_id, job.site_id);
+                  const earliestStart = previousStart + previousDuration + bufferAfterPrev;
                   const nextStart = toMinutes(nextJob.start_time);
                   const movedDuration = Math.max(30, Math.round((job.estimated_hours || 1) * 60));
-                  const latestStart = nextStart - movedDuration;
-                  computedTime = toTimeString(Math.min(Math.max(earliestStart, previousStart), latestStart));
+                  const bufferBeforeNext = getTravelBuf(job.site_id, nextJob.site_id);
+                  const latestStart = nextStart - movedDuration - bufferBeforeNext;
+                  computedTime = toTimeString(Math.min(Math.max(earliestStart, previousStart), Math.max(latestStart, earliestStart)));
                 } else if (previousJob?.start_time) {
                   const previousStart = toMinutes(previousJob.start_time);
                   const previousDuration = Math.max(30, Math.round((previousJob.estimated_hours || 1) * 60));
-                  computedTime = toTimeString(previousStart + previousDuration);
+                  const bufferAfterPrev = getTravelBuf(previousJob.site_id, job.site_id);
+                  computedTime = toTimeString(previousStart + previousDuration + bufferAfterPrev);
                 } else if (nextJob?.start_time) {
                   const nextStart = toMinutes(nextJob.start_time);
                   const movedDuration = Math.max(30, Math.round((job.estimated_hours || 1) * 60));
-                  computedTime = toTimeString(Math.max(0, nextStart - movedDuration));
+                  const bufferBeforeNext = getTravelBuf(job.site_id, nextJob.site_id);
+                  computedTime = toTimeString(Math.max(0, nextStart - movedDuration - bufferBeforeNext));
                 }
 
                 const updates: Record<string, any> = { start_date: newDate, start_time: computedTime };
@@ -1099,10 +1115,31 @@ export default function JobSchedulerContent() {
                 return;
               }
 
+              // Cross-day move: use computeSmartStartTime for crew-aware travel scheduling
               const updates: Record<string, any> = { start_date: newDate };
-              if (newTime !== undefined && newTime !== null) {
-                updates.start_time = newTime;
+              let resolvedTime = newTime !== undefined && newTime !== null ? newTime : null;
+
+              // Apply smart scheduling based on crew assignments + travel distance
+              const jobCrewIds = assignments.filter(a => a.job_id === jobId).map(a => a.worker_id);
+              if (jobCrewIds.length > 0) {
+                const smart = computeSmartStartTime(newDate, job.site_id, jobCrewIds, job.estimated_hours);
+                if (smart) {
+                  if (!resolvedTime) {
+                    resolvedTime = smart;
+                  } else {
+                    // Check if the proposed time is earlier than crew availability
+                    const [rh, rm] = resolvedTime.split(":").map(Number);
+                    const [sh, sm] = smart.split(":").map(Number);
+                    if (rh * 60 + rm < sh * 60 + sm) {
+                      resolvedTime = smart;
+                      toast.warning(`Start time adjusted to ${formatSmartTime(smart)} — crew isn't available until then (prior job + travel time)`);
+                    }
+                  }
+                }
               }
+
+              if (resolvedTime) updates.start_time = resolvedTime;
+
               if (job.end_date && newDate !== job.start_date) {
                 const diffDays = Math.round((parseD(job.end_date).getTime() - parseD(job.start_date).getTime()) / 86400000);
                 const newEnd = parseD(newDate);
@@ -1111,8 +1148,8 @@ export default function JobSchedulerContent() {
               }
               await updateJob(jobId, updates);
               const formattedDate = parseD(newDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-              toast.success(`"${job.title}" ${newTime ? 'rescheduled' : 'moved'} to ${formattedDate}${newTime ? ' at ' + newTime : ''}`);
-              await notifyAssignedCrew(jobId, job.title, `This job has been ${newTime ? 'rescheduled' : 'moved'} to ${formattedDate}${newTime ? ' at ' + newTime : ''}.`);
+              toast.success(`"${job.title}" ${resolvedTime ? 'rescheduled' : 'moved'} to ${formattedDate}${resolvedTime ? ' at ' + resolvedTime : ''}`);
+              await notifyAssignedCrew(jobId, job.title, `This job has been ${resolvedTime ? 'rescheduled' : 'moved'} to ${formattedDate}${resolvedTime ? ' at ' + resolvedTime : ''}.`);
             }}
             onDiscardEdits={async (revertData) => {
               for (const { jobId, updates } of revertData) {
