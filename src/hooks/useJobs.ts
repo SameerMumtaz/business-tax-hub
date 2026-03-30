@@ -166,12 +166,43 @@ export function useJobs() {
     return data?.id;
   };
 
+  const syncAssignmentHoursToJob = async (jobId: string, newEstimatedHours: number | null) => {
+    if (!newEstimatedHours || newEstimatedHours <= 0) return;
+    const jobAssignments = assignments.filter(a => a.job_id === jobId);
+    if (jobAssignments.length === 0) return;
+
+    const job = jobs.find(j => j.id === jobId);
+    const isMultiDay = job && job.end_date && job.end_date !== job.start_date;
+
+    for (const a of jobAssignments) {
+      const dayCount = isMultiDay
+        ? (a.assigned_days?.length || (() => {
+            const s = new Date(job!.start_date);
+            const e = new Date(job!.end_date!);
+            return Math.max(1, Math.round((e.getTime() - s.getTime()) / 86400000) + 1);
+          })())
+        : 1;
+      const hpd = Math.round((newEstimatedHours / dayCount) * 10) / 10;
+      const totalHrs = hpd * dayCount;
+      await supabase.from("job_assignments").update({
+        assigned_hours: totalHrs,
+        hours_per_day: hpd,
+      }).eq("id", a.id);
+    }
+  };
+
   const updateJob = async (id: string, updates: Partial<Job>) => {
     const { error } = await supabase.from("jobs").update(updates).eq("id", id);
     if (error) {
       toast.error(error.message);
       return;
     }
+
+    // If estimated_hours changed, sync all assignments
+    if (updates.estimated_hours !== undefined) {
+      await syncAssignmentHoursToJob(id, updates.estimated_hours ?? null);
+    }
+
     fetchAll();
   };
 
