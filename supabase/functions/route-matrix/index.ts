@@ -18,9 +18,12 @@ Deno.serve(async (req) => {
   }
 
   try {
+    console.log("route-matrix: request received");
+
     // Validate JWT
     const authHeader = req.headers.get("authorization");
     if (!authHeader) {
+      console.log("route-matrix: missing auth header");
       return new Response(JSON.stringify({ error: "Missing authorization header" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -35,11 +38,14 @@ Deno.serve(async (req) => {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
+      console.log("route-matrix: auth failed", authError?.message);
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    console.log("route-matrix: authenticated user", user.id);
 
     const body = await req.json();
     const locations: Location[] = body.locations;
