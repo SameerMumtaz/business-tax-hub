@@ -677,10 +677,34 @@ export default function JobSchedulerContent() {
       title: j.title,
       clientName: j.client_id ? clients.find(c => c.id === j.client_id)?.name : undefined,
     }));
-    const clientJobs = movedJobs.filter(j => j.clientName);
-    if (clientJobs.length > 0) {
-      const uniqueClients = [...new Set(clientJobs.map(j => j.clientName))];
-      toast.info(`📧 Remember to notify ${uniqueClients.length} client${uniqueClients.length !== 1 ? "s" : ""}: ${uniqueClients.join(", ")}`, { duration: 10000 });
+    // Store undo data
+    const parseD2 = (s: string) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+    undoDataRef.current = dayJobs.map(j => ({ id: j.id, start_date: j.start_date, end_date: j.end_date }));
+    const undoJobs = [...undoDataRef.current];
+    toast.success(`Rainchecked ${dayJobs.length} jobs`, {
+      action: { label: "Undo", onClick: async () => {
+        await updateJobsBatch(undoJobs.map(u => ({ id: u.id, updates: { start_date: u.start_date, end_date: u.end_date } as Partial<Job> })));
+        await refetch();
+        toast.info("Raincheck undone");
+      }},
+      duration: 12000,
+    });
+
+    // Build client notify data
+    const affectedClients: AffectedClient[] = [];
+    const clientMap = new Map<string, AffectedClient>();
+    for (const j of dayJobs) {
+      if (!j.client_id) continue;
+      const client = clients.find(c => c.id === j.client_id);
+      if (!client) continue;
+      const fmtDate = (s: string) => parseD2(s).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      if (!clientMap.has(client.id)) {
+        clientMap.set(client.id, { name: client.name, email: client.email, phone: client.phone, jobs: [] });
+      }
+      clientMap.get(client.id)!.jobs.push({ title: j.title, oldDate: fmtDate(dateStr), newDate: fmtDate(targetDate) });
+    }
+    if (clientMap.size > 0) {
+      setClientNotifyData({ open: true, clients: [...clientMap.values()], type: "raincheck" });
     }
 
     await refetch();
