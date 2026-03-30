@@ -730,6 +730,24 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
               ) : (
                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={enterEditMode}><Lock className="h-3.5 w-3.5 mr-1" />Edit schedule</Button>
               )}
+              {onRebalanceWeek && viewMode === "week" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={rebalanceLoading}
+                  onClick={async () => {
+                    setRebalanceLoading(true);
+                    const ws = toDateStr(weekDays[0]);
+                    const we = toDateStr(weekDays[weekDays.length - 1]);
+                    await onRebalanceWeek(ws, we);
+                    setRebalanceLoading(false);
+                  }}
+                >
+                  <Scale className="h-3.5 w-3.5 mr-1" />
+                  {rebalanceLoading ? "Rebalancing…" : "Rebalance"}
+                </Button>
+              )}
               <Button variant={viewMode === "week" ? "default" : "outline"} size="sm" className="h-7 text-xs" onClick={() => setViewMode("week")}>Week</Button>
               <Button variant={viewMode === "month" ? "default" : "outline"} size="sm" className="h-7 text-xs" onClick={() => setViewMode("month")}>Month</Button>
             </div>
