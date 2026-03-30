@@ -67,6 +67,7 @@ export default function ServicesContent() {
     setLaborHours(t.labor_budget_hours ? String(t.labor_budget_hours) : "");
     setLaborRate(t.labor_budget_rate ? String(t.labor_budget_rate) : "");
     setSelectedCrew(t.default_crew || []);
+    setRecurrence(t.recurrence_interval || "");
     setDialogOpen(true);
   };
 
