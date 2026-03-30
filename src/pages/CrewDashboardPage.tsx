@@ -624,21 +624,21 @@ export default function CrewDashboardPage() {
           <p className="text-muted-foreground text-center py-12">{t("loading.jobs")}</p>
         ) : (
           <Tabs defaultValue="list">
-            <TabsList className="w-full sticky bottom-0 sm:relative sm:bottom-auto z-10 bg-card border border-border">
-              <TabsTrigger value="list" className="flex-1 gap-1.5">
-                <List className="h-4 w-4" /> {t("tab.jobs")}
+            <TabsList className="w-full sticky bottom-0 sm:relative sm:bottom-auto z-10 bg-card border border-border overflow-x-auto">
+              <TabsTrigger value="list" className="flex-1 gap-1 min-w-0 px-2">
+                <List className="h-4 w-4 shrink-0" /> <span className="truncate text-xs sm:text-sm">{t("tab.jobs")}</span>
               </TabsTrigger>
-              <TabsTrigger value="calendar" className="flex-1 gap-1.5">
-                <CalendarDays className="h-4 w-4" /> {t("tab.calendar")}
+              <TabsTrigger value="calendar" className="flex-1 gap-1 min-w-0 px-2">
+                <CalendarDays className="h-4 w-4 shrink-0" /> <span className="truncate text-xs sm:text-sm">{t("tab.calendar")}</span>
               </TabsTrigger>
-              <TabsTrigger value="map" className="flex-1 gap-1.5">
-                <MapIcon className="h-4 w-4" /> {t("tab.map")}
+              <TabsTrigger value="map" className="flex-1 gap-1 min-w-0 px-2">
+                <MapIcon className="h-4 w-4 shrink-0" /> <span className="truncate text-xs sm:text-sm">{t("tab.map")}</span>
               </TabsTrigger>
-              <TabsTrigger value="messages" className="flex-1 gap-1.5">
-                <MessageSquare className="h-4 w-4" /> Messages
+              <TabsTrigger value="messages" className="flex-1 gap-1 min-w-0 px-2">
+                <MessageSquare className="h-4 w-4 shrink-0" /> <span className="truncate text-xs sm:text-sm">Chat</span>
               </TabsTrigger>
-              <TabsTrigger value="profile" className="flex-1 gap-1.5">
-                <UserCircle className="h-4 w-4" /> {t("tab.profile")}
+              <TabsTrigger value="profile" className="flex-1 gap-1 min-w-0 px-2">
+                <UserCircle className="h-4 w-4 shrink-0" /> <span className="truncate text-xs sm:text-sm">{t("tab.profile")}</span>
               </TabsTrigger>
             </TabsList>
             <TabsContent value="list" className="mt-4">

@@ -39,14 +39,14 @@ export default function ChatChannelList({ channels, activeChannelId, onSelect, l
 
   if (loading) {
     return (
-      <div className="w-72 border-r bg-muted/30 p-3 space-y-2">
+      <div className="w-full sm:w-72 border-r bg-muted/30 p-3 space-y-2">
         {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-12 w-full" />)}
       </div>
     );
   }
 
   return (
-    <div className="w-72 border-r bg-muted/30 flex flex-col">
+    <div className="w-full sm:w-72 border-r bg-muted/30 flex flex-col h-full">
       <div className="p-3 border-b">
         <h3 className="text-sm font-semibold text-foreground">Channels</h3>
       </div>
