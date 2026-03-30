@@ -286,6 +286,8 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
   const [raincheckDate, setRaincheckDate] = useState<string | null>(null);
   const [raincheckLoading, setRaincheckLoading] = useState(false);
   const [rebalanceLoading, setRebalanceLoading] = useState(false);
+  const [rebalancePlan, setRebalancePlan] = useState<import("@/components/team/RebalancePreviewDialog").RebalancePlan | null>(null);
+  const [showRebalancePreview, setShowRebalancePreview] = useState(false);
 
   // Filter state
   const [filterCrewId, setFilterCrewId] = useState<string>("all");
