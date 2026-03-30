@@ -720,6 +720,17 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
                   ))}
                 </SelectContent>
               </Select>
+              <Select value={filterJobTitle} onValueChange={setFilterJobTitle}>
+                <SelectTrigger className="h-8 w-[180px] text-xs">
+                  <SelectValue placeholder="All jobs/services" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All jobs / services</SelectItem>
+                  {jobTitleOptions.map((t) => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {hasActiveFilters && (
                 <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" onClick={clearFilters}>
                   <X className="h-3.5 w-3.5 mr-1" />Clear filters
