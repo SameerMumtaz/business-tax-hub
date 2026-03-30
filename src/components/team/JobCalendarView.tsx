@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo, Fragment } from "react";
 import { type Job, type JobSite, type JobAssignment, type CrewCheckinOccurrence } from "@/hooks/useJobs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -567,7 +567,88 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
   };
   const getDayHours = (dateStr: string) => (jobsByDate.get(dateStr) || []).reduce((s, j) => s + (j.estimated_hours || 2), 0);
 
+  // ── Crew Utilization Bars ──
+  const crewUtilization = useMemo(() => {
+    if (viewMode !== "week") return [];
+    const crewMap = new Map<string, { name: string; hours: number }>();
+    weekDays.forEach((day) => {
+      const dateStr = toDateStr(day);
+      const dayJobs = jobsByDate.get(dateStr) || [];
+      dayJobs.forEach((job) => {
+        const jobAssigns = assignments.filter((a) => a.job_id === job.id);
+        const hoursPerWorker = (job.estimated_hours || 2) / Math.max(1, jobAssigns.length || 1);
+        jobAssigns.forEach((a) => {
+          const existing = crewMap.get(a.worker_id) || { name: a.worker_name.split(" ")[0], hours: 0 };
+          existing.hours += hoursPerWorker;
+          crewMap.set(a.worker_id, existing);
+        });
+        if (jobAssigns.length === 0) {
+          // Unassigned jobs don't count toward anyone
+        }
+      });
+    });
+    return Array.from(crewMap.entries())
+      .map(([id, data]) => ({ id, ...data }))
+      .sort((a, b) => b.hours - a.hours);
+  }, [viewMode, weekDays, jobsByDate, assignments]);
 
+  // ── Weekly Revenue Ticker ──
+  const weekRevenue = useMemo(() => {
+    if (viewMode !== "week") return null;
+    let total = 0;
+    const seen = new Set<string>();
+    weekDays.forEach((day) => {
+      const dateStr = toDateStr(day);
+      const dayJobs = jobsByDate.get(dateStr) || [];
+      dayJobs.forEach((job) => {
+        // For recurring jobs, count price per occurrence
+        if (job.job_type === "recurring") {
+          total += job.price || 0;
+        } else if (!seen.has(job.id)) {
+          seen.add(job.id);
+          total += job.price || 0;
+        }
+      });
+    });
+    return total;
+  }, [viewMode, weekDays, jobsByDate]);
+
+  // ── Smart Conflict Detection (persistent, not just during drag) ──
+  const persistentConflicts = useMemo(() => {
+    if (viewMode !== "week") return new Map<string, string>();
+    const conflictMap = new Map<string, string>(); // jobId-dateStr → conflict message
+    weekDays.forEach((day) => {
+      const dateStr = toDateStr(day);
+      const dayJobs = sortJobs(jobsByDate.get(dateStr) || []);
+      for (let i = 0; i < dayJobs.length; i++) {
+        const jobA = dayJobs[i];
+        if (!jobA.start_time) continue;
+        const aAssigns = assignments.filter((a) => a.job_id === jobA.id);
+        const aCrewIds = new Set(aAssigns.map((a) => a.worker_id));
+        const [hA, mA] = jobA.start_time.split(":").map(Number);
+        const aStart = hA * 60 + mA;
+        const aEnd = aStart + Math.round((jobA.estimated_hours || 1) * 60);
+
+        for (let j = i + 1; j < dayJobs.length; j++) {
+          const jobB = dayJobs[j];
+          if (!jobB.start_time) continue;
+          const bAssigns = assignments.filter((a) => a.job_id === jobB.id);
+          const overlap = bAssigns.filter((a) => aCrewIds.has(a.worker_id));
+          if (overlap.length === 0) continue;
+
+          const [hB, mB] = jobB.start_time.split(":").map(Number);
+          const bStart = hB * 60 + mB;
+
+          if (aEnd > bStart) {
+            const msg = `${overlap.map(a => a.worker_name.split(" ")[0]).join(", ")} double-booked`;
+            conflictMap.set(`${jobA.id}-${dateStr}`, msg);
+            conflictMap.set(`${jobB.id}-${dateStr}`, msg);
+          }
+        }
+      }
+    });
+    return conflictMap;
+  }, [viewMode, weekDays, jobsByDate, assignments]);
 
   const dayHeaders = isMobile ? ["M", "T", "W", "T", "F", "S", "S"] : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -665,7 +746,9 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
                     isTightBuffer = gapMinutes < requiredTravelBuffer && gapMinutes >= 0;
                   }
                   const gapHeight = gapMinutes > 0 ? Math.max(0, Math.round((gapMinutes / 60) * HOUR_PX)) : 0;
-                  return <div key={`${job.id}-${dateStr}-${idx}`}><div draggable={canDrag} onDragStart={(e) => handleDragStart(e, job, dateStr)} onDragEnd={handleDragEnd} onClick={() => { if (!wasDragging.current && !isRescheduled) onJobClick?.(job); }} style={{ minHeight: `${blockHeight}px` }} className={cn("group relative rounded-md border px-2 py-1.5 transition-all select-none flex flex-col", isRescheduled ? "opacity-40 bg-muted/50 border-dashed border-muted-foreground/30 cursor-default line-through decoration-muted-foreground/40 pointer-events-none" : cn("cursor-pointer hover:shadow-sm", STATUS_BG[displayStatus] || STATUS_BG.scheduled, canDrag && "hover:ring-1 hover:ring-primary/30", job._isMultiDayContinuation && "opacity-70 border-dashed"), isDragging && "opacity-30 scale-95")}>{editMode && onJobDelete && !isRescheduled && !job._isMultiDayContinuation && <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(job); }} className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-destructive/10 pointer-events-auto z-10" title="Delete job"><Trash2 className="h-3 w-3 text-destructive" /></button>}<div className="flex gap-1.5 flex-1 pointer-events-none"><div className={cn("w-1 rounded-full shrink-0 self-stretch", STATUS_ACCENT[displayStatus] || STATUS_ACCENT.scheduled)} /><div className="min-w-0 flex-1 flex flex-col">{canDrag && <GripVertical className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 self-end cursor-grab" />}<div className={cn("text-xs font-semibold truncate", STATUS_TEXT[displayStatus])}>{job.title}</div><div className="flex flex-wrap items-center gap-x-2 gap-y-0 mt-0.5">{job.start_time && !job._isMultiDayContinuation && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><Clock className="h-2.5 w-2.5" />{formatTime12(job.start_time)}</span>}{job.estimated_hours && !job._isMultiDayContinuation && <span className="text-[10px] text-muted-foreground font-mono">{job.estimated_hours}h</span>}</div>{site && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 truncate mt-0.5"><MapPin className="h-2.5 w-2.5 shrink-0" /><span className="truncate">{site.name}</span></span>}{!job._isMultiDayContinuation && assignments.filter((a) => a.job_id === job.id).length > 0 && <div className="flex flex-wrap gap-0.5 mt-1">{assignments.filter((a) => a.job_id === job.id).slice(0, 3).map((a) => <span key={a.id} className="text-[9px] bg-background/80 border border-border/50 rounded px-1 py-0 text-muted-foreground">{a.worker_name.split(" ")[0]}</span>)}{assignments.filter((a) => a.job_id === job.id).length > 3 && <span className="text-[9px] text-muted-foreground">+{assignments.filter((a) => a.job_id === job.id).length - 3}</span>}</div>}{isRescheduled ? <span className="text-[9px] text-destructive/70 font-medium no-underline mt-auto" style={{ textDecoration: "none" }}>↗ Rescheduled</span> : job._multiDayInfo ? <span className="text-[9px] text-muted-foreground/60 italic mt-auto">Day {job._multiDayInfo.dayIndex + 1}/{job._multiDayInfo.totalDays}</span> : job.job_type === "recurring" ? <span className="text-[9px] text-muted-foreground/60 italic mt-auto">↻ {job.recurring_interval}</span> : null}</div></div></div>{isTightBuffer && !dragJob && <div className="mx-1 border-l-2 border-dashed border-destructive/40 flex items-center pl-2 py-0.5" style={{ minHeight: "20px" }}><span className="text-[9px] text-destructive font-medium flex items-center gap-0.5"><AlertTriangle className="h-2.5 w-2.5" />{gapMinutes}m gap · need {requiredTravelBuffer}m travel</span></div>}{gapHeight > 8 && !dragJob && !isTightBuffer && <div className="mx-1 border-l-2 border-dashed border-muted-foreground/15 flex items-center pl-2" style={{ height: `${Math.min(gapHeight, 80)}px` }}><span className="text-[9px] text-muted-foreground/40 font-mono">{gapMinutes >= 60 ? `${(gapMinutes / 60).toFixed(1)}h free` : `${gapMinutes}m free`}</span></div>}{showDropAfter && (() => { const dropIdx = idx + 1; const movedDur = dragJob.estimated_hours || 1; const previewTime = computeTimeForIndex(dateStr, dropIdx, dragJob.id, movedDur); const isActive = dragOverDate === dateStr && dragOverIndex === dropIdx; return <div className={cn("rounded-md border-2 border-dashed flex items-center justify-center cursor-pointer transition-all my-1", isActive ? "h-9 border-primary bg-primary/15 shadow-sm" : "h-7 border-primary/30 bg-primary/5 hover:border-primary hover:bg-primary/10")} onDragOver={(e) => handleCardDragOver(e, dateStr, dropIdx)} onDrop={(e) => handleCardDrop(e, dateStr, dropIdx)}><span className={cn("text-[10px] font-medium pointer-events-none", isActive ? "text-primary" : "text-primary/60")}>{isLastCard ? "↓" : "→"} Move here{isActive && previewTime ? ` · ${formatTime12(previewTime)}` : ""}</span></div>; })()}</div>;
+                  const conflictKey = `${job.id}-${dateStr}`;
+                  const conflictMsg = persistentConflicts.get(conflictKey);
+                  return <div key={`${job.id}-${dateStr}-${idx}`}><div draggable={canDrag} onDragStart={(e) => handleDragStart(e, job, dateStr)} onDragEnd={handleDragEnd} onClick={() => { if (!wasDragging.current && !isRescheduled) onJobClick?.(job); }} style={{ minHeight: `${blockHeight}px` }} className={cn("group relative rounded-md border px-2 py-1.5 transition-all select-none flex flex-col", isRescheduled ? "opacity-40 bg-muted/50 border-dashed border-muted-foreground/30 cursor-default line-through decoration-muted-foreground/40 pointer-events-none" : cn("cursor-pointer hover:shadow-sm", conflictMsg ? "border-destructive ring-1 ring-destructive/30" : "", STATUS_BG[displayStatus] || STATUS_BG.scheduled, canDrag && "hover:ring-1 hover:ring-primary/30", job._isMultiDayContinuation && "opacity-70 border-dashed"), isDragging && "opacity-30 scale-95")}>{conflictMsg && !isRescheduled && <div className="absolute -top-1.5 -left-1 flex items-center gap-0.5 px-1 py-0 rounded-full bg-destructive text-destructive-foreground text-[8px] font-bold z-10 shadow-sm pointer-events-auto" title={conflictMsg}><AlertTriangle className="h-2.5 w-2.5" />CONFLICT</div>}{editMode && onJobDelete && !isRescheduled && !job._isMultiDayContinuation && <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(job); }} className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-destructive/10 pointer-events-auto z-10" title="Delete job"><Trash2 className="h-3 w-3 text-destructive" /></button>}<div className="flex gap-1.5 flex-1 pointer-events-none"><div className={cn("w-1 rounded-full shrink-0 self-stretch", STATUS_ACCENT[displayStatus] || STATUS_ACCENT.scheduled)} /><div className="min-w-0 flex-1 flex flex-col">{canDrag && <GripVertical className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 self-end cursor-grab" />}<div className={cn("text-xs font-semibold truncate", STATUS_TEXT[displayStatus])}>{job.title}</div><div className="flex flex-wrap items-center gap-x-2 gap-y-0 mt-0.5">{job.start_time && !job._isMultiDayContinuation && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><Clock className="h-2.5 w-2.5" />{formatTime12(job.start_time)}</span>}{job.estimated_hours && !job._isMultiDayContinuation && <span className="text-[10px] text-muted-foreground font-mono">{job.estimated_hours}h</span>}</div>{site && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 truncate mt-0.5"><MapPin className="h-2.5 w-2.5 shrink-0" /><span className="truncate">{site.name}</span></span>}{!job._isMultiDayContinuation && assignments.filter((a) => a.job_id === job.id).length > 0 && <div className="flex flex-wrap gap-0.5 mt-1">{assignments.filter((a) => a.job_id === job.id).slice(0, 3).map((a) => <span key={a.id} className="text-[9px] bg-background/80 border border-border/50 rounded px-1 py-0 text-muted-foreground">{a.worker_name.split(" ")[0]}</span>)}{assignments.filter((a) => a.job_id === job.id).length > 3 && <span className="text-[9px] text-muted-foreground">+{assignments.filter((a) => a.job_id === job.id).length - 3}</span>}</div>}{isRescheduled ? <span className="text-[9px] text-destructive/70 font-medium no-underline mt-auto" style={{ textDecoration: "none" }}>↗ Rescheduled</span> : job._multiDayInfo ? <span className="text-[9px] text-muted-foreground/60 italic mt-auto">Day {job._multiDayInfo.dayIndex + 1}/{job._multiDayInfo.totalDays}</span> : job.job_type === "recurring" ? <span className="text-[9px] text-muted-foreground/60 italic mt-auto">↻ {job.recurring_interval}</span> : null}</div></div></div>{isTightBuffer && !dragJob && <div className="mx-1 border-l-2 border-dashed border-destructive/40 flex items-center pl-2 py-0.5" style={{ minHeight: "20px" }}><span className="text-[9px] text-destructive font-medium flex items-center gap-0.5"><AlertTriangle className="h-2.5 w-2.5" />{gapMinutes}m gap · need {requiredTravelBuffer}m travel</span></div>}{gapHeight > 8 && !dragJob && !isTightBuffer && <div className="mx-1 border-l-2 border-dashed border-muted-foreground/15 flex items-center pl-2" style={{ height: `${Math.min(gapHeight, 80)}px` }}><span className="text-[9px] text-muted-foreground/40 font-mono">{gapMinutes >= 60 ? `${(gapMinutes / 60).toFixed(1)}h free` : `${gapMinutes}m free`}</span></div>}{showDropAfter && (() => { const dropIdx = idx + 1; const movedDur = dragJob.estimated_hours || 1; const previewTime = computeTimeForIndex(dateStr, dropIdx, dragJob.id, movedDur); const isActive = dragOverDate === dateStr && dragOverIndex === dropIdx; return <div className={cn("rounded-md border-2 border-dashed flex items-center justify-center cursor-pointer transition-all my-1", isActive ? "h-9 border-primary bg-primary/15 shadow-sm" : "h-7 border-primary/30 bg-primary/5 hover:border-primary hover:bg-primary/10")} onDragOver={(e) => handleCardDragOver(e, dateStr, dropIdx)} onDrop={(e) => handleCardDrop(e, dateStr, dropIdx)}><span className={cn("text-[10px] font-medium pointer-events-none", isActive ? "text-primary" : "text-primary/60")}>{isLastCard ? "↓" : "→"} Move here{isActive && previewTime ? ` · ${formatTime12(previewTime)}` : ""}</span></div>; })()}</div>;
                 })}
                 {dragJob && dayJobs.length === 0 && <div className={cn("rounded-md border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-all py-4", dragOverDate === dateStr ? "border-primary bg-primary/15 shadow-sm" : "border-primary/30 bg-primary/5 hover:border-primary hover:bg-primary/10")} onDragOver={(e) => handleCardDragOver(e, dateStr, 0)} onDrop={(e) => handleCardDrop(e, dateStr, 0)}>{showConflicts.length > 0 && dragOverDate === dateStr ? <><AlertTriangle className="h-3.5 w-3.5 text-destructive" /><span className="text-[9px] text-destructive text-center px-1">{showConflicts[0]?.message}</span></> : <span className="text-[10px] text-primary/60 font-medium">Move here · {formatTime12(DEFAULT_START)}</span>}</div>}
               </div>
@@ -852,6 +935,48 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
                   {filterJobTitle}
                   <X className="h-3 w-3" />
                 </Badge>
+              )}
+            </div>
+          )}
+
+          {/* ── Weekly Stats Bar: Revenue + Crew Utilization ── */}
+          {viewMode === "week" && (crewUtilization.length > 0 || (weekRevenue != null && weekRevenue > 0)) && (
+            <div className="mb-3 rounded-lg border border-border bg-muted/30 px-3 py-2 space-y-2">
+              {/* Revenue ticker */}
+              {weekRevenue != null && weekRevenue > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Week Revenue</span>
+                  <span className="text-sm font-bold text-foreground">${weekRevenue.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                </div>
+              )}
+              {/* Crew utilization bars */}
+              {crewUtilization.length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Crew Load</span>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                    {crewUtilization.map((crew) => {
+                      const cap = 40; // weekly capacity hours
+                      const pct = Math.min(100, (crew.hours / cap) * 100);
+                      const isOver = crew.hours > cap;
+                      const isHeavy = crew.hours > 32;
+                      return (
+                        <div key={crew.id} className="flex items-center gap-2 min-w-[140px]" title={`${crew.name}: ${crew.hours.toFixed(1)}h / ${cap}h`}>
+                          <span className="text-[11px] font-medium text-foreground w-16 truncate">{crew.name}</span>
+                          <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden min-w-[60px]">
+                            <div
+                              className={cn(
+                                "h-full rounded-full transition-all",
+                                isOver ? "bg-destructive" : isHeavy ? "bg-amber-500" : "bg-primary"
+                              )}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className={cn("text-[10px] font-mono tabular-nums", isOver ? "text-destructive font-bold" : "text-muted-foreground")}>{crew.hours.toFixed(1)}h</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
             </div>
           )}
