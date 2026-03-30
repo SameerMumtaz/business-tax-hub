@@ -221,6 +221,26 @@ export default function ServicesContent() {
                 </SelectContent>
               </Select>
             </div>
+            {recurrence && recurrence !== "none" && (
+              <div>
+                <label className="text-xs text-muted-foreground">Billing Rate</label>
+                <Select value={billingInterval} onValueChange={setBillingInterval}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Same as recurrence" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Same as recurrence</SelectItem>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="quarterly">Quarterly</SelectItem>
+                    <SelectItem value="biannual">Bi-annual</SelectItem>
+                    <SelectItem value="annual">Annual</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-0.5">How often to bill the client (if different from service frequency)</p>
+              </div>
+            )}
             <JobBudgetFields
               price={price} materialBudget={materialBudget}
               laborBudgetType={laborType} laborBudgetAmount={laborAmount}

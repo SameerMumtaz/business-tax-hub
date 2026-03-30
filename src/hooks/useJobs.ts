@@ -33,6 +33,7 @@ export interface Job {
   job_type: string;
   recurring_interval: string | null;
   recurring_end_date: string | null;
+  billing_interval: string | null;
   invoice_id: string | null;
   price: number;
   material_budget: number;
