@@ -209,7 +209,7 @@ export default function ChatMessageArea({
                         )}
                         <span className={`text-[10px] mt-1 block ${isOwn ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
                           {format(new Date(msg.created_at), "h:mm a")}
-                          {msg.is_pinned && <Pin className="h-2.5 w-2.5 inline ml-1 text-amber-500" />}
+                          {msg.is_pinned && <Pin className="h-2.5 w-2.5 inline ml-1 text-primary" />}
                         </span>
                       </div>
                     </div>
