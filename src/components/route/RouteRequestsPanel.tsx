@@ -46,7 +46,7 @@ export default function RouteRequestsPanel({ onScheduleUpdate }: Props) {
 
     if (data) {
       // Fetch crew member names
-      const memberIds = [...new Set(data.map((r: any) => r.crew_member_id))];
+      const memberIds = [...new Set(data.map((r: any) => r.crew_member_id))] as string[];
       const { data: members } = await supabase
         .from("team_members")
         .select("id, name")
