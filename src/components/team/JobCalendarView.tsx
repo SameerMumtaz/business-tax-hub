@@ -586,7 +586,18 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
                     <span className={cn("text-xs font-medium", isMobile && "hidden")}>{day.toLocaleDateString("en-US", { weekday: "short" })}</span>
                     <span className={cn("w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center", isToday ? "bg-primary text-primary-foreground" : "text-foreground")}>{day.getDate()}</span>
                   </div>
-                  {hours > 0 && <span className="text-[10px] font-mono text-muted-foreground">{hours.toFixed(1)}h</span>}
+                  <div className="flex items-center gap-1">
+                    {hours > 0 && <span className="text-[10px] font-mono text-muted-foreground">{hours.toFixed(1)}h</span>}
+                    {onRaincheckDay && dayJobs.filter(j => (j._displayStatus || j.status) !== "completed" && j.status !== "cancelled").length > 0 && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setRaincheckDate(dateStr); }}
+                        className="opacity-0 group-hover/day:opacity-100 transition-opacity p-0.5 rounded hover:bg-destructive/10"
+                        title="Raincheck this day"
+                      >
+                        <CloudRain className="h-3.5 w-3.5 text-blue-500" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="mt-1 h-1 rounded-full bg-muted overflow-hidden"><div className={cn("h-full rounded-full transition-all", getWorkloadBarColor(hours))} style={{ width: `${Math.min(100, (hours / 12) * 100)}%` }} /></div>
                 {isGapSuggestion && !isDragTarget && <div className="mt-1 flex items-center gap-1 text-[9px] text-emerald-600 dark:text-emerald-400 font-medium"><Sparkles className="h-3 w-3" />Suggested</div>}
