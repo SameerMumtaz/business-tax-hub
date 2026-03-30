@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { MapPin, LogOut, Clock } from "lucide-react";
+import { MapPin, LogOut, Clock, MessageSquare } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Button } from "@/components/ui/button";
