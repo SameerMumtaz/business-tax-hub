@@ -46,7 +46,7 @@ export default function ChatChannelList({ channels, activeChannelId, onSelect, l
   }
 
   return (
-    <div className="w-72 border-r bg-muted/30 flex flex-col">
+    <div className="w-full sm:w-72 border-r bg-muted/30 flex flex-col h-full">
       <div className="p-3 border-b">
         <h3 className="text-sm font-semibold text-foreground">Channels</h3>
       </div>
