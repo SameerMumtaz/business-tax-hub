@@ -608,10 +608,37 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
                     <span className={cn("text-xs font-medium", !isMobile && "hidden")}>{day.toLocaleDateString("en-US", { weekday: "short" })}</span>
                     <span className={cn("text-xs font-medium", isMobile && "hidden")}>{day.toLocaleDateString("en-US", { weekday: "short" })}</span>
                     <span className={cn("w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center", isToday ? "bg-primary text-primary-foreground" : "text-foreground")}>{day.getDate()}</span>
+                    {(() => {
+                      const w = weatherData?.get(dateStr);
+                      if (!w) return null;
+                      return (
+                        <span
+                          className={cn("text-sm cursor-default", w.isStormDay && "animate-pulse")}
+                          title={`${w.label} — ${w.precipitationMm.toFixed(1)}mm`}
+                        >
+                          {w.icon}
+                        </span>
+                      );
+                    })()}
+                    {(() => {
+                      const w = weatherData?.get(dateStr);
+                      if (!w?.isRainDay || !onRaincheckDay) return null;
+                      const moveable = dayJobs.filter(j => (j._displayStatus || j.status) !== "completed" && j.status !== "cancelled").length;
+                      if (!moveable) return null;
+                      return (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setRaincheckDate(dateStr); }}
+                          className="flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 transition-colors"
+                          title={`Rain expected — raincheck ${moveable} job${moveable !== 1 ? "s" : ""}`}
+                        >
+                          <Droplets className="h-3 w-3" />Raincheck?
+                        </button>
+                      );
+                    })()}
                   </div>
                   <div className="flex items-center gap-1">
                     {hours > 0 && <span className="text-[10px] font-mono text-muted-foreground">{hours.toFixed(1)}h</span>}
-                    {onRaincheckDay && dayJobs.filter(j => (j._displayStatus || j.status) !== "completed" && j.status !== "cancelled").length > 0 && (
+                    {onRaincheckDay && !weatherData?.get(dateStr)?.isRainDay && dayJobs.filter(j => (j._displayStatus || j.status) !== "completed" && j.status !== "cancelled").length > 0 && (
                       <button
                         onClick={(e) => { e.stopPropagation(); setRaincheckDate(dateStr); }}
                         className="opacity-0 group-hover/day:opacity-100 transition-opacity p-0.5 rounded hover:bg-destructive/10"
