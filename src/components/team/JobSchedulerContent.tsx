@@ -416,6 +416,7 @@ export default function JobSchedulerContent() {
     setEditJobLaborAmount(j.labor_budget_amount ? String(j.labor_budget_amount) : "");
     setEditJobLaborHours(j.labor_budget_hours ? String(j.labor_budget_hours) : "");
     setEditJobLaborRate(j.labor_budget_rate ? String(j.labor_budget_rate) : "");
+    setEditJobBillingInterval(j.billing_interval || "");
     setEditJobOpen(true);
   };
 
