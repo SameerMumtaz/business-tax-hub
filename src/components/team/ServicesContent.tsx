@@ -45,7 +45,7 @@ export default function ServicesContent() {
   const [laborHours, setLaborHours] = useState("");
   const [laborRate, setLaborRate] = useState("");
   const [selectedCrew, setSelectedCrew] = useState<{ worker_id: string; worker_name: string }[]>([]);
-
+  const [recurrence, setRecurrence] = useState("");
   const resetForm = () => {
     setTitle(""); setDescription(""); setEstHours(""); setPrice("");
     setMaterialBudget(""); setLaborType("amount"); setLaborAmount("");
