@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
+import { notifyCrewOfJobChange } from "@/lib/crewJobNotify";
 import { getJobDateKeysInRange } from "@/lib/dateOnly";
 import JobBudgetFields from "@/components/job/JobBudgetFields";
 import CrewAssignmentPanel from "@/components/job/CrewAssignmentPanel";
