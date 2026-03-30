@@ -174,6 +174,11 @@ export default function ServicesContent() {
                       <Repeat className="h-3 w-3" />{t.recurrence_interval}
                     </Badge>
                   )}
+                  {t.billing_interval && (
+                    <Badge variant="outline" className="gap-1">
+                      <DollarSign className="h-3 w-3" />Bill {t.billing_interval}
+                    </Badge>
+                  )}
                   {t.default_crew.length > 0 && (
                     <Badge variant="secondary" className="gap-1">
                       <Users className="h-3 w-3" />{t.default_crew.length} crew
