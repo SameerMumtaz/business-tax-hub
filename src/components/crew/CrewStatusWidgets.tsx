@@ -146,11 +146,29 @@ export default function CrewStatusWidgets({ jobs, activeCheckin, siteLat, siteLn
 
   return (
     <div className="flex items-center gap-2 text-xs flex-wrap">
-      {/* Weather */}
+      {/* Weather + Temps */}
       {todayWeather && (
         <div className="flex items-center gap-1.5 bg-muted/50 rounded-full px-3 py-1.5">
           <span className="text-base leading-none">{todayWeather.icon}</span>
           <span className="text-muted-foreground font-medium">{todayWeather.label}</span>
+          <span className="font-semibold text-foreground">{todayWeather.tempHighF}°</span>
+          <span className="text-muted-foreground">/ {todayWeather.tempLowF}°</span>
+        </div>
+      )}
+
+      {/* Rain forecast */}
+      {todayWeather && todayWeather.rainStartHour !== null && !todayWeather.isRainDay && (
+        <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/30 rounded-full px-3 py-1.5 text-blue-700 dark:text-blue-400">
+          <Droplets className="h-3.5 w-3.5" />
+          <span className="font-medium">
+            Rain ~{todayWeather.rainStartHour > 12 ? `${todayWeather.rainStartHour - 12}pm` : todayWeather.rainStartHour === 0 ? "12am" : `${todayWeather.rainStartHour}am`}
+          </span>
+        </div>
+      )}
+      {todayWeather && todayWeather.isRainDay && (
+        <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/30 rounded-full px-3 py-1.5 text-blue-700 dark:text-blue-400">
+          <Droplets className="h-3.5 w-3.5" />
+          <span className="font-medium">Rain today</span>
         </div>
       )}
 
