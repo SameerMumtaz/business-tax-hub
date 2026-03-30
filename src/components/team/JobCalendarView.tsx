@@ -649,16 +649,16 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     }));
   }, [sites]);
 
-  const jobTitleOptions = useMemo(() => {
+  const jobTitleFilterOptions = useMemo(() => {
     const seen = new Set<string>();
-    const list: string[] = [];
+    const list: { value: string; label: string }[] = [];
     for (const j of jobs) {
       if (!seen.has(j.title)) {
         seen.add(j.title);
-        list.push(j.title);
+        list.push({ value: j.title, label: j.title });
       }
     }
-    return list.sort((a, b) => a.localeCompare(b));
+    return list.sort((a, b) => a.label.localeCompare(b.label));
   }, [jobs]);
 
   const clearFilters = () => { setFilterCrewId("all"); setFilterSiteId("all"); setFilterJobTitle("all"); };
