@@ -556,6 +556,19 @@ export default function CrewDashboardPage() {
           <QuickStats checkins={checkins} payRate={payRate} jobs={assignedJobs} />
         )}
 
+        {/* Optimize Route Button */}
+        {!loading && !activeCheckin && todayJobs.length >= 2 && (
+          <Button
+            variant="outline"
+            className="w-full gap-2 border-primary/30 hover:bg-primary/5"
+            onClick={handleOptimizeRoute}
+            disabled={routeLoading}
+          >
+            <Navigation className="h-4 w-4 text-primary" />
+            Optimize Today's Route
+          </Button>
+        )}
+
         {/* Active Check-in Card */}
         {activeCheckin && (
           <Card className="border-2 border-primary bg-accent/30">
