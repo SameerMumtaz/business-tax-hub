@@ -160,7 +160,21 @@ export default function CrewDashboardPage() {
   // Photo requirement for checkout
   const activeJobId = activeCheckin?.job_id || null;
   const activeOccurrenceDate = activeCheckin?.occurrence_date || null;
-  const { photoCountByType } = useJobPhotos(activeJobId, activeOccurrenceDate);
+
+  // Cross-post photos to crew chat
+  const handlePhotoUploaded = useCallback(async (photoUrl: string, photoType: string) => {
+    if (!user || !teamMemberId || !activeJobId) return;
+    const activeJobForChat = assignedJobs.find((j) => j.id === activeJobId);
+    const typeLabel = photoType.charAt(0).toUpperCase() + photoType.slice(1);
+    await postCrewChatMessage(
+      user.id,
+      teamMemberId,
+      `📷 ${typeLabel} photo uploaded for "${activeJobForChat?.title || "job"}"`,
+      { job_id: activeJobId, job_site_id: activeCheckin?.job_site_id, occurrence_date: activeOccurrenceDate, photo_url: photoUrl }
+    );
+  }, [user, teamMemberId, activeJobId, activeCheckin, assignedJobs]);
+
+  const { photoCountByType } = useJobPhotos(activeJobId, activeOccurrenceDate, handlePhotoUploaded);
   const hasBeforePhotos = photoCountByType.before > 0;
   const hasAfterPhotos = photoCountByType.after > 0;
   const photosComplete = hasBeforePhotos && hasAfterPhotos;
