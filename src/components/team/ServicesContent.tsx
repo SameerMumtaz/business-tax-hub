@@ -49,7 +49,7 @@ export default function ServicesContent() {
   const resetForm = () => {
     setTitle(""); setDescription(""); setEstHours(""); setPrice("");
     setMaterialBudget(""); setLaborType("amount"); setLaborAmount("");
-    setLaborHours(""); setLaborRate(""); setSelectedCrew([]);
+    setLaborHours(""); setLaborRate(""); setSelectedCrew([]); setRecurrence("");
     setEditing(null);
   };
 
