@@ -872,6 +872,7 @@ export type Database = {
       }
       job_templates: {
         Row: {
+          billing_interval: string | null
           created_at: string
           default_crew: Json
           description: string | null
@@ -889,6 +890,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          billing_interval?: string | null
           created_at?: string
           default_crew?: Json
           description?: string | null
@@ -906,6 +908,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          billing_interval?: string | null
           created_at?: string
           default_crew?: Json
           description?: string | null
@@ -926,6 +929,7 @@ export type Database = {
       }
       jobs: {
         Row: {
+          billing_interval: string | null
           client_id: string | null
           created_at: string
           description: string | null
@@ -951,6 +955,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          billing_interval?: string | null
           client_id?: string | null
           created_at?: string
           description?: string | null
@@ -976,6 +981,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          billing_interval?: string | null
           client_id?: string | null
           created_at?: string
           description?: string | null

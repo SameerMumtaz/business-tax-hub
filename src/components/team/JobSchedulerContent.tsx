@@ -169,6 +169,7 @@ export default function JobSchedulerContent() {
   const [jobLaborAmount, setJobLaborAmount] = useState("");
   const [jobLaborHours, setJobLaborHours] = useState("");
   const [jobLaborRate, setJobLaborRate] = useState("");
+  const [jobBillingInterval, setJobBillingInterval] = useState("");
 
   // Edit job state
   const [editJobOpen, setEditJobOpen] = useState(false);
@@ -190,6 +191,7 @@ export default function JobSchedulerContent() {
   const [editJobLaborAmount, setEditJobLaborAmount] = useState("");
   const [editJobLaborHours, setEditJobLaborHours] = useState("");
   const [editJobLaborRate, setEditJobLaborRate] = useState("");
+  const [editJobBillingInterval, setEditJobBillingInterval] = useState("");
 
   // Photos dialog state
   const [photosJobId, setPhotosJobId] = useState<string | null>(null);
@@ -374,7 +376,9 @@ export default function JobSchedulerContent() {
       title: jobTitle, site_id: jobSiteId, start_date: jobStart,
       end_date: jobEnd || null, status: "scheduled", job_type: jobType,
       recurring_interval: jobType === "recurring" ? jobInterval || null : null,
-      recurring_end_date: jobType === "recurring" && jobRecurringEnd ? jobRecurringEnd : null, invoice_id: null, description: jobDesc || null,
+      recurring_end_date: jobType === "recurring" && jobRecurringEnd ? jobRecurringEnd : null,
+      billing_interval: jobType === "recurring" && jobBillingInterval && jobBillingInterval !== "none" ? jobBillingInterval : null,
+      invoice_id: null, description: jobDesc || null,
       start_time: jobStartTime || null, estimated_hours: jobEstHours ? Number(jobEstHours) : null,
       client_id: jobClientId && jobClientId !== "none" ? jobClientId : null,
       price: Number(jobPrice) || 0,
@@ -390,6 +394,7 @@ export default function JobSchedulerContent() {
     setJobStartTime(""); setJobEstHours(""); setJobClientId("");
     setJobPrice(""); setJobMaterialBudget(""); setJobLaborType("amount");
     setJobLaborAmount(""); setJobLaborHours(""); setJobLaborRate("");
+    setJobBillingInterval("");
   };
 
   const openEditJob = (j: Job) => {
@@ -411,6 +416,7 @@ export default function JobSchedulerContent() {
     setEditJobLaborAmount(j.labor_budget_amount ? String(j.labor_budget_amount) : "");
     setEditJobLaborHours(j.labor_budget_hours ? String(j.labor_budget_hours) : "");
     setEditJobLaborRate(j.labor_budget_rate ? String(j.labor_budget_rate) : "");
+    setEditJobBillingInterval(j.billing_interval || "");
     setEditJobOpen(true);
   };
 
@@ -423,6 +429,7 @@ export default function JobSchedulerContent() {
       end_date: editJobEnd || null, job_type: editJobType,
       recurring_interval: editJobType === "recurring" ? editJobInterval || null : null,
       recurring_end_date: editJobType === "recurring" && editJobRecurringEnd ? editJobRecurringEnd : null,
+      billing_interval: editJobType === "recurring" && editJobBillingInterval && editJobBillingInterval !== "none" ? editJobBillingInterval : null,
       description: editJobDesc || null,
       start_time: editJobStartTime || null, estimated_hours: editJobEstHours ? Number(editJobEstHours) : null,
       client_id: editJobClientId && editJobClientId !== "none" ? editJobClientId : null,
@@ -511,6 +518,11 @@ export default function JobSchedulerContent() {
                   setJobLaborAmount(t.labor_budget_amount ? String(t.labor_budget_amount) : "");
                   setJobLaborHours(t.labor_budget_hours ? String(t.labor_budget_hours) : "");
                   setJobLaborRate(t.labor_budget_rate ? String(t.labor_budget_rate) : "");
+                  if (t.recurrence_interval) {
+                    setJobType("recurring");
+                    setJobInterval(t.recurrence_interval);
+                  }
+                  setJobBillingInterval(t.billing_interval || "");
                 }}>
                   <SelectTrigger className="border-dashed">
                     <Briefcase className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
@@ -599,6 +611,22 @@ export default function JobSchedulerContent() {
                     <label className="text-xs text-muted-foreground">Recurring End Date (optional)</label>
                     <Input type="date" value={jobRecurringEnd} onChange={(e) => setJobRecurringEnd(e.target.value)} />
                     <p className="text-xs text-muted-foreground mt-0.5">Leave blank to repeat indefinitely</p>
+                   </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Billing Rate</label>
+                    <Select value={jobBillingInterval} onValueChange={setJobBillingInterval}>
+                      <SelectTrigger><SelectValue placeholder="Same as recurrence" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Same as recurrence</SelectItem>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="quarterly">Quarterly</SelectItem>
+                        <SelectItem value="biannual">Bi-annual</SelectItem>
+                        <SelectItem value="annual">Annual</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-0.5">How often to bill (if different from service frequency)</p>
                   </div>
                 </>
               )}
@@ -730,6 +758,22 @@ export default function JobSchedulerContent() {
                   <label className="text-xs text-muted-foreground">Recurring End Date (optional)</label>
                   <Input type="date" value={editJobRecurringEnd} onChange={(e) => setEditJobRecurringEnd(e.target.value)} />
                   <p className="text-xs text-muted-foreground mt-0.5">Leave blank to repeat indefinitely</p>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Billing Rate</label>
+                  <Select value={editJobBillingInterval} onValueChange={setEditJobBillingInterval}>
+                    <SelectTrigger><SelectValue placeholder="Same as recurrence" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Same as recurrence</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="quarterly">Quarterly</SelectItem>
+                      <SelectItem value="biannual">Bi-annual</SelectItem>
+                      <SelectItem value="annual">Annual</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-0.5">How often to bill (if different from service frequency)</p>
                 </div>
               </>
             )}

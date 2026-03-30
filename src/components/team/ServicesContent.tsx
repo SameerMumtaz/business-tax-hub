@@ -47,11 +47,12 @@ export default function ServicesContent() {
   const [laborRate, setLaborRate] = useState("");
   const [selectedCrew, setSelectedCrew] = useState<{ worker_id: string; worker_name: string }[]>([]);
   const [recurrence, setRecurrence] = useState("");
+  const [billingInterval, setBillingInterval] = useState("");
   const resetForm = () => {
     setTitle(""); setDescription(""); setEstHours(""); setPrice("");
     setMaterialBudget(""); setLaborType("amount"); setLaborAmount("");
     setLaborHours(""); setLaborRate(""); setSelectedCrew([]); setRecurrence("");
-    setEditing(null);
+    setBillingInterval(""); setEditing(null);
   };
 
   const openCreate = () => { resetForm(); setDialogOpen(true); };
@@ -69,6 +70,7 @@ export default function ServicesContent() {
     setLaborRate(t.labor_budget_rate ? String(t.labor_budget_rate) : "");
     setSelectedCrew(t.default_crew || []);
     setRecurrence(t.recurrence_interval || "");
+    setBillingInterval(t.billing_interval || "");
     setDialogOpen(true);
   };
 
@@ -85,6 +87,7 @@ export default function ServicesContent() {
       labor_budget_hours: Number(laborHours) || 0,
       labor_budget_rate: Number(laborRate) || 0,
       recurrence_interval: recurrence && recurrence !== "none" ? recurrence : null,
+      billing_interval: billingInterval && billingInterval !== "none" ? billingInterval : null,
       default_crew: selectedCrew,
     };
     if (editing) {
@@ -171,6 +174,11 @@ export default function ServicesContent() {
                       <Repeat className="h-3 w-3" />{t.recurrence_interval}
                     </Badge>
                   )}
+                  {t.billing_interval && (
+                    <Badge variant="outline" className="gap-1">
+                      <DollarSign className="h-3 w-3" />Bill {t.billing_interval}
+                    </Badge>
+                  )}
                   {t.default_crew.length > 0 && (
                     <Badge variant="secondary" className="gap-1">
                       <Users className="h-3 w-3" />{t.default_crew.length} crew
@@ -213,6 +221,26 @@ export default function ServicesContent() {
                 </SelectContent>
               </Select>
             </div>
+            {recurrence && recurrence !== "none" && (
+              <div>
+                <label className="text-xs text-muted-foreground">Billing Rate</label>
+                <Select value={billingInterval} onValueChange={setBillingInterval}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Same as recurrence" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Same as recurrence</SelectItem>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="quarterly">Quarterly</SelectItem>
+                    <SelectItem value="biannual">Bi-annual</SelectItem>
+                    <SelectItem value="annual">Annual</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-0.5">How often to bill the client (if different from service frequency)</p>
+              </div>
+            )}
             <JobBudgetFields
               price={price} materialBudget={materialBudget}
               laborBudgetType={laborType} laborBudgetAmount={laborAmount}

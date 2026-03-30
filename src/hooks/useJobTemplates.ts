@@ -16,6 +16,7 @@ export interface JobTemplate {
   labor_budget_hours: number;
   labor_budget_rate: number;
   recurrence_interval: string | null;
+  billing_interval: string | null;
   default_crew: { worker_id: string; worker_name: string }[];
   created_at: string;
   updated_at: string;

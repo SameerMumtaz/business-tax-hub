@@ -56,6 +56,7 @@ export default function ClientJobsPanel({ client }: Props) {
   const [jobLaborAmount, setJobLaborAmount] = useState("");
   const [jobLaborHours, setJobLaborHours] = useState("");
   const [jobLaborRate, setJobLaborRate] = useState("");
+  const [jobBillingInterval, setJobBillingInterval] = useState("");
 
   // Address mode: "client" uses client address to create a new site, "existing" picks existing site, "new" enters a new address
   const [addressMode, setAddressMode] = useState<"client" | "existing" | "new">("client");
@@ -104,6 +105,7 @@ export default function ClientJobsPanel({ client }: Props) {
     setNewSiteState(""); setNewSiteLat(""); setNewSiteLng("");
     setJobPrice(""); setJobMaterialBudget(""); setJobLaborType("amount");
     setJobLaborAmount(""); setJobLaborHours(""); setJobLaborRate("");
+    setJobBillingInterval("");
   };
 
   const handleCreateJob = async () => {
@@ -169,6 +171,7 @@ export default function ClientJobsPanel({ client }: Props) {
         job_type: jobType,
         recurring_interval: jobType === "recurring" ? jobInterval || null : null,
         recurring_end_date: null,
+        billing_interval: jobType === "recurring" && jobBillingInterval && jobBillingInterval !== "none" ? jobBillingInterval : null,
         invoice_id: null,
         description: jobDesc || null,
         start_time: jobStartTime || null,
@@ -442,17 +445,35 @@ export default function ClientJobsPanel({ client }: Props) {
             </div>
 
             {jobType === "recurring" && (
-              <Select value={jobInterval} onValueChange={setJobInterval}>
-                <SelectTrigger><SelectValue placeholder="Repeat interval" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="biweekly">Bi-weekly</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                  <SelectItem value="quarterly">Quarterly</SelectItem>
-                  <SelectItem value="biannual">Bi-annual</SelectItem>
-                  <SelectItem value="annual">Annual</SelectItem>
-                </SelectContent>
-              </Select>
+              <>
+                <Select value={jobInterval} onValueChange={setJobInterval}>
+                  <SelectTrigger><SelectValue placeholder="Repeat interval" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="quarterly">Quarterly</SelectItem>
+                    <SelectItem value="biannual">Bi-annual</SelectItem>
+                    <SelectItem value="annual">Annual</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div>
+                  <label className="text-xs text-muted-foreground">Billing Rate</label>
+                  <Select value={jobBillingInterval} onValueChange={setJobBillingInterval}>
+                    <SelectTrigger><SelectValue placeholder="Same as recurrence" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Same as recurrence</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="quarterly">Quarterly</SelectItem>
+                      <SelectItem value="biannual">Bi-annual</SelectItem>
+                      <SelectItem value="annual">Annual</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-0.5">How often to bill (if different from service frequency)</p>
+                </div>
+              </>
             )}
 
             <JobBudgetFields
