@@ -1,5 +1,8 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { notifyCrewOfJobChange } from "@/lib/crewJobNotify";
+import { useWeatherForecast } from "@/hooks/useWeatherForecast";
+import ClientNotifyDialog, { type AffectedClient } from "@/components/team/ClientNotifyDialog";
+import type { RebalancePlan } from "@/components/team/RebalancePreviewDialog";
 import { getJobDateKeysInRange } from "@/lib/dateOnly";
 import JobBudgetFields from "@/components/job/JobBudgetFields";
 import CrewAssignmentPanel from "@/components/job/CrewAssignmentPanel";

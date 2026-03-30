@@ -989,10 +989,6 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
       )}
 
       {/* Rebalance Preview Dialog */}
-      {showRebalancePreview && rebalancePlan && onRebalanceWeek && (() => {
-        const RebalancePreviewDialog = require("@/components/team/RebalancePreviewDialog").default;
-        return null;
-      })()}
       {showRebalancePreview && rebalancePlan && onRebalanceWeek && (
         <Dialog open={showRebalancePreview} onOpenChange={(v) => { if (!v) { setShowRebalancePreview(false); setRebalancePlan(null); } }}>
           <DialogContent className="max-w-lg">
