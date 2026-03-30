@@ -24,6 +24,7 @@ import CrewProfileTab from "@/components/crew/CrewProfileTab";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 import RouteOptimizationDialog from "@/components/route/RouteOptimizationDialog";
 import CrewChatTab from "@/components/crew/CrewChatTab";
+import CrewStatusWidgets from "@/components/crew/CrewStatusWidgets";
 import { parseDateOnlyLocal, getTodayDateOnlyKey, getNextInstanceDate, isRecurringJobToday, addDaysToDateOnly, compareDateOnly } from "@/lib/dateOnly";
 
 /* ── Live elapsed timer ─────────────────────────────── */
@@ -538,18 +539,28 @@ export default function CrewDashboardPage() {
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-5">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">
-              {greeting}{firstName ? `, ${firstName}` : ""}
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {t("greeting.schedule")}
-            </p>
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-foreground">
+                {greeting}{firstName ? `, ${firstName}` : ""}
+              </h1>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("greeting.schedule")}
+              </p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
+              <SignOutIcon className="h-4 w-4" />
+            </Button>
           </div>
-          <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
-            <SignOutIcon className="h-4 w-4" />
-          </Button>
+
+          {/* Status Widgets */}
+          {!loading && (
+            <CrewStatusWidgets
+              jobs={assignedJobs}
+              activeCheckin={activeCheckin}
+            />
+          )}
         </div>
 
         {/* Quick Stats */}
