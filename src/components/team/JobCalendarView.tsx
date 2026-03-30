@@ -757,13 +757,8 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
                 )}
               </Button>
               <Button variant="ghost" size="sm" className="text-xs h-7" onClick={goToday}>Today</Button>
-              {weekHealth && (
-                <div className={cn("flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-md bg-muted/50", weekHealth.color)} title={`Schedule balance: ${weekHealth.score}%`}>
-                  <div className={cn("w-2 h-2 rounded-full", weekHealth.bg)} />
-                  <span className="hidden sm:inline">{weekHealth.label}</span>
-                  <span className="font-mono text-[10px]">{weekHealth.score}</span>
-                </div>
-              )}
+
+
               {editMode ? (
                 <>
                   {hasEdits && <Button variant="outline" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={handleDiscardEdits}><Undo2 className="h-3.5 w-3.5 mr-1" />Discard</Button>}
