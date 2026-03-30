@@ -1611,6 +1611,74 @@ export type Database = {
         }
         Relationships: []
       }
+      route_optimization_requests: {
+        Row: {
+          business_user_id: string
+          created_at: string
+          crew_member_id: string
+          current_lat: number | null
+          current_lng: number | null
+          estimated_savings_minutes: number
+          id: string
+          optimized_order: Json
+          original_order: Json
+          request_date: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          reviewer_notes: string | null
+          status: string
+          total_optimized_minutes: number
+          total_original_minutes: number
+          updated_at: string
+        }
+        Insert: {
+          business_user_id: string
+          created_at?: string
+          crew_member_id: string
+          current_lat?: number | null
+          current_lng?: number | null
+          estimated_savings_minutes?: number
+          id?: string
+          optimized_order?: Json
+          original_order?: Json
+          request_date: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          status?: string
+          total_optimized_minutes?: number
+          total_original_minutes?: number
+          updated_at?: string
+        }
+        Update: {
+          business_user_id?: string
+          created_at?: string
+          crew_member_id?: string
+          current_lat?: number | null
+          current_lng?: number | null
+          estimated_savings_minutes?: number
+          id?: string
+          optimized_order?: Json
+          original_order?: Json
+          request_date?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          status?: string
+          total_optimized_minutes?: number
+          total_original_minutes?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "route_optimization_requests_crew_member_id_fkey"
+            columns: ["crew_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sales: {
         Row: {
           amount: number
