@@ -1296,6 +1296,8 @@ export default function JobSchedulerContent() {
             teamMembers={teamMembers}
             onJobClick={(j) => openEditJob(j)}
             onJobDelete={deleteJob}
+            onRaincheckDay={handleRaincheckDay}
+            onRebalanceWeek={handleRebalanceWeek}
             onJobMove={async (evt: JobMoveEvent) => {
               const { jobId, newDate, newTime, fromDate, dropIndex, recurringMode, sourceJob, instanceDate } = evt;
               const parseD = (s: string) => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
