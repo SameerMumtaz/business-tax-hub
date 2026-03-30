@@ -754,6 +754,22 @@ export default function JobSchedulerContent() {
                   <Input type="date" value={editJobRecurringEnd} onChange={(e) => setEditJobRecurringEnd(e.target.value)} />
                   <p className="text-xs text-muted-foreground mt-0.5">Leave blank to repeat indefinitely</p>
                 </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Billing Rate</label>
+                  <Select value={editJobBillingInterval} onValueChange={setEditJobBillingInterval}>
+                    <SelectTrigger><SelectValue placeholder="Same as recurrence" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Same as recurrence</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="quarterly">Quarterly</SelectItem>
+                      <SelectItem value="biannual">Bi-annual</SelectItem>
+                      <SelectItem value="annual">Annual</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-0.5">How often to bill (if different from service frequency)</p>
+                </div>
               </>
             )}
             <JobBudgetFields
