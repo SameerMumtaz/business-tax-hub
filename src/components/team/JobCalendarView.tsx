@@ -703,39 +703,30 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
 
           {showFilters && (
             <div className="flex items-center gap-2 mb-3 flex-wrap">
-              <Select value={filterCrewId} onValueChange={setFilterCrewId}>
-                <SelectTrigger className="h-8 w-[180px] text-xs">
-                  <SelectValue placeholder="All crew" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All crew members</SelectItem>
-                  {crewOptions.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={filterSiteId} onValueChange={setFilterSiteId}>
-                <SelectTrigger className="h-8 w-[180px] text-xs">
-                  <SelectValue placeholder="All sites" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All sites</SelectItem>
-                  {siteOptions.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={filterJobTitle} onValueChange={setFilterJobTitle}>
-                <SelectTrigger className="h-8 w-[180px] text-xs">
-                  <SelectValue placeholder="All jobs/services" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All jobs / services</SelectItem>
-                  {jobTitleOptions.map((t) => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <FilterCombobox
+                options={crewOptions.map((c) => ({ value: c.id, label: c.name }))}
+                value={filterCrewId}
+                onSelect={setFilterCrewId}
+                allLabel="All crew members"
+                placeholder="Search crew…"
+                className="w-[180px]"
+              />
+              <FilterCombobox
+                options={siteFilterOptions}
+                value={filterSiteId}
+                onSelect={setFilterSiteId}
+                allLabel="All sites"
+                placeholder="Search sites…"
+                className="w-[200px]"
+              />
+              <FilterCombobox
+                options={jobTitleFilterOptions}
+                value={filterJobTitle}
+                onSelect={setFilterJobTitle}
+                allLabel="All jobs / services"
+                placeholder="Search jobs…"
+                className="w-[200px]"
+              />
               {hasActiveFilters && (
                 <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" onClick={clearFilters}>
                   <X className="h-3.5 w-3.5 mr-1" />Clear filters
@@ -754,7 +745,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
               )}
               {filterSiteId !== "all" && (
                 <Badge variant="secondary" className="text-xs gap-1 cursor-pointer" onClick={() => setFilterSiteId("all")}>
-                  {siteOptions.find((s) => s.id === filterSiteId)?.name || "Site"}
+                  {siteFilterOptions.find((s) => s.value === filterSiteId)?.label || "Site"}
                   <X className="h-3 w-3" />
                 </Badge>
               )}
