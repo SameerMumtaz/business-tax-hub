@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import JobBudgetFields from "@/components/job/JobBudgetFields";
-import { Plus, Pencil, Trash2, Briefcase, Clock, DollarSign, Users } from "lucide-react";
+import { Plus, Pencil, Trash2, Briefcase, Clock, DollarSign, Users, Repeat } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 
 export default function ServicesContent() {
