@@ -47,11 +47,12 @@ export default function ServicesContent() {
   const [laborRate, setLaborRate] = useState("");
   const [selectedCrew, setSelectedCrew] = useState<{ worker_id: string; worker_name: string }[]>([]);
   const [recurrence, setRecurrence] = useState("");
+  const [billingInterval, setBillingInterval] = useState("");
   const resetForm = () => {
     setTitle(""); setDescription(""); setEstHours(""); setPrice("");
     setMaterialBudget(""); setLaborType("amount"); setLaborAmount("");
     setLaborHours(""); setLaborRate(""); setSelectedCrew([]); setRecurrence("");
-    setEditing(null);
+    setBillingInterval(""); setEditing(null);
   };
 
   const openCreate = () => { resetForm(); setDialogOpen(true); };
