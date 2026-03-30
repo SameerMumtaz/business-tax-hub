@@ -389,16 +389,35 @@ export function useJobs() {
   };
 
   const assignWorker = async (jobId: string, workerId: string, workerName: string, workerType: string, assignedHours: number = 0, hoursPerDay: number = 0, assignedDays: string[] | null = null) => {
+    // Auto-fill from job's estimated_hours if no hours provided
+    let finalHours = assignedHours;
+    let finalHpd = hoursPerDay;
+    if (finalHours <= 0) {
+      const job = jobs.find(j => j.id === jobId);
+      if (job?.estimated_hours && job.estimated_hours > 0) {
+        const isMultiDay = job.end_date && job.end_date !== job.start_date;
+        const dayCount = isMultiDay
+          ? (assignedDays?.length || (() => {
+              const s = new Date(job.start_date);
+              const e = new Date(job.end_date!);
+              return Math.max(1, Math.round((e.getTime() - s.getTime()) / 86400000) + 1);
+            })())
+          : 1;
+        finalHpd = Math.round((job.estimated_hours / dayCount) * 10) / 10;
+        finalHours = finalHpd * dayCount;
+      }
+    }
+
     const { error } = await supabase.from("job_assignments").insert({
       job_id: jobId, worker_id: workerId, worker_name: workerName, worker_type: workerType,
-      assigned_hours: assignedHours, hours_per_day: hoursPerDay, assigned_days: assignedDays,
+      assigned_hours: finalHours, hours_per_day: finalHpd, assigned_days: assignedDays,
     } as any);
     if (error) {
       toast.error(error.message);
       return;
     }
 
-    await syncAssignmentToTimesheets(jobId, workerId, workerName, workerType, assignedHours);
+    await syncAssignmentToTimesheets(jobId, workerId, workerName, workerType, finalHours);
 
     toast.success("Worker assigned");
     fetchAll();
