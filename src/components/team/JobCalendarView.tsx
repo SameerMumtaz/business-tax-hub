@@ -678,7 +678,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
                 <Filter className="h-3.5 w-3.5 mr-1" />Filter
                 {hasActiveFilters && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-destructive-foreground text-[9px] flex items-center justify-center">
-                    {(filterCrewId !== "all" ? 1 : 0) + (filterSiteId !== "all" ? 1 : 0)}
+                   {(filterCrewId !== "all" ? 1 : 0) + (filterSiteId !== "all" ? 1 : 0) + (filterJobTitle !== "all" ? 1 : 0)}
                   </span>
                 )}
               </Button>
