@@ -169,6 +169,7 @@ export default function JobSchedulerContent() {
   const [jobLaborAmount, setJobLaborAmount] = useState("");
   const [jobLaborHours, setJobLaborHours] = useState("");
   const [jobLaborRate, setJobLaborRate] = useState("");
+  const [jobBillingInterval, setJobBillingInterval] = useState("");
 
   // Edit job state
   const [editJobOpen, setEditJobOpen] = useState(false);
