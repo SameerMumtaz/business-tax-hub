@@ -373,7 +373,7 @@ export default function JobSchedulerContent() {
     if (!jobTitle.trim() || !jobSiteId || !jobStart) {
       toast.error("Title, site, and start date are required"); return;
     }
-    await createJob({
+    const newJobId = await createJob({
       title: jobTitle, site_id: jobSiteId, start_date: jobStart,
       end_date: jobEnd || null, status: "scheduled", job_type: jobType,
       recurring_interval: jobType === "recurring" ? jobInterval || null : null,
@@ -389,13 +389,21 @@ export default function JobSchedulerContent() {
       labor_budget_hours: Number(jobLaborHours) || 0,
       labor_budget_rate: Number(jobLaborRate) || 0,
     });
+
+    // Auto-assign default crew from template
+    if (newJobId && pendingDefaultCrew.length > 0) {
+      for (const crew of pendingDefaultCrew) {
+        await assignWorker(newJobId, crew.worker_id, crew.worker_name, "1099", 0, 0, null);
+      }
+    }
+
     setJobOpen(false);
     setJobTitle(""); setJobSiteId(""); setJobType("one_time");
     setJobStart(""); setJobEnd(""); setJobInterval(""); setJobDesc("");
     setJobStartTime(""); setJobEstHours(""); setJobClientId("");
     setJobPrice(""); setJobMaterialBudget(""); setJobLaborType("amount");
     setJobLaborAmount(""); setJobLaborHours(""); setJobLaborRate("");
-    setJobBillingInterval("");
+    setJobBillingInterval(""); setPendingDefaultCrew([]);
   };
 
   const openEditJob = (j: Job) => {
