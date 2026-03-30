@@ -196,6 +196,23 @@ export default function ServicesContent() {
               <Input type="number" min="0.5" step="0.5" placeholder="e.g. 4" value={estHours} onChange={(e) => setEstHours(e.target.value)} />
             </div>
 
+            <div>
+              <label className="text-xs text-muted-foreground">Recurrence</label>
+              <Select value={recurrence} onValueChange={setRecurrence}>
+                <SelectTrigger>
+                  <SelectValue placeholder="One-time (no recurrence)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">One-time (no recurrence)</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="quarterly">Quarterly</SelectItem>
+                  <SelectItem value="biannual">Bi-annual</SelectItem>
+                  <SelectItem value="annual">Annual</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <JobBudgetFields
               price={price} materialBudget={materialBudget}
               laborBudgetType={laborType} laborBudgetAmount={laborAmount}
