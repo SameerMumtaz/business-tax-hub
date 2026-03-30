@@ -56,6 +56,7 @@ export function useJobTemplates() {
       labor_budget_amount: t.labor_budget_amount,
       labor_budget_hours: t.labor_budget_hours,
       labor_budget_rate: t.labor_budget_rate,
+      recurrence_interval: t.recurrence_interval,
       default_crew: t.default_crew as any,
     });
     if (error) { toast.error("Failed to create template"); return; }
