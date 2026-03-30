@@ -22,9 +22,9 @@ Deno.serve(async (req) => {
 
     // Validate JWT
     const authHeader = req.headers.get("authorization");
-    if (!authHeader) {
-      console.log("route-matrix: missing auth header");
-      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
+    if (!authHeader?.startsWith("Bearer ")) {
+      console.log("route-matrix: missing or invalid auth header");
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -33,19 +33,20 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { authorization: authHeader } },
+      global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      console.log("route-matrix: auth failed", authError?.message);
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims?.sub) {
+      console.log("route-matrix: auth failed", claimsError?.message);
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log("route-matrix: authenticated user", user.id);
+    console.log("route-matrix: authenticated user", claimsData.claims.sub);
 
     const body = await req.json();
     const locations: Location[] = body.locations;
