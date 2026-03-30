@@ -73,7 +73,11 @@ export interface JobPhoto {
   occurrence_date: string | null;
 }
 
-export function useJobPhotos(jobId: string | null, occurrenceDate: string | null = null) {
+export function useJobPhotos(
+  jobId: string | null,
+  occurrenceDate: string | null = null,
+  onPhotoUploaded?: (photoUrl: string, photoType: string) => void,
+) {
   const { user } = useAuth();
   const [photos, setPhotos] = useState<JobPhoto[]>([]);
   const [loading, setLoading] = useState(false);
