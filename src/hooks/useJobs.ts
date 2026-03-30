@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { notifyCrewOfJobChange } from "@/lib/crewJobNotify";
 
 export interface JobSite {
   id: string;
@@ -198,6 +199,7 @@ export function useJobs() {
   };
 
   const updateJob = async (id: string, updates: Partial<Job>) => {
+    if (!user) return;
     const oldJob = jobs.find(j => j.id === id);
     const { error } = await supabase.from("jobs").update(updates).eq("id", id);
     if (error) {
@@ -208,6 +210,58 @@ export function useJobs() {
     // If estimated_hours changed, sync all assignments (preserve manually set hours)
     if (updates.estimated_hours !== undefined) {
       await syncAssignmentHoursToJob(id, updates.estimated_hours ?? null, oldJob?.estimated_hours ?? null);
+    }
+
+    // Notify assigned crew of significant changes
+    if (oldJob) {
+      const jobAssigns = assignments.filter(a => a.job_id === id);
+      const workerIds = jobAssigns.map(a => a.worker_id);
+      const siteName = sites.find(s => s.id === (updates.site_id || oldJob.site_id))?.name;
+      const mergedJob = { ...oldJob, ...updates };
+
+      const wasRescheduled =
+        (updates.start_date && updates.start_date !== oldJob.start_date) ||
+        (updates.start_time !== undefined && updates.start_time !== oldJob.start_time);
+
+      const hoursChanged =
+        updates.estimated_hours !== undefined &&
+        updates.estimated_hours !== oldJob.estimated_hours;
+
+      if (wasRescheduled) {
+        await notifyCrewOfJobChange(user.id, workerIds, "rescheduled", {
+          jobId: id, jobTitle: mergedJob.title, siteName,
+          startDate: mergedJob.start_date, startTime: mergedJob.start_time,
+          estimatedHours: mergedJob.estimated_hours,
+        }, {
+          oldDate: oldJob.start_date, oldTime: oldJob.start_time,
+        });
+      } else if (hoursChanged) {
+        await notifyCrewOfJobChange(user.id, workerIds, "hours_changed", {
+          jobId: id, jobTitle: mergedJob.title, siteName,
+          startDate: mergedJob.start_date, startTime: mergedJob.start_time,
+        }, {
+          oldHours: oldJob.estimated_hours, newHours: updates.estimated_hours,
+        });
+      } else {
+        // Check for other meaningful edits
+        const trackedFields = ["title", "description", "site_id", "end_date", "status"];
+        const editedFields = trackedFields.filter(
+          f => updates[f as keyof Job] !== undefined && updates[f as keyof Job] !== oldJob[f as keyof Job]
+        );
+        if (editedFields.length > 0 && workerIds.length > 0) {
+          const friendlyNames: Record<string, string> = {
+            title: "job name", description: "description", site_id: "location",
+            end_date: "end date", status: "status",
+          };
+          await notifyCrewOfJobChange(user.id, workerIds, "edited", {
+            jobId: id, jobTitle: mergedJob.title, siteName,
+            startDate: mergedJob.start_date, startTime: mergedJob.start_time,
+            estimatedHours: mergedJob.estimated_hours,
+          }, {
+            editedFields: editedFields.map(f => friendlyNames[f] || f),
+          });
+        }
+      }
     }
 
     fetchAll();
@@ -425,6 +479,19 @@ export function useJobs() {
     }
 
     await syncAssignmentToTimesheets(jobId, workerId, workerName, workerType, finalHours);
+
+    // Notify the crew member via their crew channel
+    if (user) {
+      const job = jobs.find(j => j.id === jobId);
+      if (job) {
+        const siteName = sites.find(s => s.id === job.site_id)?.name;
+        await notifyCrewOfJobChange(user.id, [workerId], "created", {
+          jobId, jobTitle: job.title, siteName,
+          startDate: job.start_date, startTime: job.start_time,
+          estimatedHours: finalHours || job.estimated_hours,
+        });
+      }
+    }
 
     toast.success("Worker assigned");
     fetchAll();
