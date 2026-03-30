@@ -84,7 +84,7 @@ export default function ServicesContent() {
       labor_budget_amount: Number(laborAmount) || 0,
       labor_budget_hours: Number(laborHours) || 0,
       labor_budget_rate: Number(laborRate) || 0,
-      recurrence_interval: recurrence || null,
+      recurrence_interval: recurrence && recurrence !== "none" ? recurrence : null,
       default_crew: selectedCrew,
     };
     if (editing) {
