@@ -1187,6 +1187,8 @@ export default function JobSchedulerContent() {
                 const formattedDate = parseD(newDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
                 toast.success(`"${sourceJob.title}" rescheduled to ${formattedDate}`);
                 await notifyAssignedCrew(sourceJob.id, sourceJob.title, `This job has been rescheduled to ${formattedDate}.`);
+                await refetch();
+                setTimeout(() => runCascade(sourceJob.id, newDate), 500);
                 return;
               }
 
