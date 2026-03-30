@@ -166,6 +166,11 @@ export default function ServicesContent() {
                       <Clock className="h-3 w-3" />{t.estimated_hours}h
                     </Badge>
                   )}
+                  {t.recurrence_interval && (
+                    <Badge variant="secondary" className="gap-1">
+                      <Repeat className="h-3 w-3" />{t.recurrence_interval}
+                    </Badge>
+                  )}
                   {t.default_crew.length > 0 && (
                     <Badge variant="secondary" className="gap-1">
                       <Users className="h-3 w-3" />{t.default_crew.length} crew
