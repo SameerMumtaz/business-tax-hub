@@ -351,6 +351,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     allJobsByDate.forEach((dayJobs, dateStr) => {
       const matching = dayJobs.filter((job) => {
         if (filterSiteId !== "all" && job.site_id !== filterSiteId) return false;
+        if (filterJobTitle !== "all" && job.title !== filterJobTitle) return false;
         if (filterCrewId !== "all") {
           const jobAssigns = assignments.filter((a) => a.job_id === job.id);
           if (!jobAssigns.some((a) => a.worker_id === filterCrewId)) return false;
@@ -360,7 +361,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
       if (matching.length > 0) filtered.set(dateStr, matching);
     });
     return filtered;
-  }, [allJobsByDate, hasActiveFilters, filterSiteId, filterCrewId, assignments]);
+  }, [allJobsByDate, hasActiveFilters, filterSiteId, filterJobTitle, filterCrewId, assignments]);
   const todayStr = toDateStr(new Date());
   const goBack = () => viewMode === "week" ? setCurrentDate((d) => addDays(d, -7)) : setCurrentDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
   const goForward = () => viewMode === "week" ? setCurrentDate((d) => addDays(d, 7)) : setCurrentDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
