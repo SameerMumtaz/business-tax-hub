@@ -6,6 +6,7 @@ import {
   Users,
   Eye,
   LogOut,
+  MessageSquare,
   Receipt,
   Link2,
 } from "lucide-react";
