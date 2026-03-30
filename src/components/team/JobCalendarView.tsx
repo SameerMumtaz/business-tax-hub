@@ -567,20 +567,24 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
   };
   const getDayHours = (dateStr: string) => (jobsByDate.get(dateStr) || []).reduce((s, j) => s + (j.estimated_hours || 2), 0);
 
-  // Schedule Health Score
+  // Schedule Health Score — considers all 7 days, only penalizes active-day imbalance
   const weekHealth = useMemo(() => {
     if (viewMode !== "week") return null;
-    const dayHours = weekDays.slice(0, 5).map(d => getDayHours(toDateStr(d)));
-    const total = dayHours.reduce((s, h) => s + h, 0);
+    const allDayHours = weekDays.map(d => getDayHours(toDateStr(d)));
+    const activeDayHours = allDayHours.filter(h => h > 0);
+    const total = activeDayHours.reduce((s, h) => s + h, 0);
     if (total === 0) return null;
-    const activeDays = dayHours.filter(h => h > 0);
-    if (activeDays.length <= 1) return { score: 100, color: "text-emerald-500", bg: "bg-emerald-500", label: "Balanced" };
-    const mean = total / activeDays.length;
-    const variance = activeDays.reduce((s, h) => s + (h - mean) ** 2, 0) / activeDays.length;
+    if (activeDayHours.length <= 1) return { score: 100, color: "text-emerald-500", bg: "bg-emerald-500", label: "Balanced" };
+
+    // Coefficient of variation across days that actually have work
+    const mean = total / activeDayHours.length;
+    const variance = activeDayHours.reduce((s, h) => s + (h - mean) ** 2, 0) / activeDayHours.length;
     const cv = Math.sqrt(variance) / mean;
-    const score = Math.max(0, Math.round(100 - cv * 150));
-    if (score >= 80) return { score, color: "text-emerald-500", bg: "bg-emerald-500", label: "Balanced" };
-    if (score >= 50) return { score, color: "text-amber-500", bg: "bg-amber-500", label: "Uneven" };
+
+    // cv=0 → perfectly balanced (100), cv≥1 → very uneven (0). Scale of 100 is gentle enough for real schedules.
+    const score = Math.max(0, Math.round(100 - cv * 100));
+    if (score >= 75) return { score, color: "text-emerald-500", bg: "bg-emerald-500", label: "Balanced" };
+    if (score >= 45) return { score, color: "text-amber-500", bg: "bg-amber-500", label: "Uneven" };
     return { score, color: "text-destructive", bg: "bg-destructive", label: "Overloaded" };
   }, [viewMode, weekDays, getDayHours]);
 
