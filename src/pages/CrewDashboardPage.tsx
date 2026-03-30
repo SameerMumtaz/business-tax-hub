@@ -23,6 +23,7 @@ import CrewMapView from "@/components/crew/CrewMapView";
 import CrewProfileTab from "@/components/crew/CrewProfileTab";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 import RouteOptimizationDialog from "@/components/route/RouteOptimizationDialog";
+import CrewChatTab from "@/components/crew/CrewChatTab";
 import { parseDateOnlyLocal, getTodayDateOnlyKey, getNextInstanceDate, isRecurringJobToday, addDaysToDateOnly, compareDateOnly } from "@/lib/dateOnly";
 
 /* ── Live elapsed timer ─────────────────────────────── */
