@@ -117,50 +117,51 @@ export default function ChatMessageArea({
   const getJobTitle = (jobId: string) => jobs.find(j => j.id === jobId)?.title || "Unknown job";
 
   return (
-    <div className="flex-1 flex flex-col min-w-0">
-      {/* Header */}
-      <div className="px-4 py-3 border-b flex items-center gap-2">
-        <Icon className="h-5 w-5 text-muted-foreground" />
-        <h2 className="font-semibold text-foreground truncate">{channel.name}</h2>
-        {channel.type === "broadcast" && (
-          <Badge variant="secondary" className="text-xs">Announcement</Badge>
-        )}
-        {channel.description && (
-          <span className="text-xs text-muted-foreground ml-2 truncate hidden sm:inline">{channel.description}</span>
-        )}
-        <span className="ml-auto text-xs text-muted-foreground">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden min-w-0">
+      <div className="flex min-w-0 items-start gap-2 border-b px-3 py-3 sm:px-4">
+        <Icon className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="truncate font-semibold text-foreground">{channel.name}</h2>
+            {channel.type === "broadcast" && (
+              <Badge variant="secondary" className="shrink-0 text-xs">Announcement</Badge>
+            )}
+          </div>
+          {channel.description && (
+            <p className="mt-0.5 truncate text-xs text-muted-foreground hidden sm:block">{channel.description}</p>
+          )}
+        </div>
+        <span className="shrink-0 text-xs text-muted-foreground">
           {members.length} member{members.length !== 1 ? "s" : ""}
         </span>
       </div>
 
-      {/* Pinned messages bar */}
       {pinnedMessages.length > 0 && (
-        <div className="px-4 py-2 bg-accent/50 border-b flex items-center gap-2 text-xs">
+        <div className="flex items-center gap-2 border-b bg-accent/50 px-3 py-2 text-xs sm:px-4">
           <Pin className="h-3 w-3 text-primary" />
-          <span className="text-primary font-medium">
+          <span className="font-medium text-primary">
             {pinnedMessages.length} pinned message{pinnedMessages.length !== 1 ? "s" : ""}
           </span>
         </div>
       )}
 
-      {/* Messages */}
       {loading ? (
-        <div className="flex-1 p-4 space-y-3">
+        <div className="flex-1 space-y-3 p-4">
           {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-3/4" />)}
         </div>
       ) : (
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-1">
+        <div ref={scrollRef} className="min-h-0 flex-1 space-y-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4">
           {groupedMessages.length === 0 && (
-            <div className="text-center text-muted-foreground py-12">
+            <div className="py-12 text-center text-muted-foreground">
               <p className="text-sm">No messages yet. Start the conversation!</p>
             </div>
           )}
           {groupedMessages.map(group => (
             <div key={group.date}>
-              <div className="flex items-center gap-3 my-4">
-                <div className="flex-1 h-px bg-border" />
-                <span className="text-xs text-muted-foreground font-medium">{group.date}</span>
-                <div className="flex-1 h-px bg-border" />
+              <div className="my-4 flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs font-medium text-muted-foreground">{group.date}</span>
+                <div className="h-px flex-1 bg-border" />
               </div>
               {group.msgs.map(msg => {
                 const isOwn = msg.sender_id === currentUserId;
@@ -168,63 +169,61 @@ export default function ChatMessageArea({
                 return (
                   <div
                     key={msg.id}
-                    className={`flex gap-2 mb-2 group ${isOwn ? "flex-row-reverse" : ""}`}
+                    className={`group mb-2 flex items-start gap-1.5 sm:gap-2 ${isOwn ? "flex-row-reverse" : ""}`}
                   >
-                    <div className={`max-w-[70%] ${isOwn ? "items-end" : "items-start"} flex flex-col`}>
+                    <div className={`flex max-w-[82%] flex-col ${isOwn ? "items-end" : "items-start"} sm:max-w-[70%]`}>
                       {!isOwn && (
-                        <span className="text-xs text-muted-foreground mb-0.5 px-1">{senderName}</span>
+                        <span className="mb-0.5 px-1 text-xs text-muted-foreground">{senderName}</span>
                       )}
                       <div
-                        className={`rounded-xl px-3 py-2 text-sm relative ${
+                        className={`relative rounded-xl px-3 py-2 text-sm ${
                           isOwn
                             ? "bg-primary text-primary-foreground rounded-tr-sm"
                             : "bg-muted text-foreground rounded-tl-sm"
-                        } ${msg.is_pinned ? "ring-1 ring-amber-400" : ""}`}
+                        } ${msg.is_pinned ? "ring-1 ring-primary/30" : ""}`}
                       >
                         {msg.content && <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
                         {msg.photo_url && (
                           <img
                             src={msg.photo_url}
                             alt="Shared photo"
-                            className="rounded-lg mt-1 max-w-full max-h-60 object-cover cursor-pointer"
+                            className="mt-1 max-h-60 max-w-full cursor-pointer rounded-lg object-cover"
                             onClick={() => window.open(msg.photo_url!, "_blank")}
                           />
                         )}
-                        {/* Job/Site tags */}
                         {(msg.job_id || msg.job_site_id) && (
-                          <div className="flex flex-wrap gap-1 mt-1.5">
+                          <div className="mt-1.5 flex flex-wrap gap-1">
                             {msg.job_id && (
-                              <Badge variant="outline" className="text-[10px] gap-0.5">
+                              <Badge variant="outline" className="gap-0.5 text-[10px]">
                                 <Briefcase className="h-2.5 w-2.5" />
                                 {getJobTitle(msg.job_id)}
                               </Badge>
                             )}
                             {msg.job_site_id && (
-                              <Badge variant="outline" className="text-[10px] gap-0.5">
+                              <Badge variant="outline" className="gap-0.5 text-[10px]">
                                 <MapPin className="h-2.5 w-2.5" />
                                 {getSiteName(msg.job_site_id)}
                               </Badge>
                             )}
                           </div>
                         )}
-                        <span className={`text-[10px] mt-1 block ${isOwn ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
+                        <span className={`mt-1 block text-[10px] ${isOwn ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
                           {format(new Date(msg.created_at), "h:mm a")}
-                          {msg.is_pinned && <Pin className="h-2.5 w-2.5 inline ml-1 text-primary" />}
+                          {msg.is_pinned && <Pin className="ml-1 inline h-2.5 w-2.5 text-primary" />}
                         </span>
                       </div>
                     </div>
-                    {/* Actions */}
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-start pt-5">
+                    <div className="flex shrink-0 items-start pt-5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-6 w-6">
+                          <Button variant="ghost" size="icon" className="h-7 w-7">
                             <MoreVertical className="h-3.5 w-3.5" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align={isOwn ? "end" : "start"}>
                           {isAdminOrManager && (
                             <DropdownMenuItem onClick={() => onTogglePin(msg.id, msg.is_pinned)}>
-                              <Pin className="h-3.5 w-3.5 mr-2" />
+                              <Pin className="mr-2 h-3.5 w-3.5" />
                               {msg.is_pinned ? "Unpin" : "Pin"}
                             </DropdownMenuItem>
                           )}
@@ -233,7 +232,7 @@ export default function ChatMessageArea({
                               className="text-destructive"
                               onClick={() => onDeleteMessage(msg.id)}
                             >
-                              <Trash2 className="h-3.5 w-3.5 mr-2" />
+                              <Trash2 className="mr-2 h-3.5 w-3.5" />
                               Delete
                             </DropdownMenuItem>
                           )}
@@ -248,14 +247,12 @@ export default function ChatMessageArea({
         </div>
       )}
 
-      {/* Input area */}
       {(channel.type !== "broadcast" || isAdminOrManager) && (
-        <div className="border-t p-3 space-y-2">
-          {/* Tagging row */}
+        <div className="space-y-2 border-t bg-card p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
           {showTagging && (
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Select value={tagJobId} onValueChange={setTagJobId}>
-                <SelectTrigger className="w-48 h-8 text-xs">
+                <SelectTrigger className="h-8 w-full text-xs sm:w-48">
                   <SelectValue placeholder="Link to job..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -266,7 +263,7 @@ export default function ChatMessageArea({
                 </SelectContent>
               </Select>
               <Select value={tagSiteId} onValueChange={setTagSiteId}>
-                <SelectTrigger className="w-48 h-8 text-xs">
+                <SelectTrigger className="h-8 w-full text-xs sm:w-48">
                   <SelectValue placeholder="Link to site..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -278,7 +275,7 @@ export default function ChatMessageArea({
               </Select>
             </div>
           )}
-          <div className="flex items-center gap-2">
+          <div className="flex items-end gap-2">
             <Button
               variant="ghost"
               size="icon"
@@ -309,7 +306,7 @@ export default function ChatMessageArea({
               onChange={e => setText(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type a message..."
-              className="flex-1 h-9"
+              className="h-9 min-w-0 flex-1"
               disabled={sending}
             />
             <Button

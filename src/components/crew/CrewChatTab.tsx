@@ -54,16 +54,15 @@ export default function CrewChatTab() {
     setShowMessages(false);
   };
 
-  // Use a fixed height that accounts for the crew dashboard header + tabs + padding
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 16rem)" }}>
+    <div className="flex min-h-[70dvh] flex-col md:h-[calc(100dvh-16rem)]">
       {!showMessages || !activeChannel ? (
-        <div className="flex flex-col h-full min-h-0">
-          <div className="flex items-center gap-2 mb-3 shrink-0">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="mb-3 flex items-center gap-2 shrink-0">
             <MessageSquare className="h-5 w-5 text-primary" />
             <h2 className="text-lg font-semibold text-foreground">Messages</h2>
           </div>
-          <div className="flex-1 border rounded-lg overflow-hidden bg-card min-h-0">
+          <div className="flex min-h-0 flex-1 overflow-hidden rounded-lg border bg-card">
             <ChatChannelList
               channels={chat.channels}
               activeChannelId={chat.activeChannelId}
@@ -75,17 +74,17 @@ export default function CrewChatTab() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-col h-full min-h-0">
+        <div className="flex min-h-0 flex-1 flex-col gap-2">
           <Button
             variant="ghost"
             size="sm"
-            className="self-start mb-1 gap-1.5 text-muted-foreground shrink-0"
+            className="self-start gap-1.5 px-1 text-muted-foreground shrink-0"
             onClick={handleBack}
           >
             <ArrowLeft className="h-4 w-4" />
             Back
           </Button>
-          <div className="flex-1 border rounded-lg overflow-hidden bg-card min-h-0 flex flex-col">
+          <div className="flex min-h-0 flex-1 overflow-hidden rounded-lg border bg-card">
             <ChatMessageArea
               channel={activeChannel}
               messages={chat.messages}
