@@ -70,6 +70,7 @@ export default function ServicesContent() {
     setLaborRate(t.labor_budget_rate ? String(t.labor_budget_rate) : "");
     setSelectedCrew(t.default_crew || []);
     setRecurrence(t.recurrence_interval || "");
+    setBillingInterval(t.billing_interval || "");
     setDialogOpen(true);
   };
 
