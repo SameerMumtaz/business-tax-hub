@@ -100,6 +100,7 @@ const links: NavItem[] = [
     ],
   },
   
+  { to: "/chat", label: "Team Chat", icon: MessageSquare },
   { to: "/booking-settings", label: "Online Booking", icon: CalendarDays },
   { to: "/profile", label: "Business Info", icon: Building2 },
 ];

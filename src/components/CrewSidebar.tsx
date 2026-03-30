@@ -13,6 +13,7 @@ export default function CrewSidebar() {
   const links = [
     { to: "/crew", label: t("nav.myJobs"), icon: MapPin },
     { to: "/crew/history", label: t("nav.checkinHistory"), icon: Clock },
+    { to: "/chat", label: "Team Chat", icon: MessageSquare },
   ];
 
   return (
