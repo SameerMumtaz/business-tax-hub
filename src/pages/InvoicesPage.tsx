@@ -317,9 +317,11 @@ ${inv.notes ? `\nNotes: ${inv.notes}` : ""}
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="weekly">Weekly</SelectItem>
+                              <SelectItem value="biweekly">Bi-weekly</SelectItem>
                               <SelectItem value="monthly">Monthly</SelectItem>
                               <SelectItem value="quarterly">Quarterly</SelectItem>
-                              <SelectItem value="yearly">Yearly</SelectItem>
+                              <SelectItem value="biannual">Bi-annual</SelectItem>
+                              <SelectItem value="annual">Annual</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>

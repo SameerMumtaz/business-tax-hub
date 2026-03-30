@@ -215,6 +215,8 @@ function buildJobsByDate(jobs: Job[], checkins: CrewCheckinOccurrence[], rangeSt
         }
         if (job.recurring_interval === "monthly") cursor.setMonth(cursor.getMonth() + 1);
         else if (job.recurring_interval === "quarterly") cursor.setMonth(cursor.getMonth() + 3);
+        else if (job.recurring_interval === "biannual") cursor.setMonth(cursor.getMonth() + 6);
+        else if (job.recurring_interval === "annual") cursor.setFullYear(cursor.getFullYear() + 1);
         else if (intervalDays > 0) cursor.setDate(cursor.getDate() + intervalDays);
         else break;
       }
