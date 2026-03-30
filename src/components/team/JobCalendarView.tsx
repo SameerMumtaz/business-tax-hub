@@ -93,6 +93,17 @@ export interface JobMoveEvent {
   instanceDate?: string;
 }
 
+export interface RaincheckResult {
+  moved: number;
+  targetDate: string;
+  movedJobs: { title: string; clientName?: string }[];
+}
+
+export interface RebalanceResult {
+  moves: number;
+  details: { title: string; fromDate: string; toDate: string }[];
+}
+
 interface Props {
   jobs: Job[];
   sites: JobSite[];
@@ -103,6 +114,8 @@ interface Props {
   onJobMove?: (event: JobMoveEvent) => void;
   onJobDelete?: (jobId: string) => Promise<void>;
   onDiscardEdits?: (revertData: { jobId: string; updates: Record<string, any> }[]) => void;
+  onRaincheckDay?: (dateStr: string) => Promise<RaincheckResult | null>;
+  onRebalanceWeek?: (weekStartStr: string, weekEndStr: string) => Promise<RebalanceResult | null>;
 }
 
 type ViewMode = "week" | "month";
