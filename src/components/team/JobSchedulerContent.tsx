@@ -369,10 +369,106 @@ export default function JobSchedulerContent() {
     setEditSiteOpen(false);
   };
 
+  // Haversine distance in miles between two GPS coordinates
+  const haversineDistance = useCallback((lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 3958.8; // Earth radius in miles
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }, []);
+
+  // Estimate travel time in minutes from distance (miles). Uses ~30 mph avg with 10 min minimum buffer.
+  const estimateTravelMinutes = useCallback((miles: number): number => {
+    if (miles <= 0) return 10;
+    const drivingMinutes = (miles / 30) * 60; // ~30 mph average
+    return Math.max(10, Math.ceil(drivingMinutes / 5) * 5); // Round up to nearest 5 min, min 10
+  }, []);
+
+  // Calculate smart start time when crew has prior jobs on same day
+  const computeSmartStartTime = useCallback((
+    startDate: string,
+    newSiteId: string,
+    crewIds: string[],
+    estimatedHours: number | null,
+  ): string | null => {
+    if (crewIds.length === 0) return null;
+
+    // Find all jobs on the same date that involve any of the crew members
+    const sameDayJobs = jobs.filter(j => {
+      if (j.start_date !== startDate) return false;
+      if (!j.start_time) return false;
+      // Check if any crew member is assigned to this job
+      const jobAssigns = assignments.filter(a => a.job_id === j.id);
+      return jobAssigns.some(a => crewIds.includes(a.worker_id));
+    });
+
+    if (sameDayJobs.length === 0) return null;
+
+    // Find the latest end time among conflicting jobs
+    let latestEndMinutes = 0;
+    let latestJobSiteId: string | null = null;
+
+    for (const j of sameDayJobs) {
+      if (!j.start_time) continue;
+      const [h, m] = j.start_time.split(":").map(Number);
+      const startMin = h * 60 + m;
+      const durationMin = (j.estimated_hours || 1) * 60;
+      const endMin = startMin + durationMin;
+
+      if (endMin > latestEndMinutes) {
+        latestEndMinutes = endMin;
+        latestJobSiteId = j.site_id;
+      }
+    }
+
+    if (latestEndMinutes === 0) return null;
+
+    // Calculate travel buffer based on distance between sites
+    let travelMinutes = 10; // default buffer
+    if (latestJobSiteId && latestJobSiteId !== newSiteId) {
+      const prevSite = sites.find(s => s.id === latestJobSiteId);
+      const newSite = sites.find(s => s.id === newSiteId);
+      if (prevSite?.latitude && prevSite?.longitude && newSite?.latitude && newSite?.longitude) {
+        const dist = haversineDistance(prevSite.latitude, prevSite.longitude, newSite.latitude, newSite.longitude);
+        travelMinutes = estimateTravelMinutes(dist);
+      }
+    } else if (latestJobSiteId === newSiteId) {
+      travelMinutes = 10; // same site, just a short buffer
+    }
+
+    const smartStartMin = latestEndMinutes + travelMinutes;
+    // Round to nearest 5 minutes
+    const rounded = Math.ceil(smartStartMin / 5) * 5;
+    // Cap at 23:55
+    const capped = Math.min(rounded, 23 * 60 + 55);
+    const hh = String(Math.floor(capped / 60)).padStart(2, "0");
+    const mm = String(capped % 60).padStart(2, "0");
+    return `${hh}:${mm}`;
+  }, [jobs, assignments, sites, haversineDistance, estimateTravelMinutes]);
+
   const handleCreateJob = async () => {
     if (!jobTitle.trim() || !jobSiteId || !jobStart) {
       toast.error("Title, site, and start date are required"); return;
     }
+
+    // Smart start time: if no start time specified and there are default crew, calculate it
+    let resolvedStartTime = jobStartTime || null;
+    if (!resolvedStartTime && pendingDefaultCrew.length > 0) {
+      const crewIds = pendingDefaultCrew.map(c => c.worker_id);
+      const smart = computeSmartStartTime(jobStart, jobSiteId, crewIds, jobEstHours ? Number(jobEstHours) : null);
+      if (smart) {
+        resolvedStartTime = smart;
+        // Format for user-friendly display
+        const [sh, sm] = smart.split(":").map(Number);
+        const ampm = sh >= 12 ? "PM" : "AM";
+        const h12 = sh % 12 || 12;
+        toast.info(`Start time auto-set to ${h12}:${String(sm).padStart(2, "0")} ${ampm} based on crew's prior jobs and travel time`);
+      }
+    }
+
     const newJobId = await createJob({
       title: jobTitle, site_id: jobSiteId, start_date: jobStart,
       end_date: jobEnd || null, status: "scheduled", job_type: jobType,
@@ -380,7 +476,7 @@ export default function JobSchedulerContent() {
       recurring_end_date: jobType === "recurring" && jobRecurringEnd ? jobRecurringEnd : null,
       billing_interval: jobType === "recurring" && jobBillingInterval && jobBillingInterval !== "none" ? jobBillingInterval : null,
       invoice_id: null, description: jobDesc || null,
-      start_time: jobStartTime || null, estimated_hours: jobEstHours ? Number(jobEstHours) : null,
+      start_time: resolvedStartTime, estimated_hours: jobEstHours ? Number(jobEstHours) : null,
       client_id: jobClientId && jobClientId !== "none" ? jobClientId : null,
       price: Number(jobPrice) || 0,
       material_budget: Number(jobMaterialBudget) || 0,
