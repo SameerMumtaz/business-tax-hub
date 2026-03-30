@@ -56,6 +56,7 @@ export default function ClientJobsPanel({ client }: Props) {
   const [jobLaborAmount, setJobLaborAmount] = useState("");
   const [jobLaborHours, setJobLaborHours] = useState("");
   const [jobLaborRate, setJobLaborRate] = useState("");
+  const [jobBillingInterval, setJobBillingInterval] = useState("");
 
   // Address mode: "client" uses client address to create a new site, "existing" picks existing site, "new" enters a new address
   const [addressMode, setAddressMode] = useState<"client" | "existing" | "new">("client");
