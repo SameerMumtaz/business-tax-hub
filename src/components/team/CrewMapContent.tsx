@@ -13,6 +13,7 @@ import CheckInProgressWidget from "./CheckInProgressWidget";
 import TodayScheduledVsActual from "./TodayScheduledVsActual";
 import TodayJobs from "@/components/dashboard/TodayJobs";
 import AllCheckinsTable from "./AllCheckinsTable";
+import RouteRequestsPanel from "@/components/route/RouteRequestsPanel";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
