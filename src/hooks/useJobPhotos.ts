@@ -73,7 +73,11 @@ export interface JobPhoto {
   occurrence_date: string | null;
 }
 
-export function useJobPhotos(jobId: string | null, occurrenceDate: string | null = null) {
+export function useJobPhotos(
+  jobId: string | null,
+  occurrenceDate: string | null = null,
+  onPhotoUploaded?: (photoUrl: string, photoType: string) => void,
+) {
   const { user } = useAuth();
   const [photos, setPhotos] = useState<JobPhoto[]>([]);
   const [loading, setLoading] = useState(false);
@@ -166,12 +170,13 @@ export function useJobPhotos(jobId: string | null, occurrenceDate: string | null
       if (insertError) throw insertError;
 
       toast.success("Photo uploaded");
+      onPhotoUploaded?.(urlData.publicUrl, photoType);
       fetchPhotos();
     } catch (err: any) {
       toast.error(err.message || "Upload failed");
     }
     setUploading(false);
-  }, [user, jobId, occurrenceDate, fetchPhotos]);
+  }, [user, jobId, occurrenceDate, fetchPhotos, onPhotoUploaded]);
 
   const updateCaption = useCallback(async (photoId: string, caption: string) => {
     const { error } = await supabase

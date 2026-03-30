@@ -26,6 +26,7 @@ import RouteOptimizationDialog from "@/components/route/RouteOptimizationDialog"
 import CrewChatTab from "@/components/crew/CrewChatTab";
 import CrewStatusWidgets from "@/components/crew/CrewStatusWidgets";
 import { parseDateOnlyLocal, getTodayDateOnlyKey, getNextInstanceDate, isRecurringJobToday, addDaysToDateOnly, compareDateOnly } from "@/lib/dateOnly";
+import { postCrewChatMessage } from "@/lib/crewChatPost";
 
 /* ── Live elapsed timer ─────────────────────────────── */
 function LiveElapsed({ since }: { since: string }) {
@@ -159,7 +160,21 @@ export default function CrewDashboardPage() {
   // Photo requirement for checkout
   const activeJobId = activeCheckin?.job_id || null;
   const activeOccurrenceDate = activeCheckin?.occurrence_date || null;
-  const { photoCountByType } = useJobPhotos(activeJobId, activeOccurrenceDate);
+
+  // Cross-post photos to crew chat
+  const handlePhotoUploaded = useCallback(async (photoUrl: string, photoType: string) => {
+    if (!user || !teamMemberId || !activeJobId) return;
+    const activeJobForChat = assignedJobs.find((j) => j.id === activeJobId);
+    const typeLabel = photoType.charAt(0).toUpperCase() + photoType.slice(1);
+    await postCrewChatMessage(
+      user.id,
+      teamMemberId,
+      `📷 ${typeLabel} photo uploaded for "${activeJobForChat?.title || "job"}"`,
+      { job_id: activeJobId, job_site_id: activeCheckin?.job_site_id, occurrence_date: activeOccurrenceDate, photo_url: photoUrl }
+    );
+  }, [user, teamMemberId, activeJobId, activeCheckin, assignedJobs]);
+
+  const { photoCountByType } = useJobPhotos(activeJobId, activeOccurrenceDate, handlePhotoUploaded);
   const hasBeforePhotos = photoCountByType.before > 0;
   const hasAfterPhotos = photoCountByType.after > 0;
   const photosComplete = hasBeforePhotos && hasAfterPhotos;
@@ -284,12 +299,32 @@ export default function CrewDashboardPage() {
       }
       const result = await checkIn(job.id, job.site.id, lat, lng, job.expectedHours, instanceDate);
 
-      // If late, save the note and flag + notify
+      // Post check-in to chat
+      if (user && teamMemberId) {
+        const time = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        await postCrewChatMessage(
+          user.id,
+          teamMemberId,
+          `✅ Checked in to "${job.title}" at ${job.site.name} — ${time}`,
+          { job_id: job.id, job_site_id: job.site.id, occurrence_date: instanceDate }
+        );
+      }
+
+      // If late, save the note and flag + notify + post to chat
       if (lateNote && result) {
         await supabase
           .from("crew_checkins")
           .update({ notes: `Late check-in: ${lateNote}`, flag_reason: `Late check-in` } as any)
           .eq("id", (result as any).id);
+
+        if (user && teamMemberId) {
+          await postCrewChatMessage(
+            user.id,
+            teamMemberId,
+            `⚠️ Late check-in for "${job.title}"\nReason: ${lateNote}`,
+            { job_id: job.id, job_site_id: job.site.id, occurrence_date: instanceDate }
+          );
+        }
 
         // Notify admin/manager
         if (businessUserId && teamMemberId) {
@@ -352,6 +387,19 @@ export default function CrewDashboardPage() {
       }
 
       await checkOut(activeCheckin.id, lat, lng);
+
+      // Post check-out to chat
+      if (user && teamMemberId) {
+        const activeJobForChat = assignedJobs.find((j) => j.id === activeCheckin.job_id);
+        const elapsed = ((Date.now() - new Date(activeCheckin.check_in_time).getTime()) / 3600000).toFixed(1);
+        const time = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        await postCrewChatMessage(
+          user.id,
+          teamMemberId,
+          `🏁 Checked out of "${activeJobForChat?.title || "job"}" — ${elapsed}h worked, ${time}`,
+          { job_id: activeCheckin.job_id, job_site_id: activeCheckin.job_site_id, occurrence_date: activeCheckin.occurrence_date }
+        );
+      }
     } catch (err: any) {
       toast.error(err.message || t("error.gps"));
     }
@@ -442,6 +490,32 @@ export default function CrewDashboardPage() {
             } as any);
           }
         }
+      }
+
+      // Post flagged checkout + explanations to chat
+      if (user && teamMemberId) {
+        const activeJobForChat = assignedJobs.find((j) => j.id === activeCheckin.job_id);
+        const elapsed = ((Date.now() - new Date(activeCheckin.check_in_time).getTime()) / 3600000).toFixed(1);
+        const time = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        const explanationLines = explanationItems.map(item => {
+          const text = explanationTexts[item.reason].trim();
+          const labels: Record<string, string> = {
+            earlyCheckout: "⏰ Early completion",
+            overtimeCheckout: "⏱️ Overtime",
+            geofenceCheckout: "📍 Off-site checkout",
+          };
+          return `${labels[item.reason] || item.reason}: ${text}`;
+        });
+        const chatMsg = [
+          `🏁 Checked out of "${activeJobForChat?.title || "job"}" — ${elapsed}h worked, ${time}`,
+          ...explanationLines,
+        ].join("\n");
+        await postCrewChatMessage(
+          user.id,
+          teamMemberId,
+          chatMsg,
+          { job_id: activeCheckin.job_id, job_site_id: activeCheckin.job_site_id, occurrence_date: activeCheckin.occurrence_date }
+        );
       }
 
       setGpsLoading(null);

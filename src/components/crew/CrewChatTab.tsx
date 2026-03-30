@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 
 export default function CrewChatTab() {
   const { user } = useAuth();
-  const { role, businessUserId } = useTeamRole();
+  const { role, businessUserId, teamMemberId } = useTeamRole();
   const chat = useChat();
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [jobs, setJobs] = useState<any[]>([]);
@@ -18,6 +18,7 @@ export default function CrewChatTab() {
   const [showMessages, setShowMessages] = useState(false);
 
   const effectiveBusinessId = role === "admin" ? user?.id : businessUserId;
+  const isCrew = role === "crew";
 
   useEffect(() => {
     if (!effectiveBusinessId) return;
@@ -29,13 +30,54 @@ export default function CrewChatTab() {
       .then(({ data }) => setTeamMembers(data || []));
   }, [effectiveBusinessId]);
 
+  // For crew: only fetch jobs they're assigned to + those jobs' sites
+  // For admin/manager: fetch all jobs and sites
   useEffect(() => {
     if (!effectiveBusinessId) return;
-    supabase.from("jobs").select("id, title, site_id").eq("user_id", effectiveBusinessId)
-      .then(({ data }) => setJobs(data || []));
-    supabase.from("job_sites").select("id, name").eq("user_id", effectiveBusinessId)
-      .then(({ data }) => setSites(data || []));
-  }, [effectiveBusinessId]);
+
+    const fetchScopedData = async () => {
+      if (isCrew && teamMemberId) {
+        // Get only assigned job IDs
+        const { data: assignments } = await supabase
+          .from("job_assignments")
+          .select("job_id")
+          .eq("worker_id", teamMemberId);
+        const jobIds = [...new Set((assignments || []).map(a => a.job_id))];
+
+        if (jobIds.length === 0) {
+          setJobs([]);
+          setSites([]);
+          return;
+        }
+
+        const { data: jobData } = await supabase
+          .from("jobs")
+          .select("id, title, site_id")
+          .in("id", jobIds);
+        setJobs(jobData || []);
+
+        const siteIds = [...new Set((jobData || []).map(j => j.site_id))];
+        if (siteIds.length > 0) {
+          const { data: siteData } = await supabase
+            .from("job_sites")
+            .select("id, name")
+            .in("id", siteIds);
+          setSites(siteData || []);
+        } else {
+          setSites([]);
+        }
+      } else {
+        // Admin/manager sees all
+        const [jobRes, siteRes] = await Promise.all([
+          supabase.from("jobs").select("id, title, site_id").eq("user_id", effectiveBusinessId),
+          supabase.from("job_sites").select("id, name").eq("user_id", effectiveBusinessId),
+        ]);
+        setJobs(jobRes.data || []);
+        setSites(siteRes.data || []);
+      }
+    };
+    fetchScopedData();
+  }, [effectiveBusinessId, isCrew, teamMemberId]);
 
   const senderNameMap: Record<string, string> = {};
   if (user) senderNameMap[user.id] = "You";
@@ -98,7 +140,7 @@ export default function CrewChatTab() {
               onUploadPhoto={chat.uploadPhoto}
               onTogglePin={chat.togglePin}
               onDeleteMessage={chat.deleteMessage}
-              isAdminOrManager={false}
+              isAdminOrManager={!isCrew}
             />
           </div>
         </div>
