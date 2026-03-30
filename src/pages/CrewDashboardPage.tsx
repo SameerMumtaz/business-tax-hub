@@ -717,6 +717,16 @@ export default function CrewDashboardPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Route Optimization Dialog */}
+      <RouteOptimizationDialog
+        open={routeDialogOpen}
+        onOpenChange={setRouteDialogOpen}
+        route={optimizedRoute}
+        loading={routeLoading}
+        onSubmit={handleSubmitRoute}
+        submitting={routeSubmitting}
+      />
     </div>
   );
 }
