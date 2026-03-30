@@ -117,6 +117,8 @@ interface Props {
   onDiscardEdits?: (revertData: { jobId: string; updates: Record<string, any> }[]) => void;
   onRaincheckDay?: (dateStr: string) => Promise<RaincheckResult | null>;
   onRebalanceWeek?: (weekStartStr: string, weekEndStr: string) => Promise<RebalanceResult | null>;
+  onComputeRebalance?: (weekStart: string, weekEnd: string) => import("@/components/team/RebalancePreviewDialog").RebalancePlan | null;
+  weatherData?: Map<string, DailyWeather>;
 }
 
 type ViewMode = "week" | "month";
