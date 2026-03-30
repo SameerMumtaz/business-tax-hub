@@ -741,9 +741,13 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
                     const jobEndMin = h1 * 60 + m1 + estHours * 60;
                     const nextStartMin = h2 * 60 + m2;
                     gapMinutes = Math.max(0, nextStartMin - jobEndMin);
-                    // Calculate required travel buffer between these two jobs
-                    requiredTravelBuffer = getTravelBuffer(job.site_id, nextJob.site_id);
-                    isTightBuffer = gapMinutes < requiredTravelBuffer && gapMinutes >= 0;
+                    // Only show travel warning if the two jobs share at least one crew member
+                    const jobCrewIds = new Set(assignments.filter(a => a.job_id === job.id).map(a => a.worker_id));
+                    const sharedCrew = assignments.filter(a => a.job_id === nextJob.id && jobCrewIds.has(a.worker_id));
+                    if (sharedCrew.length > 0) {
+                      requiredTravelBuffer = getTravelBuffer(job.site_id, nextJob.site_id);
+                      isTightBuffer = gapMinutes < requiredTravelBuffer && gapMinutes >= 0;
+                    }
                   }
                   const gapHeight = gapMinutes > 0 ? Math.max(0, Math.round((gapMinutes / 60) * HOUR_PX)) : 0;
                   const conflictKey = `${job.id}-${dateStr}`;
