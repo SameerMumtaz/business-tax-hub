@@ -26,6 +26,7 @@ import {
   ClipboardList,
   CalendarDays,
   Eye,
+  MessageSquare,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -99,6 +100,7 @@ const links: NavItem[] = [
     ],
   },
   
+  { to: "/chat", label: "Team Chat", icon: MessageSquare },
   { to: "/booking-settings", label: "Online Booking", icon: CalendarDays },
   { to: "/profile", label: "Business Info", icon: Building2 },
 ];

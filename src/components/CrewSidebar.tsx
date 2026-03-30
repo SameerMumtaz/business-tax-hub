@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { MapPin, LogOut, Clock } from "lucide-react";
+import { MapPin, LogOut, Clock, MessageSquare } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ export default function CrewSidebar() {
   const links = [
     { to: "/crew", label: t("nav.myJobs"), icon: MapPin },
     { to: "/crew/history", label: t("nav.checkinHistory"), icon: Clock },
+    { to: "/chat", label: "Team Chat", icon: MessageSquare },
   ];
 
   return (
