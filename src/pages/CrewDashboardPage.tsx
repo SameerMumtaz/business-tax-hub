@@ -26,6 +26,7 @@ import RouteOptimizationDialog from "@/components/route/RouteOptimizationDialog"
 import CrewChatTab from "@/components/crew/CrewChatTab";
 import CrewStatusWidgets from "@/components/crew/CrewStatusWidgets";
 import { parseDateOnlyLocal, getTodayDateOnlyKey, getNextInstanceDate, isRecurringJobToday, addDaysToDateOnly, compareDateOnly } from "@/lib/dateOnly";
+import { postCrewChatMessage } from "@/lib/crewChatPost";
 
 /* ── Live elapsed timer ─────────────────────────────── */
 function LiveElapsed({ since }: { since: string }) {
