@@ -170,6 +170,7 @@ export default function JobSchedulerContent() {
   const [jobLaborHours, setJobLaborHours] = useState("");
   const [jobLaborRate, setJobLaborRate] = useState("");
   const [jobBillingInterval, setJobBillingInterval] = useState("");
+  const [pendingDefaultCrew, setPendingDefaultCrew] = useState<{ worker_id: string; worker_name: string }[]>([]);
 
   // Edit job state
   const [editJobOpen, setEditJobOpen] = useState(false);
