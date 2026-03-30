@@ -643,7 +643,19 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     return sites.slice().sort((a, b) => a.name.localeCompare(b.name));
   }, [sites]);
 
-  const clearFilters = () => { setFilterCrewId("all"); setFilterSiteId("all"); };
+  const jobTitleOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const list: string[] = [];
+    for (const j of jobs) {
+      if (!seen.has(j.title)) {
+        seen.add(j.title);
+        list.push(j.title);
+      }
+    }
+    return list.sort((a, b) => a.localeCompare(b));
+  }, [jobs]);
+
+  const clearFilters = () => { setFilterCrewId("all"); setFilterSiteId("all"); setFilterJobTitle("all"); };
 
   return (
     <>
