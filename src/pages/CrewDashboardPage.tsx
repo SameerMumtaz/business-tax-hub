@@ -24,6 +24,7 @@ import CrewProfileTab from "@/components/crew/CrewProfileTab";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 import RouteOptimizationDialog from "@/components/route/RouteOptimizationDialog";
 import CrewChatTab from "@/components/crew/CrewChatTab";
+import CrewStatusWidgets from "@/components/crew/CrewStatusWidgets";
 import { parseDateOnlyLocal, getTodayDateOnlyKey, getNextInstanceDate, isRecurringJobToday, addDaysToDateOnly, compareDateOnly } from "@/lib/dateOnly";
 
 /* ── Live elapsed timer ─────────────────────────────── */
