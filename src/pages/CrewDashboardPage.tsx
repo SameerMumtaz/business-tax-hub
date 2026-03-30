@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import { CheckCircle, Clock, LogOut, List, CalendarDays, MapPin as MapIcon, LogOut as SignOutIcon, UserCircle, AlertTriangle, Camera, Briefcase, DollarSign, Timer, Navigation } from "lucide-react";
+import { CheckCircle, Clock, LogOut, List, CalendarDays, MapPin as MapIcon, LogOut as SignOutIcon, UserCircle, AlertTriangle, Camera, Briefcase, DollarSign, Timer, Navigation, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 
 import CrewJobsList, { type AssignedJob } from "@/components/crew/CrewJobsList";
@@ -23,6 +23,7 @@ import CrewMapView from "@/components/crew/CrewMapView";
 import CrewProfileTab from "@/components/crew/CrewProfileTab";
 import JobPhotosPanel from "@/components/job/JobPhotosPanel";
 import RouteOptimizationDialog from "@/components/route/RouteOptimizationDialog";
+import CrewChatTab from "@/components/crew/CrewChatTab";
 import { parseDateOnlyLocal, getTodayDateOnlyKey, getNextInstanceDate, isRecurringJobToday, addDaysToDateOnly, compareDateOnly } from "@/lib/dateOnly";
 
 /* ── Live elapsed timer ─────────────────────────────── */
@@ -633,6 +634,9 @@ export default function CrewDashboardPage() {
               <TabsTrigger value="map" className="flex-1 gap-1.5">
                 <MapIcon className="h-4 w-4" /> {t("tab.map")}
               </TabsTrigger>
+              <TabsTrigger value="messages" className="flex-1 gap-1.5">
+                <MessageSquare className="h-4 w-4" /> Messages
+              </TabsTrigger>
               <TabsTrigger value="profile" className="flex-1 gap-1.5">
                 <UserCircle className="h-4 w-4" /> {t("tab.profile")}
               </TabsTrigger>
@@ -645,6 +649,9 @@ export default function CrewDashboardPage() {
             </TabsContent>
             <TabsContent value="map" className="mt-4">
               <CrewMapView jobs={assignedJobs} />
+            </TabsContent>
+            <TabsContent value="messages" className="mt-4">
+              <CrewChatTab />
             </TabsContent>
             <TabsContent value="profile" className="mt-4">
               <CrewProfileTab />
