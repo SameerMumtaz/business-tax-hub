@@ -105,6 +105,7 @@ export default function ClientJobsPanel({ client }: Props) {
     setNewSiteState(""); setNewSiteLat(""); setNewSiteLng("");
     setJobPrice(""); setJobMaterialBudget(""); setJobLaborType("amount");
     setJobLaborAmount(""); setJobLaborHours(""); setJobLaborRate("");
+    setJobBillingInterval("");
   };
 
   const handleCreateJob = async () => {
