@@ -373,6 +373,19 @@ export default function CrewDashboardPage() {
       }
 
       await checkOut(activeCheckin.id, lat, lng);
+
+      // Post check-out to chat
+      if (user && teamMemberId) {
+        const activeJobForChat = assignedJobs.find((j) => j.id === activeCheckin.job_id);
+        const elapsed = ((Date.now() - new Date(activeCheckin.check_in_time).getTime()) / 3600000).toFixed(1);
+        const time = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        await postCrewChatMessage(
+          user.id,
+          teamMemberId,
+          `🏁 Checked out of "${activeJobForChat?.title || "job"}" — ${elapsed}h worked, ${time}`,
+          { job_id: activeCheckin.job_id, job_site_id: activeCheckin.job_site_id, occurrence_date: activeCheckin.occurrence_date }
+        );
+      }
     } catch (err: any) {
       toast.error(err.message || t("error.gps"));
     }
