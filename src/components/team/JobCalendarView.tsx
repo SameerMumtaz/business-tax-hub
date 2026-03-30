@@ -263,7 +263,7 @@ function buildJobsByDate(jobs: Job[], checkins: CrewCheckinOccurrence[], rangeSt
   return map;
 }
 
-export default function JobCalendarView({ jobs, sites, assignments = [], checkins = [], teamMembers = [], onJobClick, onJobMove, onJobDelete, onDiscardEdits, onRaincheckDay, onRebalanceWeek }: Props) {
+export default function JobCalendarView({ jobs, sites, assignments = [], checkins = [], teamMembers = [], onJobClick, onJobMove, onJobDelete, onDiscardEdits, onRaincheckDay, onRebalanceWeek, onComputeRebalance, weatherData }: Props) {
   const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
