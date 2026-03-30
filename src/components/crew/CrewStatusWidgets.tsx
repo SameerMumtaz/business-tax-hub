@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Cloud, Clock, TrendingUp, TrendingDown, Minus, DollarSign, CheckCircle2 } from "lucide-react";
+import { Cloud, Clock, TrendingUp, TrendingDown, Minus, DollarSign, CheckCircle2, Droplets } from "lucide-react";
 import { useWeatherForecast, type DailyWeather } from "@/hooks/useWeatherForecast";
 import { getTodayDateOnlyKey, getNextInstanceDate } from "@/lib/dateOnly";
 import type { AssignedJob } from "@/components/crew/CrewJobsList";
