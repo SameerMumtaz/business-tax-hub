@@ -634,6 +634,9 @@ export default function CrewDashboardPage() {
               <TabsTrigger value="map" className="flex-1 gap-1.5">
                 <MapIcon className="h-4 w-4" /> {t("tab.map")}
               </TabsTrigger>
+              <TabsTrigger value="messages" className="flex-1 gap-1.5">
+                <MessageSquare className="h-4 w-4" /> Messages
+              </TabsTrigger>
               <TabsTrigger value="profile" className="flex-1 gap-1.5">
                 <UserCircle className="h-4 w-4" /> {t("tab.profile")}
               </TabsTrigger>
