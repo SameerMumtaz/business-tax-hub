@@ -1,5 +1,8 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { notifyCrewOfJobChange } from "@/lib/crewJobNotify";
+import { useWeatherForecast } from "@/hooks/useWeatherForecast";
+import ClientNotifyDialog, { type AffectedClient } from "@/components/team/ClientNotifyDialog";
+import type { RebalancePlan } from "@/components/team/RebalancePreviewDialog";
 import { getJobDateKeysInRange } from "@/lib/dateOnly";
 import JobBudgetFields from "@/components/job/JobBudgetFields";
 import CrewAssignmentPanel from "@/components/job/CrewAssignmentPanel";
@@ -113,6 +116,20 @@ export default function JobSchedulerContent() {
   const { data: clients = [] } = useClients();
   const { templates, refetch: refetchTemplates } = useJobTemplates();
   const [tab, setTab] = useState("calendar");
+
+  // Weather - compute centroid of sites with coordinates
+  const weatherCenter = useMemo(() => {
+    const withCoords = sites.filter(s => s.latitude && s.longitude);
+    if (withCoords.length === 0) return { lat: null, lng: null };
+    const lat = withCoords.reduce((s, site) => s + (site.latitude || 0), 0) / withCoords.length;
+    const lng = withCoords.reduce((s, site) => s + (site.longitude || 0), 0) / withCoords.length;
+    return { lat, lng };
+  }, [sites]);
+  const { data: weatherData } = useWeatherForecast(weatherCenter.lat, weatherCenter.lng);
+
+  // Undo state
+  const undoDataRef = useRef<{ id: string; start_date: string; end_date: string | null }[]>([]);
+  const [clientNotifyData, setClientNotifyData] = useState<{ open: boolean; clients: AffectedClient[]; type: "raincheck" | "rebalance" }>({ open: false, clients: [], type: "raincheck" });
 
   // Create site state
   const [siteOpen, setSiteOpen] = useState(false);
@@ -660,10 +677,34 @@ export default function JobSchedulerContent() {
       title: j.title,
       clientName: j.client_id ? clients.find(c => c.id === j.client_id)?.name : undefined,
     }));
-    const clientJobs = movedJobs.filter(j => j.clientName);
-    if (clientJobs.length > 0) {
-      const uniqueClients = [...new Set(clientJobs.map(j => j.clientName))];
-      toast.info(`📧 Remember to notify ${uniqueClients.length} client${uniqueClients.length !== 1 ? "s" : ""}: ${uniqueClients.join(", ")}`, { duration: 10000 });
+    // Store undo data
+    const parseD2 = (s: string) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+    undoDataRef.current = dayJobs.map(j => ({ id: j.id, start_date: j.start_date, end_date: j.end_date }));
+    const undoJobs = [...undoDataRef.current];
+    toast.success(`Rainchecked ${dayJobs.length} jobs`, {
+      action: { label: "Undo", onClick: async () => {
+        await updateJobsBatch(undoJobs.map(u => ({ id: u.id, updates: { start_date: u.start_date, end_date: u.end_date } as Partial<Job> })));
+        await refetch();
+        toast.info("Raincheck undone");
+      }},
+      duration: 12000,
+    });
+
+    // Build client notify data
+    const affectedClients: AffectedClient[] = [];
+    const clientMap = new Map<string, AffectedClient>();
+    for (const j of dayJobs) {
+      if (!j.client_id) continue;
+      const client = clients.find(c => c.id === j.client_id);
+      if (!client) continue;
+      const fmtDate = (s: string) => parseD2(s).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      if (!clientMap.has(client.id)) {
+        clientMap.set(client.id, { name: client.name, email: client.email, phone: client.phone, jobs: [] });
+      }
+      clientMap.get(client.id)!.jobs.push({ title: j.title, oldDate: fmtDate(dateStr), newDate: fmtDate(targetDate) });
+    }
+    if (clientMap.size > 0) {
+      setClientNotifyData({ open: true, clients: [...clientMap.values()], type: "raincheck" });
     }
 
     await refetch();

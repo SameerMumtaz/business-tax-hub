@@ -5,7 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import FilterCombobox from "@/components/FilterCombobox";
-import { ChevronLeft, ChevronRight, Clock, MapPin, AlertTriangle, Sparkles, GripVertical, Lock, Unlock, Copy, RefreshCw, Undo2, Save, Trash2, Filter, X, CloudRain, Scale } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, MapPin, AlertTriangle, Sparkles, GripVertical, Lock, Unlock, Copy, RefreshCw, Undo2, Save, Trash2, Filter, X, CloudRain, Scale, Droplets } from "lucide-react";
+import type { DailyWeather } from "@/hooks/useWeatherForecast";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
@@ -116,6 +117,8 @@ interface Props {
   onDiscardEdits?: (revertData: { jobId: string; updates: Record<string, any> }[]) => void;
   onRaincheckDay?: (dateStr: string) => Promise<RaincheckResult | null>;
   onRebalanceWeek?: (weekStartStr: string, weekEndStr: string) => Promise<RebalanceResult | null>;
+  onComputeRebalance?: (weekStart: string, weekEnd: string) => import("@/components/team/RebalancePreviewDialog").RebalancePlan | null;
+  weatherData?: Map<string, DailyWeather>;
 }
 
 type ViewMode = "week" | "month";
@@ -260,7 +263,7 @@ function buildJobsByDate(jobs: Job[], checkins: CrewCheckinOccurrence[], rangeSt
   return map;
 }
 
-export default function JobCalendarView({ jobs, sites, assignments = [], checkins = [], teamMembers = [], onJobClick, onJobMove, onJobDelete, onDiscardEdits, onRaincheckDay, onRebalanceWeek }: Props) {
+export default function JobCalendarView({ jobs, sites, assignments = [], checkins = [], teamMembers = [], onJobClick, onJobMove, onJobDelete, onDiscardEdits, onRaincheckDay, onRebalanceWeek, onComputeRebalance, weatherData }: Props) {
   const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -283,6 +286,8 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
   const [raincheckDate, setRaincheckDate] = useState<string | null>(null);
   const [raincheckLoading, setRaincheckLoading] = useState(false);
   const [rebalanceLoading, setRebalanceLoading] = useState(false);
+  const [rebalancePlan, setRebalancePlan] = useState<import("@/components/team/RebalancePreviewDialog").RebalancePlan | null>(null);
+  const [showRebalancePreview, setShowRebalancePreview] = useState(false);
 
   // Filter state
   const [filterCrewId, setFilterCrewId] = useState<string>("all");
@@ -561,6 +566,24 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     setPendingRecurringMove(null);
   };
   const getDayHours = (dateStr: string) => (jobsByDate.get(dateStr) || []).reduce((s, j) => s + (j.estimated_hours || 2), 0);
+
+  // Schedule Health Score
+  const weekHealth = useMemo(() => {
+    if (viewMode !== "week") return null;
+    const dayHours = weekDays.slice(0, 5).map(d => getDayHours(toDateStr(d)));
+    const total = dayHours.reduce((s, h) => s + h, 0);
+    if (total === 0) return null;
+    const activeDays = dayHours.filter(h => h > 0);
+    if (activeDays.length <= 1) return { score: 100, color: "text-emerald-500", bg: "bg-emerald-500", label: "Balanced" };
+    const mean = total / activeDays.length;
+    const variance = activeDays.reduce((s, h) => s + (h - mean) ** 2, 0) / activeDays.length;
+    const cv = Math.sqrt(variance) / mean;
+    const score = Math.max(0, Math.round(100 - cv * 150));
+    if (score >= 80) return { score, color: "text-emerald-500", bg: "bg-emerald-500", label: "Balanced" };
+    if (score >= 50) return { score, color: "text-amber-500", bg: "bg-amber-500", label: "Uneven" };
+    return { score, color: "text-destructive", bg: "bg-destructive", label: "Overloaded" };
+  }, [viewMode, weekDays, getDayHours]);
+
   const dayHeaders = isMobile ? ["M", "T", "W", "T", "F", "S", "S"] : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   const renderWeekView = () => {
@@ -585,10 +608,37 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
                     <span className={cn("text-xs font-medium", !isMobile && "hidden")}>{day.toLocaleDateString("en-US", { weekday: "short" })}</span>
                     <span className={cn("text-xs font-medium", isMobile && "hidden")}>{day.toLocaleDateString("en-US", { weekday: "short" })}</span>
                     <span className={cn("w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center", isToday ? "bg-primary text-primary-foreground" : "text-foreground")}>{day.getDate()}</span>
+                    {(() => {
+                      const w = weatherData?.get(dateStr);
+                      if (!w) return null;
+                      return (
+                        <span
+                          className={cn("text-sm cursor-default", w.isStormDay && "animate-pulse")}
+                          title={`${w.label} — ${w.precipitationMm.toFixed(1)}mm`}
+                        >
+                          {w.icon}
+                        </span>
+                      );
+                    })()}
+                    {(() => {
+                      const w = weatherData?.get(dateStr);
+                      if (!w?.isRainDay || !onRaincheckDay) return null;
+                      const moveable = dayJobs.filter(j => (j._displayStatus || j.status) !== "completed" && j.status !== "cancelled").length;
+                      if (!moveable) return null;
+                      return (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setRaincheckDate(dateStr); }}
+                          className="flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 transition-colors"
+                          title={`Rain expected — raincheck ${moveable} job${moveable !== 1 ? "s" : ""}`}
+                        >
+                          <Droplets className="h-3 w-3" />Raincheck?
+                        </button>
+                      );
+                    })()}
                   </div>
                   <div className="flex items-center gap-1">
                     {hours > 0 && <span className="text-[10px] font-mono text-muted-foreground">{hours.toFixed(1)}h</span>}
-                    {onRaincheckDay && dayJobs.filter(j => (j._displayStatus || j.status) !== "completed" && j.status !== "cancelled").length > 0 && (
+                    {onRaincheckDay && !weatherData?.get(dateStr)?.isRainDay && dayJobs.filter(j => (j._displayStatus || j.status) !== "completed" && j.status !== "cancelled").length > 0 && (
                       <button
                         onClick={(e) => { e.stopPropagation(); setRaincheckDate(dateStr); }}
                         className="opacity-0 group-hover/day:opacity-100 transition-opacity p-0.5 rounded hover:bg-destructive/10"
@@ -722,6 +772,13 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
                 )}
               </Button>
               <Button variant="ghost" size="sm" className="text-xs h-7" onClick={goToday}>Today</Button>
+              {weekHealth && (
+                <div className={cn("flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-md bg-muted/50", weekHealth.color)} title={`Schedule balance: ${weekHealth.score}%`}>
+                  <div className={cn("w-2 h-2 rounded-full", weekHealth.bg)} />
+                  <span className="hidden sm:inline">{weekHealth.label}</span>
+                  <span className="font-mono text-[10px]">{weekHealth.score}</span>
+                </div>
+              )}
               {editMode ? (
                 <>
                   {hasEdits && <Button variant="outline" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={handleDiscardEdits}><Undo2 className="h-3.5 w-3.5 mr-1" />Discard</Button>}
@@ -730,18 +787,27 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
               ) : (
                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={enterEditMode}><Lock className="h-3.5 w-3.5 mr-1" />Edit schedule</Button>
               )}
-              {onRebalanceWeek && viewMode === "week" && (
+              {(onComputeRebalance || onRebalanceWeek) && viewMode === "week" && (
                 <Button
                   variant="outline"
                   size="sm"
                   className="h-7 text-xs"
                   disabled={rebalanceLoading}
-                  onClick={async () => {
-                    setRebalanceLoading(true);
-                    const ws = toDateStr(weekDays[0]);
-                    const we = toDateStr(weekDays[weekDays.length - 1]);
-                    await onRebalanceWeek(ws, we);
-                    setRebalanceLoading(false);
+                  onClick={() => {
+                    if (onComputeRebalance) {
+                      const ws = toDateStr(weekDays[0]);
+                      const we = toDateStr(weekDays[weekDays.length - 1]);
+                      const plan = onComputeRebalance(ws, we);
+                      if (plan) {
+                        setRebalancePlan(plan);
+                        setShowRebalancePreview(true);
+                      }
+                    } else if (onRebalanceWeek) {
+                      setRebalanceLoading(true);
+                      const ws = toDateStr(weekDays[0]);
+                      const we = toDateStr(weekDays[weekDays.length - 1]);
+                      onRebalanceWeek(ws, we).finally(() => setRebalanceLoading(false));
+                    }
                   }}
                 >
                   <Scale className="h-3.5 w-3.5 mr-1" />
@@ -916,6 +982,87 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
               >
                 <CloudRain className="h-4 w-4 mr-2" />
                 {raincheckLoading ? "Moving jobs…" : "Raincheck Day"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Rebalance Preview Dialog */}
+      {showRebalancePreview && rebalancePlan && onRebalanceWeek && (
+        <Dialog open={showRebalancePreview} onOpenChange={(v) => { if (!v) { setShowRebalancePreview(false); setRebalancePlan(null); } }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Scale className="h-5 w-5 text-primary" />
+                Rebalance Preview
+              </DialogTitle>
+              <DialogDescription>
+                {rebalancePlan.moves.length} job{rebalancePlan.moves.length !== 1 ? "s" : ""} will be redistributed across the week.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-6">
+                {["Before", "After"].map((label) => {
+                  const data = label === "Before" ? rebalancePlan.dayHoursBefore : rebalancePlan.dayHoursAfter;
+                  const maxH = Math.max(...rebalancePlan.dayHoursBefore.map(d => d.hours), ...rebalancePlan.dayHoursAfter.map(d => d.hours), rebalancePlan.targetMax, 1);
+                  return (
+                    <div key={label}>
+                      <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">{label}</p>
+                      <div className="space-y-2">
+                        {data.map(d => (
+                          <div key={d.dateStr} className="flex items-center gap-2">
+                            <span className="text-[11px] font-medium w-8 text-right text-muted-foreground">{d.dayLabel}</span>
+                            <div className="flex-1 h-5 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className={cn("h-full rounded-full transition-all", d.hours > rebalancePlan.targetMax ? "bg-destructive" : label === "After" ? "bg-emerald-500" : "bg-primary")}
+                                style={{ width: `${Math.max(2, (d.hours / maxH) * 100)}%` }}
+                              />
+                            </div>
+                            <span className={cn("text-[11px] font-mono w-10 text-right", d.hours > rebalancePlan.targetMax ? "text-destructive font-bold" : label === "After" ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>{d.hours.toFixed(1)}h</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                <div className="h-px flex-1 border-t border-dashed border-muted-foreground/30" />
+                <span>Target max: {rebalancePlan.targetMax.toFixed(1)}h / day</span>
+                <div className="h-px flex-1 border-t border-dashed border-muted-foreground/30" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">Changes</p>
+                <div className="max-h-[150px] overflow-y-auto space-y-1">
+                  {rebalancePlan.moves.map((m, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm py-1.5 px-2 rounded bg-muted/50">
+                      <span className="font-medium truncate flex-1">{m.title}</span>
+                      <span className="text-[11px] font-mono text-muted-foreground">{m.hours}h</span>
+                      <span className="text-xs text-muted-foreground">{m.fromDate}</span>
+                      <span className="text-xs text-muted-foreground">→</span>
+                      <span className="text-xs font-medium text-primary">{m.toDate}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setShowRebalancePreview(false); setRebalancePlan(null); }} disabled={rebalanceLoading}>Cancel</Button>
+              <Button
+                disabled={rebalanceLoading}
+                onClick={async () => {
+                  setRebalanceLoading(true);
+                  const ws = toDateStr(weekDays[0]);
+                  const we = toDateStr(weekDays[weekDays.length - 1]);
+                  await onRebalanceWeek(ws, we);
+                  setRebalanceLoading(false);
+                  setShowRebalancePreview(false);
+                  setRebalancePlan(null);
+                }}
+              >
+                <Scale className="h-4 w-4 mr-2" />
+                {rebalanceLoading ? "Rebalancing…" : `Apply ${rebalancePlan.moves.length} changes`}
               </Button>
             </DialogFooter>
           </DialogContent>
