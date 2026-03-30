@@ -135,9 +135,9 @@ export default function ChatMessageArea({
 
       {/* Pinned messages bar */}
       {pinnedMessages.length > 0 && (
-        <div className="px-4 py-2 bg-amber-50 dark:bg-amber-950/20 border-b flex items-center gap-2 text-xs">
-          <Pin className="h-3 w-3 text-amber-600" />
-          <span className="text-amber-700 dark:text-amber-400 font-medium">
+        <div className="px-4 py-2 bg-accent/50 border-b flex items-center gap-2 text-xs">
+          <Pin className="h-3 w-3 text-primary" />
+          <span className="text-primary font-medium">
             {pinnedMessages.length} pinned message{pinnedMessages.length !== 1 ? "s" : ""}
           </span>
         </div>
