@@ -753,6 +753,12 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
                   <X className="h-3 w-3" />
                 </Badge>
               )}
+              {filterJobTitle !== "all" && (
+                <Badge variant="secondary" className="text-xs gap-1 cursor-pointer" onClick={() => setFilterJobTitle("all")}>
+                  {filterJobTitle}
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
             </div>
           )}
 
