@@ -506,7 +506,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
     if (!dragJob) return;
     const sameDay = dateStr === dragStartDate.current;
     const movedDuration = dragJob.estimated_hours || 1;
-    const newTime = typeof dropIdx === "number" ? computeTimeForIndex(dateStr, dropIdx, dragJob.id, movedDuration) : undefined;
+    const newTime = typeof dropIdx === "number" ? computeTimeForIndex(dateStr, dropIdx, dragJob.id, movedDuration, dragJob.site_id) : undefined;
     if (sameDay && newTime === undefined) { clearDragState(); return; }
     if (dragJob.job_type === "recurring") {
       setPendingRecurringMove({ job: dragJob, fromDate: dragStartDate.current || dateStr, toDate: dateStr, newTime });
