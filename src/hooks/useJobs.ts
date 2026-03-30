@@ -198,15 +198,16 @@ export function useJobs() {
   };
 
   const updateJob = async (id: string, updates: Partial<Job>) => {
+    const oldJob = jobs.find(j => j.id === id);
     const { error } = await supabase.from("jobs").update(updates).eq("id", id);
     if (error) {
       toast.error(error.message);
       return;
     }
 
-    // If estimated_hours changed, sync all assignments
+    // If estimated_hours changed, sync all assignments (preserve manually set hours)
     if (updates.estimated_hours !== undefined) {
-      await syncAssignmentHoursToJob(id, updates.estimated_hours ?? null);
+      await syncAssignmentHoursToJob(id, updates.estimated_hours ?? null, oldJob?.estimated_hours ?? null);
     }
 
     fetchAll();
