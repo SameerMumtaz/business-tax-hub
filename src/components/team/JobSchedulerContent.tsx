@@ -470,6 +470,135 @@ export default function JobSchedulerContent() {
     return `${h12}:${String(sm).padStart(2, "0")} ${ampm}`;
   };
 
+  // ── Cascade Recalculation ──
+  // After any job is created, moved, or edited, recalculate all subsequent crew jobs
+  // on the same date to enforce proper travel buffers.
+  const cascadeRecalculate = useCallback(async (
+    triggerJobId: string,
+    dateStr: string,
+  ) => {
+    // Find all crew assigned to the trigger job
+    const triggerAssigns = assignments.filter(a => a.job_id === triggerJobId);
+    if (triggerAssigns.length === 0) return;
+
+    const affectedCrewIds = triggerAssigns.map(a => a.worker_id);
+
+    // Refetch to get latest state after the mutation
+    await refetch();
+
+    // Re-read jobs (use latest from refetch)
+    // We need a small delay for state to settle
+    await new Promise(r => setTimeout(r, 300));
+  }, [assignments, refetch]);
+
+  // Full cascade that runs on fresh data
+  const runCascade = useCallback(async (
+    triggerJobId: string,
+    dateStr: string,
+  ) => {
+    const triggerAssigns = assignments.filter(a => a.job_id === triggerJobId);
+    if (triggerAssigns.length === 0) return;
+    const affectedCrewIds = triggerAssigns.map(a => a.worker_id);
+
+    // Get all jobs on this date that share crew with the trigger job
+    const dayJobs = jobs.filter(j => {
+      if (!j.start_time) return false;
+      if (!jobOccursOnDate(j, dateStr)) return false;
+      const jobAssigns = assignments.filter(a => a.job_id === j.id);
+      return jobAssigns.some(a => affectedCrewIds.includes(a.worker_id));
+    });
+
+    if (dayJobs.length < 2) return;
+
+    // Sort by start time
+    const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+    const sorted = [...dayJobs].sort((a, b) => toMin(a.start_time!) - toMin(b.start_time!));
+
+    const updates: { id: string; start_time: string; old_time: string; title: string }[] = [];
+    let tightBuffers: { jobA: string; jobB: string; gap: number; needed: number }[] = [];
+
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1];
+      const curr = sorted[i];
+
+      const prevStart = toMin(prev.start_time!);
+      const prevDuration = Math.round((prev.estimated_hours || 1) * 60);
+      const prevEnd = prevStart + prevDuration;
+
+      // Calculate required travel buffer
+      let requiredBuffer = 10;
+      if (prev.site_id !== curr.site_id) {
+        const prevSite = sites.find(s => s.id === prev.site_id);
+        const currSite = sites.find(s => s.id === curr.site_id);
+        if (prevSite?.latitude && prevSite?.longitude && currSite?.latitude && currSite?.longitude) {
+          const dist = haversineDistance(prevSite.latitude, prevSite.longitude, currSite.latitude, currSite.longitude);
+          requiredBuffer = estimateTravelMinutes(dist);
+        }
+      }
+
+      const earliestStart = prevEnd + requiredBuffer;
+      const currStart = toMin(curr.start_time!);
+      const actualGap = currStart - prevEnd;
+
+      // Flag tight buffer (gap < required travel time)
+      if (actualGap < requiredBuffer && actualGap >= 0) {
+        tightBuffers.push({
+          jobA: prev.title,
+          jobB: curr.title,
+          gap: actualGap,
+          needed: requiredBuffer,
+        });
+      }
+
+      // If current job starts before it should (overlap or insufficient buffer)
+      if (currStart < earliestStart) {
+        const roundedStart = Math.ceil(earliestStart / 5) * 5;
+        const cappedStart = Math.min(roundedStart, 23 * 60 + 55);
+        const hh = String(Math.floor(cappedStart / 60)).padStart(2, "0");
+        const mm = String(cappedStart % 60).padStart(2, "0");
+        const newTime = `${hh}:${mm}`;
+
+        if (newTime !== curr.start_time) {
+          updates.push({
+            id: curr.id,
+            start_time: newTime,
+            old_time: curr.start_time!,
+            title: curr.title,
+          });
+          // Update the sorted array so subsequent calculations use the new time
+          sorted[i] = { ...sorted[i], start_time: newTime };
+        }
+      }
+    }
+
+    // Apply all updates
+    if (updates.length > 0) {
+      const batchUpdates = updates.map(u => ({
+        id: u.id,
+        updates: { start_time: u.start_time } as Partial<Job>,
+      }));
+      await updateJobsBatch(batchUpdates);
+
+      const details = updates.map(u =>
+        `• ${u.title}: ${formatSmartTime(u.old_time)} → ${formatSmartTime(u.start_time)}`
+      ).join("\n");
+      toast.info(
+        `Cascade: ${updates.length} job${updates.length > 1 ? "s" : ""} shifted to maintain travel buffers`,
+        { description: details, duration: 6000 }
+      );
+    }
+
+    // Warn about tight buffers that couldn't be auto-fixed (e.g. first job is the problem)
+    if (tightBuffers.length > 0 && updates.length === 0) {
+      tightBuffers.forEach(tb => {
+        toast.warning(
+          `Tight buffer: ${tb.gap}min gap between "${tb.jobA}" and "${tb.jobB}" (need ${tb.needed}min for travel)`,
+          { duration: 8000 }
+        );
+      });
+    }
+  }, [jobs, assignments, sites, haversineDistance, estimateTravelMinutes, jobOccursOnDate, updateJobsBatch, formatSmartTime]);
+
   const handleCreateJob = async () => {
     if (!jobTitle.trim() || !jobSiteId || !jobStart) {
       toast.error("Title, site, and start date are required"); return;
