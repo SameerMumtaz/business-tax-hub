@@ -578,7 +578,7 @@ export default function JobCalendarView({ jobs, sites, assignments = [], checkin
           const isGapSuggestion = gapSuggestions.includes(dateStr) && dragJob !== null;
           const isCurrentMonth = day.getMonth() === currentDate.getMonth();
           return (
-            <div key={dateStr} className={cn("rounded-lg border transition-all flex flex-col", isToday && "ring-2 ring-primary/50", isDragTarget && showConflicts.length > 0 && "ring-2 ring-red-500/60 bg-red-500/5", isDragTarget && showConflicts.length === 0 && "ring-2 ring-primary/60 bg-primary/5", isGapSuggestion && !isDragTarget && "ring-2 ring-emerald-500/40 bg-emerald-500/5", !isDragTarget && !isGapSuggestion && "border-border bg-card", !isCurrentMonth && "opacity-50")} onDragOver={(e) => handleDragOver(e, dateStr)} onDragLeave={handleDragLeave} onDrop={(e) => handleDrop(e, dateStr)}>
+            <div key={dateStr} className={cn("group/day rounded-lg border transition-all flex flex-col", isToday && "ring-2 ring-primary/50", isDragTarget && showConflicts.length > 0 && "ring-2 ring-red-500/60 bg-red-500/5", isDragTarget && showConflicts.length === 0 && "ring-2 ring-primary/60 bg-primary/5", isGapSuggestion && !isDragTarget && "ring-2 ring-emerald-500/40 bg-emerald-500/5", !isDragTarget && !isGapSuggestion && "border-border bg-card", !isCurrentMonth && "opacity-50")} onDragOver={(e) => handleDragOver(e, dateStr)} onDragLeave={handleDragLeave} onDrop={(e) => handleDrop(e, dateStr)}>
               <div className={cn("px-2 py-1.5 border-b border-border/50 flex-shrink-0", workload.color)}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
