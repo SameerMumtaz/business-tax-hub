@@ -1,80 +1,87 @@
 
-Goal: make statement import fail-safe and faster. Right now it is both too permissive and too expensive.
+Goal
 
-What I found
-- Both import flows (`src/hooks/useImportLogic.ts` and `src/pages/PersonalImportPage.tsx`) chunk by fixed 6-page groups and send every chunk to `parse-pdf`.
-- The current sample request includes page 1 summary totals and page 2 “IMPORTANT INFORMATION” legal text, so we are paying parsing cost on pages that are not transactions.
-- `parse-pdf` still treats AI as the primary path whenever it detects 2+ columns. Recent edge executions are about 43–58s each, which explains the slowdown.
-- There is still no reconciliation against the statement’s own totals/counts, even though page 1 contains deposits `$92,786.53`, withdrawals `$109,297.92`, and counts `26 / 623`.
-- Session replay shows one run extracting only 104 transactions from 26 pages, so we are missing a large share of rows before we even get to review.
-- Column detection is still fragile because it relies on early-page headers and nearest-center assignment, which can swap debit/credit or pull in summary content.
+- Pivot the statement importer to a vision-first pipeline that fixes the “almost everything became income” failure and stops bad parses from being importable.
 
-Plan
-1. Split “statement metadata” from “transaction parsing”
-   - Extract official totals, counts, date range, and bank/profile hints from summary pages first.
-   - Add page classification: `summary`, `transaction_detail`, `legal_marketing`, `unknown`.
-   - Exclude legal/marketing pages from transaction parsing entirely.
+What’s actually broken in the current code
 
-2. Make parsing deterministic-first, AI-second
-   - Move `supabase/functions/parse-pdf/index.ts` to a deterministic primary pipeline for bank statements.
-   - Parse rows by geometry, stitch multiline descriptions, and read debit/credit/balance columns explicitly.
-   - Use multiple signals for type classification:
-     - separate debit vs credit columns
-     - section markers
-     - signed amount formatting
-     - running balance delta when balance exists
-   - Use AI only as a rescue pass for unresolved rows/pages, not as the default for every chunk.
+- `src/lib/pdfImportHelper.ts` still extracts PDF text/items and sends chunked structured pages to `parse-pdf`; there is no image pipeline yet.
+- In `supabase/functions/parse-pdf/index.ts`, `processPages()` accepts deterministic output as soon as it finds any rows, even if totals are obviously wrong.
+- `deterministicParse()` classifies many amount-only rows from inherited section state (`currentSection`), so if a withdrawal header is missed, a whole chunk can skew to income.
+- `src/pages/ImportPage.tsx` and `src/pages/PersonalImportPage.tsx` show mismatch banners, but they do not actually block import.
 
-3. Add reconciliation and fail-closed behavior
-   - After parsing, compare parsed income/expense totals and counts to the statement’s official totals/counts.
-   - If mismatched, run targeted recovery:
-     - reclassify only ambiguous rows
-     - retry skipped rows/pages
-     - AI-rescue only unresolved rows with local context
-   - If still mismatched, return a reconciliation failure instead of a confident but wrong result.
-   - In the UI, show Expected vs Parsed totals/counts and disable import until reconciled.
+Recommended approach
 
-4. Fix chunking and latency
-   - Stop chunking by raw page count alone.
-   - Chunk only contiguous `transaction_detail` pages, preserving section context.
-   - Detect columns from candidate transaction pages, not just the first 3 pages.
-   - Lower/adapt concurrency for AI rescue work so we do not fan out 5–6 long AI calls at once.
-   - Add timing logs for extraction, classification, deterministic parse, AI rescue, and reconciliation.
+- Yes to using images for statement extraction.
+- But not “pure image-only for everything.” The best version here is:
+  - vision-first for transaction extraction
+  - lightweight PDF/text signals only for routing, summary totals, and cheap fallbacks
+- Full image-only on every page would likely be costlier and not automatically faster. Speed will come from rendering only the right pages, using compressed images, and retrying only suspect pages.
 
-5. Make it bank-agnostic without depending on section headers alone
-   - Add a layout-profile layer: BoA/Chase/Wells-style hints plus a generic fallback.
-   - Use x-band ranges instead of nearest-center-only column assignment.
-   - Support statements with:
-     - separate debit/credit columns
-     - single amount + balance
-     - section-based layouts
-     - no clear section headers
+Implementation plan
 
-6. Unify both import clients
-   - Move shared chunking/request/reconciliation logic out of duplicated page code so business and personal imports cannot drift apart.
-   - Keep one parser contract for both review screens.
+1. Add a page-image pipeline in `src/lib/pdfImportHelper.ts`
+   - Render PDF pages to compressed JPEG/WebP images client-side.
+   - Separate summary pages from transaction pages before sending.
+   - Chunk by page/section in small groups, not large arbitrary slabs.
+   - Preserve page numbers so retries can target specific pages.
 
-7. Add real regression coverage
-   - Add edge-function tests for:
-     - the BoA sample reconciling to `$92,786.53` income and `$109,297.92` expense
-     - expected counts `26 / 623`
+2. Rework `supabase/functions/parse-pdf/index.ts` around vision extraction
+   - Stage A: extract statement totals/counts/date range from summary pages.
+   - Stage B: extract transactions from page images with multimodal structured output.
+   - Require page-numbered transactions so every row is traceable.
+   - Stop relying on inherited chunk section as the main type classifier.
+
+3. Make reconciliation the acceptance gate
+   - Never accept a parse just because rows were found.
+   - Compare parsed income/expense totals and counts against statement totals immediately.
+   - If mismatched, auto-retry only the suspect pages/chunks with:
+     - smaller chunks
+     - higher image quality
+     - stricter prompts
+   - If still mismatched, return a failure state instead of “successful but wrong.”
+
+4. Add guardrails for the “everything is income” bug
+   - Detect lopsided outputs when the statement summary clearly contains both deposits and withdrawals.
+   - Force reparse on those pages instead of surfacing the result.
+   - Add page-level sanity rules so one missed section header cannot poison an entire chunk.
+
+5. Keep deterministic text parsing only as a fallback
+   - Use it for clean digital statements when it reconciles correctly.
+   - Do not let deterministic output win if reconciliation fails.
+   - This preserves speed on easy PDFs without trusting the current brittle path.
+
+6. Make the UI fail closed
+   - In `src/pages/ImportPage.tsx` and `src/pages/PersonalImportPage.tsx`, disable Import when reconciliation is mismatched.
+   - Show expected vs parsed totals/counts plus retry status.
+   - Surface “needs review / retry” instead of allowing bad data through.
+
+7. Add regression tests
+   - Cover the current sample so it must reconcile to:
+     - income: `$92,786.53`
+     - expense: `$109,297.92`
+   - Also cover:
      - separate debit/credit layouts
      - single-amount-with-balance layouts
-     - mixed PDFs with summary/legal pages
-     - statements with non-BoA section wording
+     - scanned/image-heavy statements
+     - non-BoA section wording
+   - Add one explicit test preventing the “nearly all income” failure mode.
 
 Technical details
+
 ```text
-PDF
- -> summary extractor
- -> page classifier
- -> deterministic row parser
- -> reconciliation engine
- -> AI rescue only for unresolved rows
- -> review UI with reconciliation status
+PDF upload
+ -> render selected pages to compressed images
+ -> extract statement totals/counts
+ -> vision extract transaction pages
+ -> reconcile
+ -> targeted retry on bad pages only
+ -> block import unless reconciled
 ```
 
 Files to update
+
+- `src/lib/pdfImportHelper.ts`
 - `supabase/functions/parse-pdf/index.ts`
 - `src/lib/pdfTextExtract.ts`
 - `src/hooks/useImportLogic.ts`
@@ -83,9 +90,8 @@ Files to update
 - `supabase/functions/parse-pdf/*test.ts`
 
 Expected result
-- The BoA sample will not be marked complete unless it reconciles to the statement totals/counts.
-- Debit/credit swaps should drop sharply because section headers become one signal, not the whole classifier.
-- Parse time should improve because we stop parsing summary/legal pages and stop sending easy rows through AI.
-- Chunk times should become more consistent because we will process actual transaction pages instead of mixed-content 6-page slabs.
 
-No database changes are needed for this.
+- The parser stops collapsing whole chunks into income when section detection misses.
+- Hard statement layouts become more accurate because extraction is based on page visuals, not brittle inferred geometry.
+- Parse times should improve versus the current bad path because we will process smaller image chunks and skip non-transaction pages.
+- Bad parses will no longer be importable.
