@@ -1,6 +1,6 @@
 // AI-Powered Bank Statement Parser + Rule-Based W-2 Parser
 // Supports both legacy {text} and structured {pages} payload formats
-// Uses server-side column detection + Lovable AI Gateway (Gemini Flash Lite)
+// Uses server-side column detection + Lovable AI Gateway (Gemini Flash)
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
@@ -46,21 +46,95 @@ const HEADER_KEYWORDS: Record<string, string[]> = {
   date: ["date", "trans date", "post date", "posting date", "transaction date", "effective date"],
   description: ["description", "details", "memo", "payee", "merchant", "transaction description", "narrative"],
   debit: ["debit", "debits", "withdrawal", "withdrawals", "charges", "amount deducted", "purchases"],
-  credit: ["credit", "credits", "deposit", "deposits", "payments", "amount added"],
+  credit: ["credit", "credits", "deposit", "deposits", "amount added"],
   amount: ["amount", "transaction amount"],
   balance: ["balance", "running balance", "available balance", "ending balance", "closing balance"],
 };
 
+// ─── Section Detection (bank-agnostic, comprehensive) ───────────────────────
+
+// Income/deposit section patterns — covers BoA, Chase, Wells Fargo, Citi, credit unions, generic
+const DEPOSIT_PATTERNS: RegExp[] = [
+  /\bdeposits?\s+and\s+(?:other\s+)?credits?\b/i,
+  /\bdeposits?\s+and\s+additions\b/i,
+  /\bdeposits?\s*[\/&]\s*credits?\b/i,
+  /\bother\s+credits?\b/i,
+  /\belectronic\s+deposits?\b/i,
+  /\bdirect\s+deposits?\b/i,
+  /\bdeposits?\s+(?:made|received|posted)\b/i,
+  /\bcredits?\s+(?:and\s+)?deposits?\b/i,
+  /\badditions\s+(?:and\s+)?deposits?\b/i,
+  /\bmoney\s+in\b/i,
+  /\bincoming\s+transactions?\b/i,
+  /\bfunds?\s+(?:received|added|deposited)\b/i,
+  /\bpayments?\s+(?:received|and\s+other\s+credits?)\b/i,
+  /\btransaction\s+credits?\b/i,
+  /\bcredit\s+transactions?\b/i,
+  /\bpositive\s+transactions?\b/i,
+];
+
+// Expense/withdrawal section patterns
+const WITHDRAWAL_PATTERNS: RegExp[] = [
+  /\bwithdrawals?\s+and\s+(?:other\s+)?debits?\b/i,
+  /\bwithdrawals?\s+and\s+(?:subtractions?|deductions?)\b/i,
+  /\bwithdrawals?\s*[\/&]\s*debits?\b/i,
+  /\bother\s+debits?\b/i,
+  /\belectronic\s+withdrawals?\b/i,
+  /\bpurchases?\s+and\s+adjustments?\b/i,
+  /\bchecks?\s+paid\b/i,
+  /\bchecks?\s+and\s+substitute\s+checks?\b/i,
+  /\bchecks?\s+(?:cleared|cashed|written)\b/i,
+  /\bdebit\s+card\s+(?:purchases?|transactions?)\b/i,
+  /\bcard\s+transactions?\b/i,
+  /\batm\s+(?:and\s+)?(?:debit\s+card\s+)?(?:withdrawals?|transactions?)\b/i,
+  /\bonline\s+(?:and\s+)?(?:electronic\s+)?(?:banking\s+)?transactions?\b/i,
+  /\bservice\s+(?:charges?|fees?)\b/i,
+  /\bfees?\s+(?:and\s+)?(?:service\s+)?charges?\b/i,
+  /\bmoney\s+out\b/i,
+  /\boutgoing\s+transactions?\b/i,
+  /\bfunds?\s+(?:withdrawn|removed|paid)\b/i,
+  /\bpayments?\s+(?:made|sent)\b/i,
+  /\bpoint\s+of\s+sale\b/i,
+  /\bdebit\s+transactions?\b/i,
+  /\bnegative\s+transactions?\b/i,
+  /\bother\s+(?:withdrawals?|subtractions?)\b/i,
+  /\bdaily\s+card\s+transactions?\b/i,
+];
+
+// Combined pattern for "is this a section header at all?" — used to skip these in column detection
+const ALL_SECTION_PATTERNS = [...DEPOSIT_PATTERNS, ...WITHDRAWAL_PATTERNS];
+
+// Also skip summary/balance section headers
+const SUMMARY_SECTION_RE = /\b(daily\s+(?:ledger\s+)?balance|account\s+summary|statement\s+summary|balance\s+summary|transaction\s+summary|interest\s+(?:charged|earned|summary)|rewards?\s+summary|year.to.date\s+totals?)\b/i;
+
+function detectSectionType(text: string): "income" | "expense" | "summary" | null {
+  // Check summary first (these should stop section tracking)
+  if (SUMMARY_SECTION_RE.test(text)) return "summary";
+  for (const re of DEPOSIT_PATTERNS) {
+    if (re.test(text)) return "income";
+  }
+  for (const re of WITHDRAWAL_PATTERNS) {
+    if (re.test(text)) return "expense";
+  }
+  return null;
+}
+
+function isSectionHeader(text: string): boolean {
+  const lower = text.toLowerCase().trim();
+  if (SUMMARY_SECTION_RE.test(lower)) return true;
+  for (const re of ALL_SECTION_PATTERNS) {
+    if (re.test(lower)) return true;
+  }
+  return false;
+}
+
 function detectColumns(pages: PagePayload[]): ColumnDef[] {
   const candidates: { name: string; x: number; width: number }[] = [];
 
-  // Scan first 3 pages for header keywords — but EXCLUDE section headers
-  // like "Deposits and Other Credits" which are section dividers, not column labels.
   for (const page of pages.slice(0, 3)) {
     for (const item of page.items) {
       const lower = item.str.toLowerCase().trim();
-      // Skip items that are section headers (full-width banners)
-      if (SECTION_HEADER_RE.test(lower)) continue;
+      if (isSectionHeader(lower)) continue;
       for (const [colName, keywords] of Object.entries(HEADER_KEYWORDS)) {
         if (keywords.some((kw) => lower === kw || lower.startsWith(kw))) {
           candidates.push({ name: colName, x: item.x, width: item.width });
@@ -71,7 +145,6 @@ function detectColumns(pages: PagePayload[]): ColumnDef[] {
 
   if (candidates.length === 0) return [];
 
-  // Deduplicate: group by name, take most common X position
   const byName = new Map<string, { x: number; width: number }[]>();
   for (const c of candidates) {
     if (!byName.has(c.name)) byName.set(c.name, []);
@@ -80,7 +153,6 @@ function detectColumns(pages: PagePayload[]): ColumnDef[] {
 
   const columns: ColumnDef[] = [];
   for (const [name, positions] of byName) {
-    // Take the most frequent x position (within tolerance)
     const avgX = positions.reduce((s, p) => s + p.x, 0) / positions.length;
     const avgW = positions.reduce((s, p) => s + p.width, 0) / positions.length;
     columns.push({
@@ -91,7 +163,6 @@ function detectColumns(pages: PagePayload[]): ColumnDef[] {
     });
   }
 
-  // Sort columns left-to-right
   columns.sort((a, b) => a.xCenter - b.xCenter);
   return columns;
 }
@@ -129,7 +200,6 @@ function groupIntoRows(items: RawItem[]): Row[] {
 // ─── Junk Detection ──────────────────────────────────────────────────────────
 
 function detectRepeatedHeaders(pages: PagePayload[]): Set<string> {
-  // Find text that appears at similar Y positions across multiple pages
   const topTexts = new Map<string, number>();
   const bottomTexts = new Map<string, number>();
 
@@ -138,7 +208,6 @@ function detectRepeatedHeaders(pages: PagePayload[]): Set<string> {
     for (const item of page.items) {
       const normalized = item.str.trim().toLowerCase();
       if (normalized.length < 3) continue;
-      // Top 15% or bottom 15% of page
       if (item.y > pageHeight * 0.85) {
         topTexts.set(normalized, (topTexts.get(normalized) || 0) + 1);
       }
@@ -149,7 +218,6 @@ function detectRepeatedHeaders(pages: PagePayload[]): Set<string> {
   }
 
   const repeated = new Set<string>();
-  // Only filter repeated headers when we have enough pages to identify a pattern
   const threshold = Math.max(2, Math.ceil(pages.length * 0.5));
   for (const [text, count] of topTexts) {
     if (count >= threshold) repeated.add(text);
@@ -158,18 +226,6 @@ function detectRepeatedHeaders(pages: PagePayload[]): Set<string> {
     if (count >= threshold) repeated.add(text);
   }
   return repeated;
-}
-
-// ─── Section Detection ──────────────────────────────────────────────────────
-
-const DEPOSIT_SECTION_RE = /\b(deposits?\s+and\s+other\s+credits?|deposits?\s+and\s+additions|deposits?\s*\/?\s*credits?|other\s+credits?|electronic\s+deposits?|direct\s+deposits?)\b/i;
-const WITHDRAWAL_SECTION_RE = /\b(withdrawals?\s+and\s+other\s+debits?|withdrawals?\s+and\s+subtractions|withdrawals?\s*\/?\s*debits?|other\s+debits?|electronic\s+withdrawals?|purchases?\s+and\s+adjustments?|checks?\s+paid|checks?\s+and\s+substitute\s+checks?)\b/i;
-const SECTION_HEADER_RE = /\b(deposits?\s+and\s+other\s+credits?|withdrawals?\s+and\s+other\s+debits?|deposits?\s+and\s+additions|withdrawals?\s+and\s+subtractions|deposits?\s*\/?\s*credits?|withdrawals?\s*\/?\s*debits?|other\s+credits?|other\s+debits?|electronic\s+deposits?|electronic\s+withdrawals?|direct\s+deposits?|purchases?\s+and\s+adjustments?|checks?\s+paid|checks?\s+and\s+substitute\s+checks?|daily\s+ledger\s+balance)\b/i;
-
-function detectSectionType(text: string): "income" | "expense" | null {
-  if (DEPOSIT_SECTION_RE.test(text)) return "income";
-  if (WITHDRAWAL_SECTION_RE.test(text)) return "expense";
-  return null;
 }
 
 // ─── Build Structured Table ─────────────────────────────────────────────────
@@ -188,18 +244,30 @@ function assignColumn(item: RawItem, columns: ColumnDef[]): string {
   return best;
 }
 
-function buildStructuredTable(pages: PagePayload[], columns: ColumnDef[]): string {
+function buildStructuredTable(
+  pages: PagePayload[],
+  columns: ColumnDef[],
+  initialSection: TxType | null,
+): string {
   const repeatedHeaders = detectRepeatedHeaders(pages);
   const JUNK_RE = /\b(subtotal|total for|beginning balance|ending balance|closing balance|opening balance|daily.*balance|account ending|statement period|page \d+ of \d+|continued|account number|member fdic)\b/i;
 
   const hasDebitCol = columns.some((c) => c.name === "debit");
   const hasCreditCol = columns.some((c) => c.name === "credit");
-  const isSectionBased = !hasCreditCol || !hasDebitCol; // If missing one, likely section-based
+  const isSectionBased = !hasCreditCol || !hasDebitCol;
 
   const headerLine = "| " + columns.map((c) => c.name.charAt(0).toUpperCase() + c.name.slice(1)).join(" | ") + " |";
   const sepLine = "| " + columns.map(() => "---").join(" | ") + " |";
   const dataLines: string[] = [];
-  let currentSection: "income" | "expense" | null = null;
+  let currentSection: TxType | null = initialSection;
+
+  // If we have an initial section from a previous chunk, inject marker at start
+  if (initialSection && isSectionBased) {
+    const sectionLabel = initialSection === "income"
+      ? ">>> SECTION: DEPOSITS / CREDITS (type = income) <<<"
+      : ">>> SECTION: WITHDRAWALS / DEBITS (type = expense) <<<";
+    dataLines.push(sectionLabel);
+  }
 
   for (const page of pages) {
     const filteredItems = page.items.filter((item) => {
@@ -212,12 +280,15 @@ function buildStructuredTable(pages: PagePayload[], columns: ColumnDef[]): strin
     for (const row of rows) {
       const rowText = row.items.map((i) => i.str).join(" ");
 
-      // Check for section headers BEFORE filtering junk
       const sectionType = detectSectionType(rowText);
       if (sectionType) {
+        if (sectionType === "summary") {
+          // Stop processing — everything after is balances/summary
+          currentSection = null;
+          continue;
+        }
         currentSection = sectionType;
         if (isSectionBased) {
-          // Insert section marker into output for AI context
           const sectionLabel = sectionType === "income"
             ? ">>> SECTION: DEPOSITS / CREDITS (type = income) <<<"
             : ">>> SECTION: WITHDRAWALS / DEBITS (type = expense) <<<";
@@ -228,7 +299,6 @@ function buildStructuredTable(pages: PagePayload[], columns: ColumnDef[]): strin
 
       if (JUNK_RE.test(rowText)) continue;
       if (row.items.length < 2) continue;
-      // Skip rows that look like column headers repeated mid-document
       if (/^\s*(date|trans\s*date|post\s*date)\s*$/i.test(row.items[0]?.str?.trim())) continue;
 
       const cells: Record<string, string> = {};
@@ -253,7 +323,7 @@ function buildStructuredTable(pages: PagePayload[], columns: ColumnDef[]): strin
 
   const hasSectionMarkers = dataLines.some((l) => l.startsWith(">>>"));
   const preamble = hasSectionMarkers
-    ? "NOTE: This statement uses SECTION-BASED layout. Lines starting with '>>>' indicate a section change. All transactions after a section marker belong to that section type (income or expense) until the next marker.\n\n"
+    ? "NOTE: This statement uses SECTION-BASED layout. Lines starting with '>>>' indicate a section change. ALL transactions after a section marker belong to that section type (income or expense) until the next marker appears.\n\n"
     : "";
 
   return `${preamble}${headerLine}\n${sepLine}\n${dataLines.join("\n")}`;
@@ -307,8 +377,9 @@ async function parseWithAI(input: string, isStructured: boolean, columnNames?: s
       typeRules = `- This statement uses a SECTION-BASED layout with section markers like ">>> SECTION: DEPOSITS / CREDITS (type = income) <<<" and ">>> SECTION: WITHDRAWALS / DEBITS (type = expense) <<<".
 - ALL transactions after a "DEPOSITS / CREDITS" marker are type = "income" until the next section marker.
 - ALL transactions after a "WITHDRAWALS / DEBITS" marker are type = "expense" until the next section marker.
-- The section marker determines the type — do NOT guess from the description.
-- Use the Amount/Debit column value for the transaction amount (always output as positive number).`;
+- The section marker ALWAYS determines the type — do NOT guess from the description or amount sign.
+- Use the Amount/Debit column value for the transaction amount (always output as positive number).
+- If no section marker has appeared yet, default to "expense".`;
     } else if (hasDebit && hasCredit) {
       typeRules = `- This table has SEPARATE Debit and Credit columns.
 - If a row has a value in the Debit column → type = "expense"
@@ -331,10 +402,11 @@ CRITICAL RULES:
 - Extract ONLY actual transactions (purchases, payments, deposits, withdrawals, transfers)
 ${hasBalance ? "- IGNORE the Balance column — it shows running totals, NOT transaction amounts" : ""}
 - IGNORE subtotals, section totals, summary rows, daily balance rows
-- The "amount" field must ALWAYS be a positive number
+- The "amount" field must ALWAYS be a positive number — remove dollar signs, commas, and negative signs
 - Clean merchant names: remove reference numbers, card masks (XXXX1234), internal codes
 - Infer the full year (YYYY) from statement context if dates only show month/day
-- Each row with a date is ONE transaction — do not skip or merge rows`;
+- Each row with a date is ONE transaction — do not skip or merge rows
+- If a row has values in both a numeric column AND no clear date, skip it (likely a subtotal)`;
   } else {
     systemPrompt = `You are a financial data extraction engine. Extract transactions from bank/credit card statement text.
 
@@ -425,10 +497,13 @@ CRITICAL RULES:
 
 // ─── Column-Aware Regex Fallback ────────────────────────────────────────────
 
-function structuredRegexParse(pages: PagePayload[], columns: ColumnDef[]): ParsedTx[] {
+function structuredRegexParse(
+  pages: PagePayload[],
+  columns: ColumnDef[],
+  initialSection: TxType | null,
+): ParsedTx[] {
   const transactions: ParsedTx[] = [];
   const dateCol = columns.find((c) => c.name === "date");
-  const descCol = columns.find((c) => c.name === "description");
   const debitCol = columns.find((c) => c.name === "debit");
   const creditCol = columns.find((c) => c.name === "credit");
   const amountCol = columns.find((c) => c.name === "amount");
@@ -439,12 +514,11 @@ function structuredRegexParse(pages: PagePayload[], columns: ColumnDef[]): Parse
   const DATE_RE = /(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/;
   const AMOUNT_RE = /\$?\s*(\d{1,3}(?:,\d{3})*\.?\d{0,2})/;
 
-  // Try to detect year from all text
   const allText = pages.flatMap((p) => p.items.map((i) => i.str)).join(" ");
   const yearMatch = allText.match(/(?:statement|through|ending|period)[:\s]*\d{1,2}[\/\-]\d{1,2}[\/\-](\d{4})/i);
   const year = yearMatch?.[1] || new Date().getFullYear().toString();
 
-  let currentSection: TxType | null = null;
+  let currentSection: TxType | null = initialSection;
 
   for (const page of pages) {
     const rows = groupIntoRows(page.items);
@@ -452,9 +526,9 @@ function structuredRegexParse(pages: PagePayload[], columns: ColumnDef[]): Parse
     for (const row of rows) {
       const rowText = row.items.map((i) => i.str).join(" ");
 
-      // Check for section headers
       const sectionType = detectSectionType(rowText);
       if (sectionType) {
+        if (sectionType === "summary") { currentSection = null; continue; }
         currentSection = sectionType;
         continue;
       }
@@ -493,7 +567,6 @@ function structuredRegexParse(pages: PagePayload[], columns: ColumnDef[]): Parse
           txType = "income";
         }
       } else if (currentSection) {
-        // Section-based: use any numeric column for amount, section determines type
         const amtMatch = (cells["debit"] || cells["amount"] || cells["credit"] || "").match(AMOUNT_RE);
         if (amtMatch) {
           amount = parseFloat(amtMatch[1].replace(/,/g, ""));
@@ -631,23 +704,69 @@ function postFilter(txs: ParsedTx[]): ParsedTx[] {
   });
 }
 
+// ─── Pre-scan: detect section boundaries across all pages ───────────────────
+
+interface SectionBoundary {
+  pageNum: number;
+  y: number;
+  type: TxType;
+}
+
+function prescanSections(pages: PagePayload[]): SectionBoundary[] {
+  const boundaries: SectionBoundary[] = [];
+  for (const page of pages) {
+    const rows = groupIntoRows(page.items);
+    for (const row of rows) {
+      const rowText = row.items.map((i) => i.str).join(" ");
+      const sectionType = detectSectionType(rowText);
+      if (sectionType && sectionType !== "summary") {
+        boundaries.push({ pageNum: page.pageNum, y: row.y, type: sectionType });
+      }
+    }
+  }
+  return boundaries;
+}
+
+/** Given section boundaries from all pages, determine which section a chunk starts in. */
+function getInitialSectionForChunk(
+  chunkStartPage: number,
+  allBoundaries: SectionBoundary[],
+): TxType | null {
+  // Find the last section boundary BEFORE this chunk's first page
+  let lastSection: TxType | null = null;
+  for (const b of allBoundaries) {
+    if (b.pageNum < chunkStartPage) {
+      lastSection = b.type;
+    }
+  }
+  return lastSection;
+}
+
 // ─── Structured Pages Pipeline ──────────────────────────────────────────────
 
-async function processStructuredPages(pages: PagePayload[]): Promise<{ transactions: ParsedTx[]; method: string }> {
-  const columns = detectColumns(pages);
+async function processStructuredPages(
+  pages: PagePayload[],
+  predetectedColumns?: ColumnDef[],
+  initialSection?: TxType | null,
+): Promise<{ transactions: ParsedTx[]; method: string; lastSection: TxType | null }> {
+  const columns = predetectedColumns || detectColumns(pages);
+  const effectiveInitialSection = initialSection ?? null;
+
   console.log(`Detected ${columns.length} columns: ${columns.map((c) => c.name).join(", ")}`);
+  console.log(`Initial section: ${effectiveInitialSection || "none"}`);
 
   let transactions: ParsedTx[] = [];
   let method = "ai_structured";
 
+  // Track last section seen for returning to caller
+  let lastSection = effectiveInitialSection;
+
   if (columns.length >= 2) {
-    // Build structured markdown table for AI
-    const table = buildStructuredTable(pages, columns);
+    const table = buildStructuredTable(pages, columns, effectiveInitialSection);
 
     if (table) {
       console.log(`Built structured table with ${table.split("\n").length - 2} data rows`);
 
-      // Truncate if too large
       const truncated = table.length > 80000 ? table.slice(0, 80000) : table;
 
       try {
@@ -660,16 +779,14 @@ async function processStructuredPages(pages: PagePayload[]): Promise<{ transacti
 
         console.warn(`AI structured parse failed (${errMsg}), trying column-aware regex`);
         method = "regex_structured";
-        transactions = structuredRegexParse(pages, columns);
+        transactions = structuredRegexParse(pages, columns, effectiveInitialSection);
         console.log(`Column-aware regex returned ${transactions.length} transactions`);
       }
     } else {
-      // Table building returned empty — try regex directly
       method = "regex_structured";
-      transactions = structuredRegexParse(pages, columns);
+      transactions = structuredRegexParse(pages, columns, effectiveInitialSection);
     }
   } else {
-    // No columns detected — reconstruct text and use legacy pipeline
     console.log("No column structure detected, falling back to text reconstruction");
     const text = reconstructTextFromPages(pages);
     const truncated = text.length > 100000 ? text.slice(0, 100000) : text;
@@ -686,7 +803,17 @@ async function processStructuredPages(pages: PagePayload[]): Promise<{ transacti
     }
   }
 
-  return { transactions, method };
+  // Determine last section from this chunk's pages
+  for (const page of pages) {
+    const rows = groupIntoRows(page.items);
+    for (const row of rows) {
+      const rowText = row.items.map((i) => i.str).join(" ");
+      const st = detectSectionType(rowText);
+      if (st && st !== "summary") lastSection = st;
+    }
+  }
+
+  return { transactions, method, lastSection };
 }
 
 // ─── HTTP Handler ───────────────────────────────────────────────────────────
@@ -699,10 +826,13 @@ serve(async (req) => {
   try {
     const body = await req.json();
 
-    // Detect payload format
     const hasPages = Array.isArray(body.pages) && body.pages.length > 0;
     const text = body.text || body.fullText || "";
     const docType = body.docType || "unknown";
+
+    // Accept pre-detected columns and initial section from client
+    const predetectedColumns: ColumnDef[] | undefined = body.detectedColumns;
+    const initialSection: TxType | null = body.initialSection || null;
 
     // W-2: rule-based regardless of format
     if (docType === "w2") {
@@ -720,9 +850,13 @@ serve(async (req) => {
 
     // === Structured pages pipeline (new) ===
     if (hasPages) {
-      console.log(`Processing ${body.pages.length} pages with structured pipeline`);
+      console.log(`Processing ${body.pages.length} pages with structured pipeline (initialSection: ${initialSection || "none"})`);
 
-      const { transactions: rawTx, method } = await processStructuredPages(body.pages);
+      const { transactions: rawTx, method } = await processStructuredPages(
+        body.pages,
+        predetectedColumns,
+        initialSection,
+      );
       const transactions = postFilter(rawTx);
 
       console.log(`Final: ${transactions.length} transactions via ${method}`);
