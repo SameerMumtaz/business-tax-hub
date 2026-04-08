@@ -1,20 +1,9 @@
 /**
- * Shared PDF import helper — used by both business and personal import flows.
- * Handles PDF reading, page classification, summary extraction, smart chunking,
- * edge function invocation, and reconciliation.
+ * Vision-first PDF import helper.
+ * Renders PDF pages to compressed JPEG images, sends to edge function for
+ * multimodal AI extraction, and reconciles against statement summary.
  */
 import { supabase } from "@/integrations/supabase/client";
-import {
-  extractRawItems,
-  detectDocTypeFromItems,
-  prescanDocument,
-  getInitialSectionForChunk,
-  classifyPage,
-  extractStatementSummary,
-  type PageData,
-  type StatementSummary,
-  type PageType,
-} from "@/lib/pdfTextExtract";
 
 export interface ParsedImportTx {
   date: string;
@@ -35,6 +24,13 @@ export interface ReconciliationResult {
   expenseCountParsed: number;
 }
 
+export interface StatementSummary {
+  depositTotal?: number;
+  withdrawalTotal?: number;
+  depositCount?: number;
+  withdrawalCount?: number;
+}
+
 export interface PdfImportResult {
   transactions: ParsedImportTx[];
   summary: StatementSummary;
@@ -46,17 +42,90 @@ export interface PdfImportResult {
 
 export type ProgressCallback = (status: string, percent: number) => void;
 
+// ─── Page rendering ─────────────────────────────────────────────────────────
+
+interface PageImage {
+  base64: string;
+  mimeType: string;
+  pageNum: number;
+}
+
 /**
- * Process a PDF statement file end-to-end.
- * Returns parsed transactions with reconciliation status.
+ * Render a single PDF page to a compressed JPEG base64 string.
  */
+async function renderPageToImage(
+  pdf: any,
+  pageNum: number,
+  scale: number = 1.5,
+): Promise<PageImage> {
+  const page = await pdf.getPage(pageNum);
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement("canvas");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext("2d")!;
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  // Compress to JPEG at 75% quality — good balance of size vs readability
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+  const base64 = dataUrl.split(",")[1];
+  canvas.width = 0;
+  canvas.height = 0;
+  return { base64, mimeType: "image/jpeg", pageNum };
+}
+
+/**
+ * Classify pages into summary vs transaction using simple text heuristics.
+ * We still extract text for classification only — actual parsing uses images.
+ */
+async function classifyPages(pdf: any, numPages: number): Promise<{
+  summaryPages: number[];
+  transactionPages: number[];
+  legalPages: number[];
+}> {
+  const summaryPages: number[] = [];
+  const transactionPages: number[] = [];
+  const legalPages: number[] = [];
+
+  const SUMMARY_RE = /account\s+summary|statement\s+summary|beginning\s+balance|ending\s+balance|total\s+deposits?|total\s+withdrawals?/i;
+  const LEGAL_RE = /important\s+information|terms\s+and\s+conditions|disclosure|privacy\s+(?:notice|policy)|in\s+case\s+of\s+errors?|electronic\s+fund\s+transfer/i;
+  const DATE_RE = /\d{1,2}[\/\-]\d{1,2}/g;
+
+  for (let p = 1; p <= numPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    const text = content.items.map((i: any) => i.str || "").join(" ");
+    const lower = text.toLowerCase();
+
+    const dateCount = (lower.match(DATE_RE) || []).length;
+    const isSummary = SUMMARY_RE.test(lower);
+    const isLegal = LEGAL_RE.test(lower);
+
+    if (isLegal && dateCount < 5) {
+      legalPages.push(p);
+    } else if (isSummary && dateCount < 10) {
+      summaryPages.push(p);
+    } else {
+      transactionPages.push(p);
+    }
+  }
+
+  // First page is often summary even if it also has some transactions
+  if (summaryPages.length === 0 && numPages > 1) {
+    summaryPages.push(1);
+  }
+
+  return { summaryPages, transactionPages, legalPages };
+}
+
+// ─── Main pipeline ──────────────────────────────────────────────────────────
+
 export async function processStatementPdf(
   file: File,
   onProgress: ProgressCallback,
 ): Promise<PdfImportResult> {
   const startTime = Date.now();
 
-  // Step 1: Read PDF pages
+  // Step 1: Load PDF
   onProgress("Reading PDF…", 5);
   const pdfjsLib = await import("pdfjs-dist");
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -64,63 +133,61 @@ export async function processStatementPdf(
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const numPages = Math.min(pdf.numPages, 50);
 
-  const allPages: PageData[] = [];
-  for (let p = 1; p <= numPages; p++) {
-    onProgress(`Reading page ${p} of ${numPages}…`, 5 + Math.round((p / numPages) * 15));
-    const page = await pdf.getPage(p);
-    const content = await page.getTextContent();
-    const viewport = page.getViewport({ scale: 1 });
-    const pageData = extractRawItems(content.items, { width: viewport.width, height: viewport.height });
-    pageData.pageNum = p;
-    allPages.push(pageData);
-  }
-
-  // Step 2: Detect doc type
-  const docType = detectDocTypeFromItems(allPages);
-
-  // Step 3: Classify pages
-  onProgress("Classifying pages…", 22);
-  const pageTypes: PageType[] = allPages.map((p) => classifyPage(p));
+  // Step 2: Classify pages
+  onProgress("Classifying pages…", 10);
+  const { summaryPages, transactionPages, legalPages } = await classifyPages(pdf, numPages);
   const pageStats = {
     total: numPages,
-    transaction: pageTypes.filter((t) => t === "transaction").length,
-    summary: pageTypes.filter((t) => t === "summary").length,
-    legal: pageTypes.filter((t) => t === "legal").length,
+    transaction: transactionPages.length,
+    summary: summaryPages.length,
+    legal: legalPages.length,
   };
+  console.log(`Pages: ${transactionPages.length} transaction, ${summaryPages.length} summary, ${legalPages.length} legal`);
 
-  // Step 4: Extract summary from summary pages
-  onProgress("Extracting statement summary…", 25);
-  const summaryPages = allPages.filter((_, i) => pageTypes[i] === "summary");
-  const summary = extractStatementSummary(summaryPages.length > 0 ? summaryPages : allPages.slice(0, 2));
-
-  // Step 5: Pre-scan for columns and section boundaries
-  const prescan = prescanDocument(allPages);
-  console.log(
-    `Pre-scan: ${prescan.columns.length} columns (${prescan.columns.map((c) => c.name).join(", ")}), ` +
-    `${prescan.sectionBoundaries.length} section boundaries, ` +
-    `pages: ${pageStats.transaction} transaction, ${pageStats.summary} summary, ${pageStats.legal} legal`
-  );
-
-  // Step 6: Get transaction pages only
-  const transactionPages = allPages.filter((_, i) => pageTypes[i] === "transaction" || pageTypes[i] === "unknown");
-  const pagesToProcess = transactionPages.length > 0 ? transactionPages : allPages;
-
-  // Step 7: Smart chunking — larger chunks since deterministic parsing is fast
-  onProgress("Analyzing transactions…", 30);
-  const PAGES_PER_CHUNK = 15; // Larger chunks since deterministic is < 100ms
-  const pageChunks: PageData[][] = [];
-  for (let i = 0; i < pagesToProcess.length; i += PAGES_PER_CHUNK) {
-    pageChunks.push(pagesToProcess.slice(i, i + PAGES_PER_CHUNK));
+  // Step 3: Render summary pages and extract summary
+  onProgress("Extracting statement summary…", 15);
+  let summary: StatementSummary = {};
+  if (summaryPages.length > 0) {
+    const summaryImages = await Promise.all(
+      summaryPages.slice(0, 2).map((p) => renderPageToImage(pdf, p, 2.0)),
+    );
+    try {
+      const { data, error } = await supabase.functions.invoke("parse-pdf", {
+        body: { mode: "summary", images: summaryImages },
+      });
+      if (!error && data?.summary) {
+        summary = data.summary;
+        console.log("Statement summary:", JSON.stringify(summary));
+      }
+    } catch (e) {
+      console.warn("Summary extraction failed:", e);
+    }
   }
 
-  // Step 8: Send chunks to edge function (max 3 concurrent)
+  // Step 4: Render transaction pages to images
+  onProgress("Rendering pages…", 20);
+  const pagesToRender = transactionPages.length > 0 ? transactionPages : Array.from({ length: numPages }, (_, i) => i + 1);
+  const pageImages: PageImage[] = [];
+  for (let i = 0; i < pagesToRender.length; i++) {
+    onProgress(`Rendering page ${i + 1} of ${pagesToRender.length}…`, 20 + Math.round((i / pagesToRender.length) * 15));
+    pageImages.push(await renderPageToImage(pdf, pagesToRender[i]));
+  }
+
+  // Step 5: Chunk images and send to vision extraction
+  // Send 3-4 pages per chunk to keep payload manageable
+  onProgress("Analyzing transactions…", 38);
+  const PAGES_PER_CHUNK = 4;
+  const chunks: PageImage[][] = [];
+  for (let i = 0; i < pageImages.length; i += PAGES_PER_CHUNK) {
+    chunks.push(pageImages.slice(i, i + PAGES_PER_CHUNK));
+  }
+
   const allTx: ParsedImportTx[] = [];
   const chunkErrors: string[] = [];
-  const totalChunks = pageChunks.length;
-  const concurrency = Math.min(3, totalChunks);
+  const totalChunks = chunks.length;
+  const concurrency = Math.min(2, totalChunks); // Keep concurrency low for vision calls
   let nextChunkIndex = 0;
   let completed = 0;
-  let method = "deterministic";
   const chunkStartTime = Date.now();
 
   const getEta = () => {
@@ -135,23 +202,14 @@ export async function processStatementPdf(
   const runWorker = async () => {
     while (nextChunkIndex < totalChunks) {
       const chunkIndex = nextChunkIndex++;
-      const chunkStartPage = pageChunks[chunkIndex][0]?.pageNum || 1;
-      const initialSection = getInitialSectionForChunk(chunkStartPage, prescan.sectionBoundaries);
-
       try {
         const { data, error } = await supabase.functions.invoke("parse-pdf", {
-          body: {
-            pages: pageChunks[chunkIndex],
-            docType,
-            detectedColumns: prescan.columns,
-            initialSection,
-          },
+          body: { mode: "transactions", images: chunks[chunkIndex] },
         });
         if (error) {
           chunkErrors.push(`Chunk ${chunkIndex + 1}: ${(error as any).message || "failed"}`);
-        } else {
-          if (data?.transactions?.length) allTx.push(...data.transactions);
-          if (data?.method && data.method !== "deterministic") method = data.method;
+        } else if (data?.transactions?.length) {
+          allTx.push(...data.transactions);
         }
       } catch (e) {
         chunkErrors.push(`Chunk ${chunkIndex + 1}: ${e instanceof Error ? e.message : "failed"}`);
@@ -159,7 +217,7 @@ export async function processStatementPdf(
         completed++;
         onProgress(
           `Analyzing transactions… ${completed}/${totalChunks} chunks done, ${getEta()}`,
-          30 + Math.round((completed / totalChunks) * 55),
+          38 + Math.round((completed / totalChunks) * 47),
         );
       }
     }
@@ -167,7 +225,7 @@ export async function processStatementPdf(
 
   await Promise.all(Array.from({ length: concurrency }, () => runWorker()));
 
-  // Step 9: Reconciliation
+  // Step 6: Reconciliation
   onProgress("Reconciling results…", 90);
 
   let incomeTotal = 0, expenseTotal = 0, incomeCount = 0, expenseCount = 0;
@@ -176,9 +234,17 @@ export async function processStatementPdf(
     else { expenseTotal += tx.amount; expenseCount++; }
   }
 
+  // Lopsided guard: if summary says there should be both types but we got almost all one type
+  if (summary.depositTotal && summary.withdrawalTotal) {
+    const totalParsed = incomeCount + expenseCount;
+    if (totalParsed > 10 && (incomeCount < 2 || expenseCount < 2)) {
+      console.warn(`Lopsided results detected: ${incomeCount} income, ${expenseCount} expense. Statement has both deposits ($${summary.depositTotal}) and withdrawals ($${summary.withdrawalTotal}). This likely indicates a parsing error.`);
+    }
+  }
+
   let reconciliation: ReconciliationResult;
   if (summary.depositTotal != null || summary.withdrawalTotal != null) {
-    const tolerance = 0.02; // 2% tolerance
+    const tolerance = 0.05; // 5% tolerance for vision extraction
     const incomeMatch = summary.depositTotal != null
       ? Math.abs(incomeTotal - summary.depositTotal) / Math.max(summary.depositTotal, 1) <= tolerance
       : true;
@@ -211,10 +277,10 @@ export async function processStatementPdf(
   const totalMs = Date.now() - startTime;
 
   console.log(
-    `PDF import complete: ${allTx.length} transactions, method=${method}, ` +
+    `PDF import complete: ${allTx.length} transactions, method=vision, ` +
     `reconciliation=${reconciliation.status}, took ${totalMs}ms` +
     (chunkErrors.length > 0 ? `, errors: ${chunkErrors.join("; ")}` : "")
   );
 
-  return { transactions: allTx, summary, reconciliation, pageStats, method, totalMs };
+  return { transactions: allTx, summary, reconciliation, pageStats, method: "vision", totalMs };
 }

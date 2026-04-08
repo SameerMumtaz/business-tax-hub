@@ -139,7 +139,7 @@ export default function ImportPage() {
                 )}
                 <Button variant="outline" onClick={handleAudit} disabled={categorizing}><ShieldAlert className="h-4 w-4 mr-2" />Quick Audit</Button>
                 <Button variant="outline" onClick={() => { setStep("upload"); setTransactions([]); }}>Cancel</Button>
-                <Button onClick={handleImport} disabled={categorizing || auditing || importing}>
+                <Button onClick={handleImport} disabled={categorizing || auditing || importing || (reconciliation?.status === "mismatched")}>
                   {importing ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importing…</> : <><ArrowRight className="h-4 w-4 mr-2" />Import {transactions.filter((t) => t.include).length} Transactions</>}
                 </Button>
               </div>
