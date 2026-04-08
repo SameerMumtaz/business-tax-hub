@@ -271,7 +271,7 @@ export default function PersonalImportPage() {
                 </SelectContent>
               </Select>
               <div className="flex-1" />
-              <Button onClick={handleImport} disabled={importing || included.length === 0}>
+              <Button onClick={handleImport} disabled={importing || included.length === 0 || (reconciliation?.status === "mismatched")}>
                 {importing ? (
                   <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> {progress}%</>
                 ) : (
