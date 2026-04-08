@@ -167,109 +167,29 @@ export default function useImportLogic() {
   const handlePdfFile = useCallback(async (file: File) => {
     if (file.size > 20 * 1024 * 1024) { toast.error("File too large — max 20MB"); return; }
     setPdfProcessing(true); setPdfStatus("Reading PDF…"); setPdfProgress(0);
+    setReconciliation(null);
     try {
-      const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const numPages = Math.min(pdf.numPages, 50);
-      const allPages: PageData[] = [];
-      for (let p = 1; p <= numPages; p++) {
-        setPdfProgress(Math.round((p / numPages) * 25));
-        setPdfStatus(`Reading page ${p} of ${numPages}…`);
-        const page = await pdf.getPage(p);
-        const content = await page.getTextContent();
-        const viewport = page.getViewport({ scale: 1 });
-        const pageData = extractRawItems(content.items, { width: viewport.width, height: viewport.height });
-        pageData.pageNum = p;
-        allPages.push(pageData);
-      }
+      const result = await processStatementPdf(file, (status, percent) => {
+        setPdfStatus(status);
+        setPdfProgress(percent);
+      });
 
-      const docType = detectDocTypeFromItems(allPages);
-
-      // Pre-scan entire document for columns and section boundaries BEFORE chunking
-      const prescan = prescanDocument(allPages);
-      console.log(`Pre-scan: ${prescan.columns.length} columns (${prescan.columns.map(c => c.name).join(", ")}), ${prescan.sectionBoundaries.length} section boundaries`);
-
-      // Chunk by page groups (6 pages per chunk)
-      const PAGES_PER_CHUNK = 6;
-      const pageChunks: PageData[][] = [];
-      for (let i = 0; i < allPages.length; i += PAGES_PER_CHUNK) {
-        pageChunks.push(allPages.slice(i, i + PAGES_PER_CHUNK));
-      }
-
-      const allTx: any[] = []; const chunkErrors: string[] = [];
-      const totalChunks = pageChunks.length;
-      const concurrency = Math.min(6, totalChunks);
-      let nextChunkIndex = 0;
-      let completed = 0;
-      const startTime = Date.now();
-
-      const getEta = () => {
-        if (completed < 2) return "estimating…";
-        const elapsedMs = Date.now() - startTime;
-        const msPerChunk = elapsedMs / completed;
-        const remaining = totalChunks - completed;
-        const etaSec = Math.max(1, Math.round((msPerChunk * remaining) / 1000));
-        return etaSec >= 60 ? `~${Math.ceil(etaSec / 60)}min remaining` : `~${etaSec}s remaining`;
-      };
-
-      const updateStatus = () => {
-        setPdfStatus(`Analyzing transactions… ${completed}/${totalChunks} chunks done, ${getEta()}`);
-      };
-      updateStatus();
-      const statusTimer = setInterval(updateStatus, 1000);
-
-      const runWorker = async () => {
-        while (nextChunkIndex < totalChunks) {
-          const chunkIndex = nextChunkIndex++;
-          const timeoutMs = 45000;
-          
-          // Determine initial section for this chunk based on global pre-scan
-          const chunkStartPage = pageChunks[chunkIndex][0]?.pageNum || 1;
-          const initialSection = getInitialSectionForChunk(chunkStartPage, prescan.sectionBoundaries);
-
-          try {
-            const chunkPromise = supabase.functions.invoke("parse-pdf", {
-              body: {
-                pages: pageChunks[chunkIndex],
-                docType,
-                detectedColumns: prescan.columns,
-                initialSection,
-              },
-            });
-            const timeoutPromise = new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error(`Chunk ${chunkIndex + 1} timed out after ${timeoutMs / 1000}s`)), timeoutMs)
-            );
-
-            const { data, error } = await Promise.race([chunkPromise, timeoutPromise]) as Awaited<typeof chunkPromise>;
-            if (error) chunkErrors.push(`Chunk ${chunkIndex + 1}: ${(error as any).message || "failed"}`);
-            else if (data?.transactions?.length) allTx.push(...data.transactions);
-          } catch (e) {
-            chunkErrors.push(`Chunk ${chunkIndex + 1}: ${e instanceof Error ? e.message : "failed"}`);
-          } finally {
-            // elapsed time tracked via startTime
-            completed++;
-            setPdfProgress(30 + Math.round((completed / totalChunks) * 55));
-            updateStatus();
-          }
-        }
-      };
-
-      await Promise.all(Array.from({ length: concurrency }, () => runWorker()));
-      clearInterval(statusTimer);
-      setPdfStatus(`Analysis complete (${completed}/${totalChunks} chunks)`);
-      if (allTx.length === 0) { toast.error(chunkErrors[0] || "No transactions found in PDF"); return; }
+      if (result.transactions.length === 0) { toast.error("No transactions found in PDF"); return; }
 
       setPdfProgress(90); setPdfStatus("Processing results…");
-      const reviewed: ReviewTransaction[] = allTx.map((t: any) => ({
+      const reviewed: ReviewTransaction[] = result.transactions.map((t) => ({
         date: t.date || "", description: t.description || "", originalDescription: t.description || "",
         amount: Math.abs(t.amount || 0), type: t.type === "income" ? "income" : "expense",
         id: generateId(), category: "Other" as ExpenseCategory, include: true,
       }));
       const { dupeCount, withDupeFlags } = detectDuplicates(reviewed, existingExpenses, existingSales);
       setTransactions(withDupeFlags); setStep("review");
-      toast.success(`Extracted ${reviewed.length} transactions from ${numPages} pages${dupeCount > 0 ? ` (${dupeCount} duplicates excluded)` : ""}`);
+      setReconciliation(result.reconciliation);
+
+      const reconMsg = result.reconciliation.status === "matched" ? " ✓ Reconciled"
+        : result.reconciliation.status === "mismatched" ? " ⚠ Totals mismatch" : "";
+      toast.success(`Extracted ${reviewed.length} transactions (${result.pageStats.transaction} pages parsed)${dupeCount > 0 ? `, ${dupeCount} duplicates excluded` : ""}${reconMsg}`);
+
       setPdfStatus("Categorizing transactions…"); setPdfProgress(95);
       await categorizeReviewed(reviewed);
     } catch (err) { console.error(err); toast.error(err instanceof Error ? err.message : "Failed to parse PDF"); }
