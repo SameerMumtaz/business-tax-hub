@@ -125,10 +125,10 @@ export default function PersonalImportPage() {
 
       // Deduplicate against existing
       const existingKeys = new Set(
-        existingExpenses.map((e) => `${e.date}|${e.amount.toFixed(2)}`)
+        existingExpenses.map((e) => `${e.date}|${e.amount.toFixed(2)}|${(e.vendor || "").toLowerCase().trim()}`)
       );
       parsed.forEach((t) => {
-        const key = `${t.date}|${t.amount.toFixed(2)}`;
+        const key = `${t.date}|${t.amount.toFixed(2)}|${t.description.toLowerCase().trim()}`;
         if (existingKeys.has(key)) t.include = false;
       });
 

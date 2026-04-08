@@ -43,15 +43,22 @@ export interface RuleSuggestion {
 
 function detectDuplicates(
   transactions: ReviewTransaction[],
-  existingExpenses: { date: string; amount: number }[],
-  existingSales: { date: string; amount: number }[],
+  existingExpenses: { date: string; amount: number; vendor?: string; description?: string }[],
+  existingSales: { date: string; amount: number; client?: string; description?: string }[],
 ) {
   const existingKeys = new Set<string>();
-  for (const e of existingExpenses) existingKeys.add(`${e.date}|${Math.abs(e.amount).toFixed(2)}`);
-  for (const s of existingSales) existingKeys.add(`${s.date}|${Math.abs(s.amount).toFixed(2)}`);
+  for (const e of existingExpenses) {
+    const desc = (e.vendor || e.description || "").toLowerCase().trim();
+    existingKeys.add(`${e.date}|${Math.abs(e.amount).toFixed(2)}|${desc}`);
+  }
+  for (const s of existingSales) {
+    const desc = (s.client || s.description || "").toLowerCase().trim();
+    existingKeys.add(`${s.date}|${Math.abs(s.amount).toFixed(2)}|${desc}`);
+  }
   let dupeCount = 0;
   const withDupeFlags = transactions.map((t) => {
-    const key = `${t.date}|${Math.abs(t.amount).toFixed(2)}`;
+    const desc = (t.description || "").toLowerCase().trim();
+    const key = `${t.date}|${Math.abs(t.amount).toFixed(2)}|${desc}`;
     if (existingKeys.has(key)) { dupeCount++; return { ...t, include: false, isDuplicate: true }; }
     return t;
   });
