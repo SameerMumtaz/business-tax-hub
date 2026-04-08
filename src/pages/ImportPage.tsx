@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { memo } from "react";
 import {
   Upload, Check, X, ArrowRight, Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown,
-  Lightbulb, Plus, XCircle, ShieldAlert, AlertTriangle, Info, Ban, Tag, ExternalLink,
+  Lightbulb, Plus, XCircle, ShieldAlert, AlertTriangle, Info, Ban, Tag, ExternalLink, CheckCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
