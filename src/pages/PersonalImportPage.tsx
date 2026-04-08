@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Upload, FileText, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { extractRawItems, detectDocTypeFromItems, type PageData } from "@/lib/pdfTextExtract";
+import { extractRawItems, detectDocTypeFromItems, prescanDocument, getInitialSectionForChunk, type PageData } from "@/lib/pdfTextExtract";
 
 const PERSONAL_CATEGORIES = [
   "Housing", "Medical & Health", "Charitable Giving", "Education", "Childcare",
