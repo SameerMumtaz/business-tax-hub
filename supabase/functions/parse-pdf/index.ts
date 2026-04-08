@@ -188,12 +188,13 @@ function buildStructuredTable(pages: PagePayload[], columns: ColumnDef[]): strin
     });
 
     const rows = groupIntoRows(filteredItems);
+    console.log(`Page ${page.pageNum}: ${rows.length} rows, ${filteredItems.length} items`);
 
     for (const row of rows) {
       const rowText = row.items.map((i) => i.str).join(" ");
-      if (JUNK_RE.test(rowText)) continue;
+      if (JUNK_RE.test(rowText)) { console.log(`JUNK: ${rowText.slice(0, 80)}`); continue; }
       // Skip rows with only 1 item (likely headers/labels)
-      if (row.items.length < 2) continue;
+      if (row.items.length < 2) { console.log(`SKIP single-item: ${rowText.slice(0, 80)}`); continue; }
 
       const cells: Record<string, string> = {};
       for (const col of columns) cells[col.name] = "";
@@ -207,10 +208,11 @@ function buildStructuredTable(pages: PagePayload[], columns: ColumnDef[]): strin
       // Skip rows with no date-like content in date column
       const dateCell = cells["date"] || "";
       const hasDate = /\d{1,2}[\/\-]\d{1,2}/.test(dateCell) || /(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(dateCell);
-      if (!hasDate && columns.some((c) => c.name === "date")) continue;
+      if (!hasDate && columns.some((c) => c.name === "date")) { console.log(`NO DATE: cells=${JSON.stringify(cells)}`); continue; }
 
       const line = "| " + columns.map((c) => cells[c.name] || "").join(" | ") + " |";
       dataLines.push(line);
+      console.log(`ROW: ${line}`);
     }
   }
 
