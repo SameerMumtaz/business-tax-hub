@@ -1,6 +1,5 @@
 // Vision-First Bank Statement Parser + W-2 Parser
 // Primary path: multimodal AI extracts transactions from page images
-// Deterministic text parsing kept only as fast-path fallback validated by reconciliation
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
@@ -19,40 +18,41 @@ interface ParsedTx {
   pageNum?: number;
 }
 
-interface ParseStats {
-  incomeTotal: number;
-  expenseTotal: number;
-  incomeCount: number;
-  expenseCount: number;
-}
-
 // ─── Vision-based extraction ────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are a bank statement transaction extraction engine. You will receive one or more page images from a bank statement.
+function buildSystemPrompt(statementYear?: number): string {
+  const yearHint = statementYear
+    ? `The statement is from ${statementYear}. Use this year for all dates unless the statement clearly spans a year boundary (e.g. Dec ${statementYear - 1} to Jan ${statementYear}).`
+    : "Infer the year from context on the page.";
 
-Extract EVERY individual transaction. For each transaction provide:
+  return `You are a bank statement transaction extraction engine. You will receive page images from a bank statement.
+
+${yearHint}
+
+Extract EVERY SINGLE individual transaction row. For each transaction provide:
 - date: in YYYY-MM-DD format
-- description: clean merchant/payee name (remove reference numbers, card masks like XXXX1234)
-- amount: positive number (no negatives)
+- description: the merchant/payee name as printed (remove only card masks like XXXX1234 and internal reference numbers)
+- amount: positive number (no negatives, no dollar signs)
 - type: "income" for deposits/credits/refunds/transfers-in, "expense" for withdrawals/debits/purchases/fees/checks
-- pageNum: the page number shown in the image
 
 CRITICAL RULES:
-1. IGNORE subtotals, running balances, beginning/ending balances, daily balance summaries, page headers/footers
-2. Look at the ACTUAL column the amount appears in (debit vs credit) or the section header (Deposits vs Withdrawals) to determine type
-3. If the statement has separate "Deposits and Credits" and "Withdrawals and Debits" sections, use those sections to determine type
-4. DO NOT classify everything as income or everything as expense — real statements have BOTH
-5. Fees and service charges are ALWAYS expense
-6. Direct deposits and interest earned are ALWAYS income
-7. Extract ALL transactions, not just a sample — every single row with a date and amount`;
+1. DO NOT SKIP ANY TRANSACTION ROWS. Extract every single line that has a date and an amount. Even if two transactions look similar, extract both.
+2. IGNORE these non-transaction items: subtotal lines, running balance columns, beginning/ending balance lines, daily balance summaries, page headers/footers, account summary sections.
+3. Look at which COLUMN the amount appears in (debit column vs credit column) to determine type. If the statement uses a single amount column with +/- signs, use the sign.
+4. If the statement has separate sections like "Deposits and Credits" vs "Withdrawals and Debits", use the SECTION HEADER to determine type for all transactions in that section.
+5. Fees and service charges are ALWAYS expense.
+6. Direct deposits, interest earned, and refunds are ALWAYS income.
+7. If you see a check number (e.g. "Check #1234"), it is an expense (withdrawal).
+8. Count your extracted transactions and make sure you haven't missed any rows visible in the image.`;
+}
 
 async function visionExtractTransactions(
   images: { base64: string; mimeType: string; pageNum: number }[],
+  statementYear?: number,
 ): Promise<ParsedTx[]> {
   const apiKey = Deno.env.get("LOVABLE_API_KEY");
   if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
 
-  // Build multimodal content array
   const content: any[] = [];
   for (const img of images) {
     content.push({
@@ -66,7 +66,7 @@ async function visionExtractTransactions(
   }
   content.push({
     type: "text",
-    text: "Extract ALL transactions from these bank statement pages. Remember: deposits/credits = income, withdrawals/debits/purchases/fees = expense.",
+    text: `Extract ALL transactions from these bank statement pages. Do not skip any rows. Count the transaction rows you see and make sure your output count matches.`,
   });
 
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -75,14 +75,14 @@ async function visionExtractTransactions(
     body: JSON.stringify({
       model: "google/gemini-2.5-flash",
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: buildSystemPrompt(statementYear) },
         { role: "user", content },
       ],
       tools: [{
         type: "function",
         function: {
           name: "extract_transactions",
-          description: "Extract all financial transactions from bank statement page images. Skip subtotals, balances, summaries.",
+          description: "Extract all financial transactions from bank statement page images.",
           parameters: {
             type: "object",
             properties: {
@@ -92,7 +92,7 @@ async function visionExtractTransactions(
                   type: "object",
                   properties: {
                     date: { type: "string", description: "Date in YYYY-MM-DD format" },
-                    description: { type: "string", description: "Clean merchant/payee name" },
+                    description: { type: "string", description: "Merchant/payee name as printed" },
                     amount: { type: "number", description: "Positive transaction amount" },
                     type: { type: "string", enum: ["income", "expense"], description: "income for deposits/credits, expense for withdrawals/debits" },
                     pageNum: { type: "number", description: "Page number this transaction appears on" },
@@ -145,6 +145,7 @@ interface StatementSummary {
   withdrawalTotal?: number;
   depositCount?: number;
   withdrawalCount?: number;
+  statementYear?: number;
 }
 
 async function visionExtractSummary(
@@ -162,7 +163,7 @@ async function visionExtractSummary(
   }
   content.push({
     type: "text",
-    text: "Extract the statement summary totals from these pages. Look for total deposits, total withdrawals, deposit count, withdrawal count. These are usually in an 'Account Summary' section.",
+    text: "Extract the statement summary totals from these pages. Look for: total deposits/credits, total withdrawals/debits, number of deposits, number of withdrawals, and the statement year. These are usually in an 'Account Summary' or 'Account Activity Summary' section near the top.",
   });
 
   try {
@@ -170,11 +171,11 @@ async function visionExtractSummary(
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
+        model: "google/gemini-2.5-flash",
         messages: [
           {
             role: "system",
-            content: "Extract statement summary numbers. Return only the official totals printed on the statement.",
+            content: "Extract statement summary numbers exactly as printed. Return only the official totals shown on the statement. Also extract the year from the statement period dates.",
           },
           { role: "user", content },
         ],
@@ -182,14 +183,15 @@ async function visionExtractSummary(
           type: "function",
           function: {
             name: "extract_summary",
-            description: "Extract statement summary totals",
+            description: "Extract statement summary totals and metadata",
             parameters: {
               type: "object",
               properties: {
                 depositTotal: { type: "number", description: "Total deposits/credits amount" },
                 withdrawalTotal: { type: "number", description: "Total withdrawals/debits amount" },
-                depositCount: { type: "number", description: "Number of deposits" },
-                withdrawalCount: { type: "number", description: "Number of withdrawals" },
+                depositCount: { type: "number", description: "Number of deposits/credits" },
+                withdrawalCount: { type: "number", description: "Number of withdrawals/debits" },
+                statementYear: { type: "number", description: "The year of the statement period (e.g. 2024)" },
               },
               additionalProperties: false,
             },
@@ -214,6 +216,7 @@ async function visionExtractSummary(
     if (parsed.withdrawalTotal && parsed.withdrawalTotal > 0) summary.withdrawalTotal = parsed.withdrawalTotal;
     if (parsed.depositCount && parsed.depositCount > 0) summary.depositCount = parsed.depositCount;
     if (parsed.withdrawalCount && parsed.withdrawalCount > 0) summary.withdrawalCount = parsed.withdrawalCount;
+    if (parsed.statementYear && parsed.statementYear > 2000) summary.statementYear = parsed.statementYear;
     return summary;
   } catch {
     return {};
@@ -258,35 +261,35 @@ function parseW2(text: string): W2Result {
 
 // ─── Post-Processing Filter ─────────────────────────────────────────────────
 
-const JUNK_RE = /\b(subtotal|total\s+(?:for|deposits|withdrawals|debits|credits|checks)|(?:beginning|ending|closing|opening)\s+balance|daily.*balance|account\s+ending|statement\s+period|page\s+\d+\s+of\s+\d+|continued|account\s+number|member\s+fdic)\b/i;
+// Only match lines that are clearly subtotals/balances, not merchant names
+const JUNK_RE = /^(subtotal|total for|total deposits|total withdrawals|total debits|total credits|total checks|beginning balance|ending balance|closing balance|opening balance|daily balance|account ending|statement period|page \d+ of \d+|continued from|account number|member fdic)$/i;
 
 function postFilter(txs: ParsedTx[]): ParsedTx[] {
   const seen = new Set<string>();
   return txs.filter(t => {
-    if (JUNK_RE.test(t.description)) return false;
+    // Only filter exact junk matches, not partial
+    const descLower = t.description.toLowerCase().trim();
+    if (JUNK_RE.test(descLower)) return false;
     if (t.amount <= 0 || t.description.length < 2) return false;
+
+    // Clean card masks but preserve original description
     t.description = t.description
       .replace(/[Xx*]{4,}\s*\d{0,4}/g, "")
       .replace(/\s+/g, " ")
       .trim();
+
+    // Validate date format
     const m = t.date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!m) return false;
     const month = Number(m[2]), day = Number(m[3]);
     if (month < 1 || month > 12 || day < 1 || day > 31) return false;
-    const key = `${t.date}|${t.amount.toFixed(2)}|${t.description.toLowerCase().slice(0, 50)}`;
+
+    // Dedup: use full description (not truncated) to avoid dropping legitimate same-day transactions
+    const key = `${t.date}|${t.amount.toFixed(2)}|${t.type}|${t.description.toLowerCase()}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
-}
-
-function computeStats(txs: ParsedTx[]): ParseStats {
-  let incomeTotal = 0, expenseTotal = 0, incomeCount = 0, expenseCount = 0;
-  for (const tx of txs) {
-    if (tx.type === "income") { incomeTotal += tx.amount; incomeCount++; }
-    else { expenseTotal += tx.amount; expenseCount++; }
-  }
-  return { incomeTotal, expenseTotal, incomeCount, expenseCount };
 }
 
 // ─── HTTP Handler ───────────────────────────────────────────────────────────
@@ -307,7 +310,7 @@ serve(async (req) => {
       });
     }
 
-    // Vision pipeline: expects { images: [{base64, mimeType, pageNum}], mode: "transactions" | "summary" }
+    // Vision pipeline: summary mode
     if (body.mode === "summary" && Array.isArray(body.images)) {
       const startMs = Date.now();
       console.log(`Extracting summary from ${body.images.length} page image(s)`);
@@ -318,16 +321,33 @@ serve(async (req) => {
       });
     }
 
+    // Vision pipeline: transaction extraction
     if (body.mode === "transactions" && Array.isArray(body.images)) {
       const startMs = Date.now();
-      console.log(`Vision-extracting transactions from ${body.images.length} page image(s)`);
-      const rawTxs = await visionExtractTransactions(body.images);
+      const pageNums = body.images.map((i: any) => i.pageNum).join(",");
+      console.log(`Vision-extracting transactions from ${body.images.length} page(s): [${pageNums}]`);
+      const rawTxs = await visionExtractTransactions(body.images, body.statementYear);
       const transactions = postFilter(rawTxs);
-      const stats = computeStats(transactions);
+
+      let incomeTotal = 0, expenseTotal = 0, incomeCount = 0, expenseCount = 0;
+      for (const tx of transactions) {
+        if (tx.type === "income") { incomeTotal += tx.amount; incomeCount++; }
+        else { expenseTotal += tx.amount; expenseCount++; }
+      }
+
       const totalMs = Date.now() - startMs;
-      console.log(`Vision: ${transactions.length} transactions in ${totalMs}ms (${stats.incomeCount} income, ${stats.expenseCount} expense)`);
+      console.log(`Vision: ${rawTxs.length} raw → ${transactions.length} filtered (${rawTxs.length - transactions.length} removed by post-filter)`);
+      console.log(`  Income: ${incomeCount} txs, $${incomeTotal.toFixed(2)} | Expense: ${expenseCount} txs, $${expenseTotal.toFixed(2)} | ${totalMs}ms`);
+
       return new Response(
-        JSON.stringify({ transactions, method: "vision", stats, processingMs: totalMs }),
+        JSON.stringify({
+          transactions,
+          method: "vision",
+          stats: { incomeTotal, expenseTotal, incomeCount, expenseCount },
+          rawCount: rawTxs.length,
+          filteredCount: transactions.length,
+          processingMs: totalMs,
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
