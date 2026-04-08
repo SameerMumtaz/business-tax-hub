@@ -17,12 +17,6 @@ interface LineItem {
   height: number;
 }
 
-interface ReconstructedLine {
-  y: number;
-  items: LineItem[];
-  text: string;
-}
-
 export type DocType = "bank_statement" | "w2" | "unknown";
 
 /** Raw positioned item for structured extraction */
@@ -62,6 +56,19 @@ export interface DocumentPrescan {
   sectionBoundaries: SectionBoundary[];
 }
 
+/** Statement summary extracted from summary pages */
+export interface StatementSummary {
+  depositTotal?: number;
+  withdrawalTotal?: number;
+  depositCount?: number;
+  withdrawalCount?: number;
+  beginningBalance?: number;
+  endingBalance?: number;
+}
+
+/** Page classification */
+export type PageType = "summary" | "transaction" | "legal" | "unknown";
+
 /**
  * Extract raw positioned items from a pdf.js page's text content.
  */
@@ -85,7 +92,7 @@ export function extractRawItems(contentItems: any[], viewport?: { width: number;
   };
 }
 
-// ─── Section detection patterns (must match edge function) ───────────────────
+// ─── Section detection patterns ─────────────────────────────────────────────
 
 const DEPOSIT_PATTERNS: RegExp[] = [
   /\bdeposits?\s+and\s+(?:other\s+)?credits?\b/i,
@@ -172,15 +179,137 @@ function groupItemsIntoRows(items: RawPageItem[]): { y: number; items: RawPageIt
   return rows;
 }
 
+// ─── Page Classification ────────────────────────────────────────────────────
+
+const LEGAL_PATTERNS = [
+  /\bimportant\s+information\b/i,
+  /\bterms\s+and\s+conditions\b/i,
+  /\bdisclosure\b/i,
+  /\bprivacy\s+(?:notice|policy)\b/i,
+  /\bmember\s+fdic\b/i,
+  /\bequal\s+(?:housing|opportunity)\b/i,
+  /\b(?:©|copyright)\b/i,
+  /\bnotice\s+to\s+customers?\b/i,
+  /\bterms\s+of\s+(?:use|service)\b/i,
+  /\bin\s+case\s+of\s+errors?\b/i,
+  /\belectronic\s+fund\s+transfer\s+act\b/i,
+];
+
+const SUMMARY_PAGE_PATTERNS = [
+  /\baccount\s+summary\b/i,
+  /\bstatement\s+summary\b/i,
+  /\bbeginning\s+balance\b/i,
+  /\bending\s+balance\b/i,
+  /\btotal\s+deposits?\b/i,
+  /\btotal\s+withdrawals?\b/i,
+  /\baccount\s+overview\b/i,
+];
+
+/**
+ * Classify a page as summary, transaction, legal, or unknown.
+ */
+export function classifyPage(page: PageData): PageType {
+  const allText = page.items.map((i) => i.str).join(" ");
+  const lower = allText.toLowerCase();
+
+  // Count signals
+  let legalSignals = 0;
+  let summarySignals = 0;
+  let transactionSignals = 0;
+
+  for (const re of LEGAL_PATTERNS) {
+    if (re.test(lower)) legalSignals++;
+  }
+  for (const re of SUMMARY_PAGE_PATTERNS) {
+    if (re.test(lower)) summarySignals++;
+  }
+
+  // Count date patterns (strong indicator of transaction page)
+  const dateMatches = lower.match(/\d{1,2}[\/\-]\d{1,2}/g) || [];
+  if (dateMatches.length >= 5) transactionSignals += 3;
+  else if (dateMatches.length >= 2) transactionSignals += 1;
+
+  // Count dollar amount patterns
+  const amountMatches = lower.match(/\$?\d{1,3}(?:,\d{3})*\.\d{2}/g) || [];
+  if (amountMatches.length >= 5) transactionSignals += 2;
+
+  // Legal pages with few dates/amounts
+  if (legalSignals >= 2 && transactionSignals < 2) return "legal";
+
+  // Summary pages
+  if (summarySignals >= 2 && transactionSignals < 3) return "summary";
+
+  // Transaction pages have lots of dates and amounts
+  if (transactionSignals >= 3) return "transaction";
+
+  // If page has section headers, likely transaction-adjacent
+  if (isSectionHeaderText(lower)) return "transaction";
+
+  return "unknown";
+}
+
+// ─── Statement Summary Extraction ───────────────────────────────────────────
+
+/**
+ * Extract official totals/counts from summary pages.
+ * Looks for patterns like "Total deposits: $92,786.53" or "26 deposits".
+ */
+export function extractStatementSummary(pages: PageData[]): StatementSummary {
+  const summary: StatementSummary = {};
+  const allText = pages.flatMap((p) => p.items.map((i) => i.str)).join(" ");
+
+  // Extract total deposits
+  const depositTotalMatch = allText.match(
+    /(?:total\s+)?(?:deposits?\s+(?:and\s+(?:other\s+)?credits?|and\s+additions)?|additions\s+and\s+deposits?)\s*[:$]?\s*\$?\s*([\d,]+\.\d{2})/i
+  );
+  if (depositTotalMatch) {
+    summary.depositTotal = parseFloat(depositTotalMatch[1].replace(/,/g, ""));
+  }
+
+  // Extract total withdrawals
+  const withdrawalTotalMatch = allText.match(
+    /(?:total\s+)?(?:withdrawals?\s+(?:and\s+(?:other\s+)?debits?|and\s+(?:subtractions?|deductions?))?|debits?\s+and\s+withdrawals?)\s*[:$]?\s*\$?\s*([\d,]+\.\d{2})/i
+  );
+  if (withdrawalTotalMatch) {
+    summary.withdrawalTotal = parseFloat(withdrawalTotalMatch[1].replace(/,/g, ""));
+  }
+
+  // Extract deposit count
+  const depositCountMatch = allText.match(/(\d+)\s+(?:deposits?|credits?|items?\s+(?:added|deposited))/i);
+  if (depositCountMatch) {
+    summary.depositCount = parseInt(depositCountMatch[1]);
+  }
+
+  // Extract withdrawal count
+  const withdrawalCountMatch = allText.match(/(\d+)\s+(?:withdrawals?|debits?|checks?\s+(?:paid|cleared)|items?\s+(?:withdrawn|paid))/i);
+  if (withdrawalCountMatch) {
+    summary.withdrawalCount = parseInt(withdrawalCountMatch[1]);
+  }
+
+  // Beginning balance
+  const beginMatch = allText.match(/(?:beginning|opening|previous)\s+balance\s*[:$]?\s*\$?\s*([\d,]+\.\d{2})/i);
+  if (beginMatch) {
+    summary.beginningBalance = parseFloat(beginMatch[1].replace(/,/g, ""));
+  }
+
+  // Ending balance
+  const endMatch = allText.match(/(?:ending|closing|new)\s+balance\s*[:$]?\s*\$?\s*([\d,]+\.\d{2})/i);
+  if (endMatch) {
+    summary.endingBalance = parseFloat(endMatch[1].replace(/,/g, ""));
+  }
+
+  return summary;
+}
+
+// ─── Pre-scan ───────────────────────────────────────────────────────────────
+
 /**
  * Pre-scan all pages to detect columns and section boundaries.
- * This runs once on the full document before chunking,
- * so each chunk gets consistent column definitions and knows its starting section.
  */
 export function prescanDocument(pages: PageData[]): DocumentPrescan {
-  // Detect columns from first 3 pages
+  // Detect columns from all pages (not just first 3)
   const candidates: { name: string; x: number; width: number }[] = [];
-  for (const page of pages.slice(0, 3)) {
+  for (const page of pages) {
     for (const item of page.items) {
       const lower = item.str.toLowerCase().trim();
       if (isSectionHeaderText(lower)) continue;
@@ -249,14 +378,11 @@ export function getInitialSectionForChunk(
  */
 export function detectDocType(fullText: string): DocType {
   const upper = fullText.toUpperCase();
-
   if (
     upper.includes("WAGE AND TAX STATEMENT") ||
     upper.includes("FORM W-2") ||
     upper.includes("W-2 WAGE")
-  ) {
-    return "w2";
-  }
+  ) return "w2";
 
   if (
     upper.includes("ACCOUNT STATEMENT") ||
@@ -273,29 +399,24 @@ export function detectDocType(fullText: string): DocType {
     upper.includes("NEW BALANCE") ||
     upper.includes("PAYMENT DUE DATE") ||
     upper.includes("MINIMUM PAYMENT")
-  ) {
-    return "bank_statement";
-  }
+  ) return "bank_statement";
 
   return "unknown";
 }
 
 /**
- * Detect document type from raw page items (without reconstructing text).
+ * Detect document type from raw page items.
  */
 export function detectDocTypeFromItems(pages: PageData[]): DocType {
-  const allText = pages.flatMap(p => p.items.map(i => i.str)).join(" ");
+  const allText = pages.flatMap((p) => p.items.map((i) => i.str)).join(" ");
   return detectDocType(allText);
 }
 
 /**
  * Reconstructs text from PDF page content items, preserving spatial layout.
- * Uses tolerance-based Y-band clustering that adapts to font size,
- * and inserts separators based on character-relative gap detection.
  */
 export function reconstructPageText(items: TextItem[]): string {
   const lineItems: LineItem[] = [];
-
   for (const item of items) {
     if (!item.str || !item.str.trim()) continue;
     const x = item.transform?.[4] ?? 0;
@@ -304,20 +425,15 @@ export function reconstructPageText(items: TextItem[]): string {
     const height = item.height ?? 12;
     lineItems.push({ x, y, text: item.str, width, height });
   }
-
   if (lineItems.length === 0) return "";
 
-  // Sort by Y descending (top of page first in PDF coords), then X ascending
   const sorted = [...lineItems].sort((a, b) => b.y - a.y || a.x - b.x);
-
-  // Group into lines using adaptive Y-tolerance based on item height
   const lines: { y: number; items: LineItem[] }[] = [];
   let currentBand: LineItem[] = [sorted[0]];
   let bandY = sorted[0].y;
 
   for (let i = 1; i < sorted.length; i++) {
     const item = sorted[i];
-    // Tolerance: ~30% of the item's font height, minimum 2px
     const tolerance = Math.max(item.height * 0.3, 2);
     if (Math.abs(item.y - bandY) <= tolerance) {
       currentBand.push(item);
@@ -329,30 +445,18 @@ export function reconstructPageText(items: TextItem[]): string {
   }
   lines.push({ y: bandY, items: [...currentBand] });
 
-  // Build text for each line
   const outputLines: string[] = [];
-
   for (const line of lines) {
-    // Sort items left-to-right within the line
     const sortedItems = [...line.items].sort((a, b) => a.x - b.x);
-
     let text = sortedItems[0].text;
     for (let i = 1; i < sortedItems.length; i++) {
       const prev = sortedItems[i - 1];
       const curr = sortedItems[i];
       const gap = curr.x - (prev.x + prev.width);
-
-      // Gap detection relative to font height
-      if (gap > prev.height * 2) {
-        text += "    "; // Large gap = column separator
-      } else if (gap > prev.height * 0.3) {
-        text += " "; // Normal word gap
-      }
-      // Very close or overlapping = no separator
-
+      if (gap > prev.height * 2) text += "    ";
+      else if (gap > prev.height * 0.3) text += " ";
       text += curr.text;
     }
-
     outputLines.push(text.trimEnd());
   }
 

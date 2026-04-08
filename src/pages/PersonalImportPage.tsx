@@ -6,10 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Upload, FileText, Check, Loader2 } from "lucide-react";
+import { Upload, FileText, Check, Loader2, AlertTriangle, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
-import { extractRawItems, detectDocTypeFromItems, prescanDocument, getInitialSectionForChunk, type PageData } from "@/lib/pdfTextExtract";
+import { processStatementPdf, type ReconciliationResult } from "@/lib/pdfImportHelper";
 
 const PERSONAL_CATEGORIES = [
   "Housing", "Medical & Health", "Charitable Giving", "Education", "Childcare",
@@ -54,71 +53,30 @@ export default function PersonalImportPage() {
   const addExpense = useAddPersonalExpense();
   const [transactions, setTransactions] = useState<ReviewTx[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [filterCat, setFilterCat] = useState("all");
   const [filterType, setFilterType] = useState("all");
   const fileRef = useRef<HTMLInputElement>(null);
+  const [reconciliation, setReconciliation] = useState<ReconciliationResult | null>(null);
 
   const handlePdfUpload = useCallback(async (file: File) => {
     setUploading(true);
+    setReconciliation(null);
     try {
-      const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
-      const buf = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-      const numPages = Math.min(pdf.numPages, 50);
-      const allPages: PageData[] = [];
-      for (let p = 1; p <= numPages; p++) {
-        const page = await pdf.getPage(p);
-        const content = await page.getTextContent();
-        const viewport = page.getViewport({ scale: 1 });
-        const pageData = extractRawItems(content.items, { width: viewport.width, height: viewport.height });
-        pageData.pageNum = p;
-        allPages.push(pageData);
-      }
+      const result = await processStatementPdf(file, (status, percent) => {
+        setUploadStatus(status);
+        setUploadProgress(percent);
+      });
 
-      const docType = detectDocTypeFromItems(allPages);
-
-      // Pre-scan entire document for columns and section boundaries BEFORE chunking
-      const prescan = prescanDocument(allPages);
-
-      const PAGES_PER_CHUNK = 6;
-      const pageChunks: PageData[][] = [];
-      for (let i = 0; i < allPages.length; i += PAGES_PER_CHUNK) {
-        pageChunks.push(allPages.slice(i, i + PAGES_PER_CHUNK));
-      }
-
-      const allTx: any[] = [];
-      const concurrency = Math.min(6, pageChunks.length);
-      let nextIdx = 0;
-
-      const worker = async () => {
-        while (nextIdx < pageChunks.length) {
-          const idx = nextIdx++;
-          const chunkStartPage = pageChunks[idx][0]?.pageNum || 1;
-          const initialSection = getInitialSectionForChunk(chunkStartPage, prescan.sectionBoundaries);
-          const { data, error } = await supabase.functions.invoke("parse-pdf", {
-            body: {
-              pages: pageChunks[idx],
-              docType,
-              detectedColumns: prescan.columns,
-              initialSection,
-            },
-          });
-          if (error) throw error;
-          if (data?.transactions?.length) allTx.push(...data.transactions);
-        }
-      };
-
-      await Promise.all(Array.from({ length: concurrency }, () => worker()));
-
-      if (allTx.length === 0) {
+      if (result.transactions.length === 0) {
         toast.error("No transactions found in PDF");
         return;
       }
 
-      const parsed: ReviewTx[] = allTx.map((t: any, i: number) => {
+      const parsed: ReviewTx[] = result.transactions.map((t, i) => {
         const cat = autoCategorize(t.description);
         return {
           id: `imp-${i}-${Date.now()}`,
@@ -142,11 +100,16 @@ export default function PersonalImportPage() {
       });
 
       setTransactions(parsed);
-      toast.success(`Extracted ${parsed.length} transactions`);
+      setReconciliation(result.reconciliation);
+
+      const reconMsg = result.reconciliation.status === "matched" ? " ✓ Reconciled" : result.reconciliation.status === "mismatched" ? " ⚠ Totals mismatch" : "";
+      toast.success(`Extracted ${parsed.length} transactions${reconMsg}`);
     } catch (e: any) {
       toast.error(e.message || "Failed to parse PDF");
     } finally {
       setUploading(false);
+      setUploadStatus("");
+      setUploadProgress(0);
     }
   }, [existingExpenses]);
 
@@ -237,7 +200,12 @@ export default function PersonalImportPage() {
           {uploading ? (
             <div className="flex flex-col items-center gap-2">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Parsing statement…</p>
+              <p className="text-sm text-muted-foreground">{uploadStatus || "Parsing statement…"}</p>
+              {uploadProgress > 0 && (
+                <div className="w-full max-w-xs bg-muted rounded-full h-2">
+                  <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2">
@@ -247,6 +215,24 @@ export default function PersonalImportPage() {
             </div>
           )}
         </div>
+
+        {/* Reconciliation banner */}
+        {reconciliation && reconciliation.status !== "no_reference" && (
+          <div className={`flex items-center gap-3 rounded-lg p-3 text-sm ${
+            reconciliation.status === "matched" ? "bg-chart-positive/10 text-chart-positive" : "bg-destructive/10 text-destructive"
+          }`}>
+            {reconciliation.status === "matched" ? <CheckCircle className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
+            <div className="flex-1">
+              {reconciliation.status === "matched" ? "Totals match statement" : "Totals don't match statement"}
+              {reconciliation.expectedIncome != null && (
+                <span className="ml-2 font-mono text-xs">Income: {formatCurrency(reconciliation.parsedIncome)}/{formatCurrency(reconciliation.expectedIncome)}</span>
+              )}
+              {reconciliation.expectedExpense != null && (
+                <span className="ml-2 font-mono text-xs">Expense: {formatCurrency(reconciliation.parsedExpense)}/{formatCurrency(reconciliation.expectedExpense)}</span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Review area */}
         {transactions.length > 0 && (

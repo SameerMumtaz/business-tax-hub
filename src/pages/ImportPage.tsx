@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { memo } from "react";
 import {
   Upload, Check, X, ArrowRight, Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown,
-  Lightbulb, Plus, XCircle, ShieldAlert, AlertTriangle, Info, Ban, Tag, ExternalLink,
+  Lightbulb, Plus, XCircle, ShieldAlert, AlertTriangle, Info, Ban, Tag, ExternalLink, CheckCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -51,7 +51,7 @@ export default function ImportPage() {
     toggleInclude, selectAll, deselectAll, deleteTransaction,
     toggleSort, updateCategory, visibleSuggestions, saveRule, dismissRule, saveAllRules, saveInlineRule,
     handleAudit, applyIssueSuggestion, dismissIssue, uncategorizedCount, handleImport, setStep, setTransactions,
-    incomeCount, expenseCountN, totalIncome, totalExpenseAmt, getAffectedTransactions, auditing,
+    incomeCount, expenseCountN, totalIncome, totalExpenseAmt, getAffectedTransactions, auditing, reconciliation,
   } = logic;
 
   const SortIcon = ({ field }: { field: typeof sortField }) => {
@@ -105,6 +105,24 @@ export default function ImportPage() {
 
         {step === "review" && (
           <div className="space-y-4">
+            {/* Reconciliation banner */}
+            {reconciliation && reconciliation.status !== "no_reference" && (
+              <div className={`flex items-center gap-3 rounded-lg p-3 text-sm ${
+                reconciliation.status === "matched" ? "bg-chart-positive/10 text-chart-positive" : "bg-destructive/10 text-destructive"
+              }`}>
+                {reconciliation.status === "matched" ? <CheckCircle className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
+                <div className="flex-1 flex flex-wrap gap-x-4 gap-y-1">
+                  <span>{reconciliation.status === "matched" ? "Totals match statement" : "Totals don't match statement"}</span>
+                  {reconciliation.expectedIncome != null && (
+                    <span className="font-mono text-xs">Deposits: {formatCurrency(reconciliation.parsedIncome)} / {formatCurrency(reconciliation.expectedIncome)} expected</span>
+                  )}
+                  {reconciliation.expectedExpense != null && (
+                    <span className="font-mono text-xs">Withdrawals: {formatCurrency(reconciliation.parsedExpense)} / {formatCurrency(reconciliation.expectedExpense)} expected</span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Summary bar */}
             <div className="flex flex-wrap items-center justify-between gap-3 bg-card border rounded-lg p-4">
               <div className="flex gap-6 text-sm">
