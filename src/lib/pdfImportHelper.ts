@@ -64,11 +64,27 @@ async function renderPageToImage(
   canvas.height = viewport.height;
   const ctx = canvas.getContext("2d")!;
   await page.render({ canvasContext: ctx, viewport }).promise;
-  const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
   const base64 = dataUrl.split(",")[1];
   canvas.width = 0;
   canvas.height = 0;
   return { base64, mimeType: "image/jpeg", pageNum };
+}
+
+/** Render multiple pages in parallel (batched to avoid memory spikes) */
+async function renderPagesParallel(
+  pdf: any,
+  pageNums: number[],
+  scale: number = 1.5,
+  batchSize: number = 4,
+): Promise<PageImage[]> {
+  const results: PageImage[] = [];
+  for (let i = 0; i < pageNums.length; i += batchSize) {
+    const batch = pageNums.slice(i, i + batchSize);
+    const rendered = await Promise.all(batch.map((p) => renderPageToImage(pdf, p, scale)));
+    results.push(...rendered);
+  }
+  return results;
 }
 
 async function classifyPages(pdf: any, numPages: number): Promise<{
@@ -103,16 +119,13 @@ async function classifyPages(pdf: any, numPages: number): Promise<{
     }
   }
 
-  // First page is often summary even if it also has some transactions
   if (summaryPages.length === 0 && numPages > 1) {
     summaryPages.push(1);
   }
 
-  // IMPORTANT: If the summary page also contains transaction-like content,
-  // include it in transaction pages too so we don't miss any
+  // If summary page has transactions too, include it in both lists
   for (const sp of summaryPages) {
     if (!transactionPages.includes(sp)) {
-      // Check if summary page has enough dates to suggest transactions
       const page = await pdf.getPage(sp);
       const content = await page.getTextContent();
       const text = content.items.map((i: any) => i.str || "").join(" ");
@@ -197,51 +210,35 @@ export async function processStatementPdf(
   };
   console.log(`Pages: ${transactionPages.length} transaction [${transactionPages.join(",")}], ${summaryPages.length} summary [${summaryPages.join(",")}], ${legalPages.length} legal`);
 
-  // Step 3: Extract summary from summary pages
-  onProgress("Extracting statement summary…", 15);
-  let summary: StatementSummary = {};
-  if (summaryPages.length > 0) {
-    const summaryImages = await Promise.all(
-      summaryPages.slice(0, 2).map((p) => renderPageToImage(pdf, p, 2.0)),
-    );
-    try {
-      const { data, error } = await supabase.functions.invoke("parse-pdf", {
-        body: { mode: "summary", images: summaryImages },
-      });
-      if (!error && data?.summary) {
-        summary = data.summary;
-        console.log("Statement summary:", JSON.stringify(summary));
-      }
-    } catch (e) {
-      console.warn("Summary extraction failed:", e);
-    }
-  }
-
-  // Step 4: Render transaction pages to images
-  onProgress("Rendering pages…", 20);
+  // Step 3: Render summary + transaction pages IN PARALLEL
+  onProgress("Rendering pages…", 15);
   const pagesToRender = transactionPages.length > 0
     ? transactionPages
     : Array.from({ length: numPages }, (_, i) => i + 1);
-  const pageImages: PageImage[] = [];
-  for (let i = 0; i < pagesToRender.length; i++) {
-    onProgress(`Rendering page ${i + 1} of ${pagesToRender.length}…`, 20 + Math.round((i / pagesToRender.length) * 15));
-    pageImages.push(await renderPageToImage(pdf, pagesToRender[i]));
-  }
 
-  // Step 5: Chunk images and send to vision extraction
-  // Use 2 pages per chunk for better accuracy on dense statements
-  onProgress("Analyzing transactions…", 38);
-  const PAGES_PER_CHUNK = 2;
+  // Render summary pages at 2.0x (for number accuracy) and transaction pages at 1.5x simultaneously
+  const [summaryImages, pageImages] = await Promise.all([
+    summaryPages.length > 0
+      ? renderPagesParallel(pdf, summaryPages.slice(0, 2), 2.0)
+      : Promise.resolve([]),
+    renderPagesParallel(pdf, pagesToRender, 1.5),
+  ]);
+
+  onProgress("Analyzing…", 25);
+
+  // Step 4: Fire summary extraction AND first transaction chunks IN PARALLEL
+  const PAGES_PER_CHUNK = 3;
   const chunks: PageImage[][] = [];
   for (let i = 0; i < pageImages.length; i += PAGES_PER_CHUNK) {
     chunks.push(pageImages.slice(i, i + PAGES_PER_CHUNK));
   }
 
+  let summary: StatementSummary = {};
   const allTx: ParsedImportTx[] = [];
   const chunkErrors: string[] = [];
   const chunkStats: { chunkIdx: number; count: number; income: number; expense: number }[] = [];
   const totalChunks = chunks.length;
-  const concurrency = Math.min(2, totalChunks);
+  const CONCURRENCY = Math.min(3, totalChunks);
   let nextChunkIndex = 0;
   let completed = 0;
   const chunkStartTime = Date.now();
@@ -255,15 +252,8 @@ export async function processStatementPdf(
     return etaSec >= 60 ? `~${Math.ceil(etaSec / 60)}min remaining` : `~${etaSec}s remaining`;
   };
 
-  const processChunk = async (chunkIndex: number, retryScale?: number): Promise<ParsedImportTx[]> => {
-    // If retrying with higher quality, re-render the pages
-    let images = chunks[chunkIndex];
-    if (retryScale) {
-      images = await Promise.all(
-        chunks[chunkIndex].map(async (img) => renderPageToImage(pdf, img.pageNum, retryScale)),
-      );
-    }
-
+  const processChunk = async (chunkIndex: number): Promise<ParsedImportTx[]> => {
+    const images = chunks[chunkIndex];
     const { data, error } = await supabase.functions.invoke("parse-pdf", {
       body: {
         mode: "transactions",
@@ -274,6 +264,18 @@ export async function processStatementPdf(
     if (error) throw new Error((error as any).message || "failed");
     return data?.transactions || [];
   };
+
+  // Extract summary concurrently with first transaction chunks
+  const summaryPromise = summaryImages.length > 0
+    ? supabase.functions.invoke("parse-pdf", { body: { mode: "summary", images: summaryImages } })
+        .then(({ data, error }) => {
+          if (!error && data?.summary) {
+            summary = data.summary;
+            console.log("Statement summary:", JSON.stringify(summary));
+          }
+        })
+        .catch((e) => console.warn("Summary extraction failed:", e))
+    : Promise.resolve();
 
   const runWorker = async () => {
     while (nextChunkIndex < totalChunks) {
@@ -293,84 +295,23 @@ export async function processStatementPdf(
         completed++;
         onProgress(
           `Analyzing transactions… ${completed}/${totalChunks} chunks done, ${getEta()}`,
-          38 + Math.round((completed / totalChunks) * 40),
+          25 + Math.round((completed / totalChunks) * 55),
         );
       }
     }
   };
 
-  await Promise.all(Array.from({ length: concurrency }, () => runWorker()));
+  // Run summary + all transaction workers in parallel
+  await Promise.all([
+    summaryPromise,
+    ...Array.from({ length: CONCURRENCY }, () => runWorker()),
+  ]);
 
-  // Step 6: First reconciliation check
-  onProgress("Reconciling results…", 82);
-  let reconciliation = reconcile(allTx, summary);
+  // Step 5: Reconcile
+  onProgress("Reconciling results…", 85);
+  const reconciliation = reconcile(allTx, summary);
 
-  // Step 7: If mismatched, attempt targeted retry on sparse chunks
-  if (reconciliation.status === "mismatched" && summary.depositTotal != null && summary.withdrawalTotal != null) {
-    console.log("Reconciliation mismatched — attempting targeted retry on sparse chunks");
-    onProgress("Re-analyzing suspect pages…", 85);
-
-    // Identify chunks that might be underperforming:
-    // - chunks with very few transactions relative to others
-    // - chunks where the per-page count seems low
-    const avgPerChunk = allTx.length / Math.max(1, totalChunks);
-    const sparseChunks = chunkStats
-      .filter(cs => cs.count < avgPerChunk * 0.5 || cs.count < 3)
-      .map(cs => cs.chunkIdx);
-
-    // Also retry any chunks that failed entirely
-    const failedChunkIndices: number[] = [];
-    for (let i = 0; i < totalChunks; i++) {
-      if (!chunkStats.find(cs => cs.chunkIdx === i)) {
-        failedChunkIndices.push(i);
-      }
-    }
-
-    const retryChunks = [...new Set([...sparseChunks, ...failedChunkIndices])];
-
-    if (retryChunks.length > 0 && retryChunks.length <= totalChunks) {
-      console.log(`Retrying ${retryChunks.length} chunks with higher quality: [${retryChunks.join(",")}]`);
-
-      // Remove old transactions from retry chunks
-      const retryPageNums = new Set<number>();
-      for (const ci of retryChunks) {
-        for (const img of chunks[ci]) {
-          retryPageNums.add(img.pageNum);
-        }
-      }
-
-      // Keep transactions NOT from retry pages
-      const keptTx = allTx.filter(tx => !tx.pageNum || !retryPageNums.has(tx.pageNum));
-
-      // Retry each chunk individually at higher resolution
-      for (const ci of retryChunks) {
-        try {
-          const retryTxs = await processChunk(ci, 2.0);
-          keptTx.push(...retryTxs);
-        } catch (e) {
-          console.warn(`Retry chunk ${ci} failed:`, e);
-        }
-      }
-
-      // Check if retry improved things
-      const retryRecon = reconcile(keptTx, summary);
-      const prevIncomeDiff = Math.abs(reconciliation.parsedIncome - (reconciliation.expectedIncome || 0));
-      const retryIncomeDiff = Math.abs(retryRecon.parsedIncome - (retryRecon.expectedIncome || 0));
-      const prevExpenseDiff = Math.abs(reconciliation.parsedExpense - (reconciliation.expectedExpense || 0));
-      const retryExpenseDiff = Math.abs(retryRecon.parsedExpense - (retryRecon.expectedExpense || 0));
-
-      if ((retryIncomeDiff + retryExpenseDiff) < (prevIncomeDiff + prevExpenseDiff)) {
-        console.log("Retry improved accuracy — using retry results");
-        allTx.length = 0;
-        allTx.push(...keptTx);
-        reconciliation = retryRecon;
-      } else {
-        console.log("Retry did not improve — keeping original results");
-      }
-    }
-  }
-
-  // Step 8: Lopsided guard
+  // Step 6: Lopsided guard
   if (summary.depositTotal && summary.withdrawalTotal) {
     const totalParsed = reconciliation.incomeCountParsed + reconciliation.expenseCountParsed;
     if (totalParsed > 10 && (reconciliation.incomeCountParsed < 2 || reconciliation.expenseCountParsed < 2)) {
