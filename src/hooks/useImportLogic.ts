@@ -6,7 +6,7 @@ import { categorizeTransactions, invalidateRulesCache } from "@/lib/categorize";
 import { generateId } from "@/lib/format";
 import { ExpenseCategory } from "@/types/tax";
 import { supabase } from "@/integrations/supabase/client";
-import { extractRawItems, detectDocTypeFromItems, prescanDocument, getInitialSectionForChunk, type PageData } from "@/lib/pdfTextExtract";
+import { processStatementPdf, type ReconciliationResult } from "@/lib/pdfImportHelper";
 import { toast } from "sonner";
 
 export interface AuditIssue {
