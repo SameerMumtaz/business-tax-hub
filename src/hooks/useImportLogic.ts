@@ -303,6 +303,8 @@ export default function useImportLogic() {
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) handleFileUpload(file); }, [handleFileUpload]);
 
   const toggleInclude = (id: string) => setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, include: !t.include } : t)));
+  const selectAll = () => setTransactions((prev) => prev.map((t) => ({ ...t, include: true })));
+  const deselectAll = () => setTransactions((prev) => prev.map((t) => ({ ...t, include: false })));
   const deleteTransaction = (id: string) => setTransactions((prev) => prev.filter((t) => t.id !== id));
   const toggleSort = (field: SortField) => { if (sortField === field) setSortDir((d) => d === "asc" ? "desc" : "asc"); else { setSortField(field); setSortDir("asc"); } setCurrentPage(0); };
   const updateCategory = (id: string, category: ExpenseCategory) => setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, category, catSource: "rule", userEdited: true } : t)));
