@@ -1,83 +1,96 @@
 
 
-# Smart Job Drop Positioning — Revised Drag Logic
+# PDF Parser Overhaul: AI-First with Structured Page Data
 
-## What's Changing
+## Problem
 
-Replace the current `computeTimeForIndex` function with smarter time-slot calculation that accounts for the moved job's duration and adds a 20-minute buffer between jobs.
+The current pipeline reconstructs text client-side (lossy spatial flattening), then sends a giant text blob to the AI. This breaks on varied bank formats because column alignment is lost, junk rows blend in with transactions, and the AI hallucinates without structural context.
 
-## Current Behavior
-- **Drop above first job**: Starts 30 min before the first job (arbitrary)
-- **Drop below last job**: Starts right when last job ends (no buffer)
-- **Drop between jobs**: Midpoint of gap (ignores moved job's duration)
+## Strategy
 
-## New Behavior
+**Keep pdfjs client-side for extraction, but send raw positioned items (not flattened text) to the edge function. Let a fast, cheap AI model (gemini-2.5-flash-lite — already in use) do the heavy lifting with much better input.**
 
-**Drop ABOVE a job (index 0 or before a specific job):**
-- Calculate: `new_start = next_job_start - moved_job_duration - 20min_buffer`
-- Ensures the moved job ends 20 minutes before the next job starts
-- Floor at 00:00 if result goes negative
+The key insight: the current system throws away the most valuable data (X/Y positions, column structure) before the AI ever sees it. We fix that.
 
-**Drop BELOW a job (after last job, or after a specific job):**
-- Calculate: `new_start = previous_job_end + 20min_buffer`
-- Where `previous_job_end = prev_start_time + prev_estimated_hours`
-- Cap at 23:59 if result overflows
+---
 
-**Drop BETWEEN two jobs (middle position):**
-- Same as "drop below" — start 20 min after the job above ends
-- Then validate: would the moved job end before the next job starts? If not, warn but still allow (user can edit after)
+## Changes
 
-**Drop on empty day:**
-- Keep existing behavior (no time set, or default to 8:00 AM)
+### 1. Client-Side: Send Raw Items Instead of Text
 
-**Drop on same position as adjacent job (side-by-side / next to):**
-- Match the start time of the neighboring job
+**Files: `useImportLogic.ts`, `PersonalImportPage.tsx`**
 
-## Additional Improvements to Add
+- After pdfjs extracts each page, instead of calling `reconstructPageText()` and sending a string, collect the raw items: `{str, x, y, width, height}` per item, plus page dimensions
+- Chunk by page groups (5-8 pages per chunk) instead of character count — this preserves page boundaries
+- Send payload as `{pages: [{pageNum, width, height, items: [...]}], docType}` to the edge function
+- Keep parallel chunking (up to 6 concurrent) and ETA logic unchanged
 
-1. **Visual time preview on drag**: Show the computed start time in the drop zone label (e.g., "↓ Move here · 2:20 PM") so the user knows what time will be assigned before dropping
+### 2. Edge Function: Server-Side Column Detection + AI
 
-2. **Overflow warning**: If the computed end time exceeds 6:00 PM (end of typical workday), show a subtle amber indicator on the drop zone
+**File: `supabase/functions/parse-pdf/index.ts`**
 
-3. **Snap to 5-minute increments**: Round computed times to nearest 5 minutes for cleaner scheduling
+The edge function gains a structured extraction pipeline when it receives `pages` format:
 
-## Crew Conflict Logic
-Unchanged — `detectConflicts` already checks crew overlap using time windows. The new `computeTimeForIndex` feeds a more accurate `proposedStartTime` into the conflict check, making it more reliable.
+**Step A — Detect table columns:**
+- Scan all items for header keywords (Date, Description, Amount, Debit, Credit, Balance, etc.)
+- Record their X-positions as column anchors
+- Handle common layouts: `Date|Description|Debit|Credit|Balance`, `Trans Date|Post Date|Description|Amount`, single-amount columns
 
-## Files to Modify
+**Step B — Group items into rows:**
+- Cluster items by Y-coordinate (tolerance-based, adaptive to font size — reuse existing logic from `pdfTextExtract.ts` but on the server)
+- Sort left-to-right within each row
 
-- **`src/components/team/JobCalendarView.tsx`**:
-  - Rewrite `computeTimeForIndex` with the new buffer-aware logic
-  - Update drop zone labels to show computed time preview
-  - Add 5-minute rounding helper
-  - Pass moved job's duration into time calculation
-
-## Technical Detail
-
-```text
-computeTimeForIndex(dateStr, dropIndex, excludeJobId, movedJobDuration):
-
-  dayJobs = sorted jobs on dateStr (excluding moved job)
-  BUFFER = 20 minutes
-
-  if dayJobs empty → return "08:00" (sensible default)
-
-  if dropIndex <= 0 (above all):
-    nextJob = dayJobs[0]
-    nextStart = parseTime(nextJob.start_time)
-    newStart = nextStart - movedJobDuration - BUFFER
-    return roundTo5Min(max(0, newStart))
-
-  if dropIndex >= dayJobs.length (below all):
-    prevJob = dayJobs[last]
-    prevEnd = parseTime(prevJob.start_time) + prevJob.estimated_hours
-    newStart = prevEnd + BUFFER
-    return roundTo5Min(min(23:59, newStart))
-
-  else (between):
-    prevJob = dayJobs[dropIndex - 1]
-    prevEnd = parseTime(prevJob.start_time) + prevJob.estimated_hours
-    newStart = prevEnd + BUFFER
-    return roundTo5Min(newStart)
+**Step C — Assign columns and build structured table:**
+- Map each item to its nearest column header by X-position
+- Build a clean markdown table for the AI:
 ```
+Columns: Date | Description | Debit | Credit | Balance
+01/15 | AMAZON MARKETPLACE | 45.99 | | 1,234.56
+01/15 | DIRECT DEPOSIT PAYROLL | | 2,500.00 | 3,734.56
+```
+
+**Step D — AI extraction with structured input:**
+- Send the markdown table (not raw text) to gemini-2.5-flash-lite
+- Updated prompt explicitly tells the model the column layout and to ignore balance columns, subtotals, and summary rows
+- Same tool-calling approach for structured output
+
+**Step E — Enhanced regex fallback:**
+- If AI fails, use the detected columns to extract date/description/amount by position directly — no text reconstruction needed
+- This is far more accurate than the current line-by-line regex
+
+**Step F — Smarter junk filtering:**
+- Detect repeated text across pages (headers/footers) and strip them before AI sees the data
+- Skip rows where all items land in a single column
+- More aggressive balance/summary/subtotal filtering in post-process
+
+### 3. Backward Compatibility
+
+- Edge function accepts both old `{text}` format and new `{pages}` format
+- Old format triggers current behavior (existing regex fallback)
+- New format triggers the structured pipeline
+- `pdfTextExtract.ts` remains available for other uses but import flows switch to raw items
+
+### 4. W-2 Handling
+
+- W-2s already use the `parse-w2` function with spatial extraction — no changes needed there
+- The `parse-pdf` W-2 branch continues to use the existing regex parser
+
+---
+
+## Why This Works
+
+| Current problem | Fix |
+|---|---|
+| Column data merged into one string | Raw X/Y positions preserved; server-side column detection |
+| AI hallucinates from messy text | AI receives clean markdown table with labeled columns |
+| Bank format changes break parsing | Column headers detected dynamically, not hardcoded patterns |
+| Too many junk rows | Repeated headers/footers stripped; balance column identified and excluded |
+| Wrong amounts (balance vs transaction) | Rightmost column detected as balance and filtered |
+
+## Files Modified
+
+1. `supabase/functions/parse-pdf/index.ts` — Major rewrite: add column detection, row grouping, structured AI prompt, enhanced regex fallback
+2. `src/hooks/useImportLogic.ts` — Send raw page items instead of text, chunk by page groups
+3. `src/pages/PersonalImportPage.tsx` — Same raw-items approach for personal import
+4. `src/lib/pdfTextExtract.ts` — Add `extractRawItems()` helper; keep existing functions
 
