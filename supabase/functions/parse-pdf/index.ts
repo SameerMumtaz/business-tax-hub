@@ -146,7 +146,8 @@ function detectRepeatedHeaders(pages: PagePayload[]): Set<string> {
   }
 
   const repeated = new Set<string>();
-  const threshold = Math.min(pages.length, 3);
+  // Only filter repeated headers when we have enough pages to identify a pattern
+  const threshold = Math.max(2, Math.ceil(pages.length * 0.5));
   for (const [text, count] of topTexts) {
     if (count >= threshold) repeated.add(text);
   }
