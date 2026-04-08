@@ -200,7 +200,12 @@ export default function PersonalImportPage() {
           {uploading ? (
             <div className="flex flex-col items-center gap-2">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Parsing statement…</p>
+              <p className="text-sm text-muted-foreground">{uploadStatus || "Parsing statement…"}</p>
+              {uploadProgress > 0 && (
+                <div className="w-full max-w-xs bg-muted rounded-full h-2">
+                  <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2">
