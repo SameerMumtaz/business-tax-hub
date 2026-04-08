@@ -66,20 +66,25 @@ export function auditExpenses(expenses: Expense[], dismissedSet?: Set<string>): 
     });
   }
 
-  // 3. Large outliers
+  // 3. Large outliers — use median + 2 std-dev to avoid false flags
   const amounts = expenses.map((e) => e.amount);
-  const avg = amounts.length > 0 ? amounts.reduce((a, b) => a + b, 0) / amounts.length : 0;
-  const threshold = Math.max(avg * 5, 5000);
-  for (const e of expenses.filter((e) => e.amount > threshold)) {
-    issues.push({
-      type: "anomaly", severity: "low",
-      title: `Large expense: $${e.amount.toFixed(2)}`,
-      description: `"${e.vendor.slice(0, 50)}" is significantly above average ($${avg.toFixed(0)}).`,
-      affected_ids: [e.id],
-      suggestion: "review",
-      suggestion_detail: "Verify this amount is correct and properly categorized.",
-      dollarImpact: e.amount,
-    });
+  if (amounts.length >= 5) {
+    const sorted = [...amounts].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    const mean = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+    const stdDev = Math.sqrt(amounts.reduce((s, v) => s + (v - mean) ** 2, 0) / amounts.length);
+    const threshold = Math.max(median + 2 * stdDev, 5000);
+    for (const e of expenses.filter((e) => e.amount > threshold)) {
+      issues.push({
+        type: "anomaly", severity: "low",
+        title: `Large expense: $${e.amount.toFixed(2)}`,
+        description: `"${e.vendor.slice(0, 50)}" is significantly above the median ($${median.toFixed(0)}).`,
+        affected_ids: [e.id],
+        suggestion: "review",
+        suggestion_detail: "Verify this amount is correct and properly categorized.",
+        dollarImpact: e.amount,
+      });
+    }
   }
 
   // 4. Personal expenses
