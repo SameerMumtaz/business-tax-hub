@@ -219,7 +219,7 @@ export default function useImportLogic() {
         while (nextChunkIndex < totalChunks) {
           const chunkIndex = nextChunkIndex++;
           const timeoutMs = 45000;
-          const chunkStart = performance.now();
+          
 
           try {
             const chunkPromise = supabase.functions.invoke("parse-pdf", {
