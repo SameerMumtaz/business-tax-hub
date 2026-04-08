@@ -230,7 +230,12 @@ export default function useImportLogic() {
 
           try {
             const chunkPromise = supabase.functions.invoke("parse-pdf", {
-              body: { pages: pageChunks[chunkIndex], docType },
+              body: {
+                pages: pageChunks[chunkIndex],
+                docType,
+                detectedColumns: prescan.columns,
+                initialSection,
+              },
             });
             const timeoutPromise = new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error(`Chunk ${chunkIndex + 1} timed out after ${timeoutMs / 1000}s`)), timeoutMs)
