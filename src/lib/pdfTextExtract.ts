@@ -25,6 +25,46 @@ interface ReconstructedLine {
 
 export type DocType = "bank_statement" | "w2" | "unknown";
 
+/** Raw positioned item for structured extraction */
+export interface RawPageItem {
+  str: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface PageData {
+  pageNum: number;
+  width: number;
+  height: number;
+  items: RawPageItem[];
+}
+
+/**
+ * Extract raw positioned items from a pdf.js page's text content.
+ * Returns cleaned items with absolute coordinates.
+ */
+export function extractRawItems(contentItems: any[], viewport?: { width: number; height: number }): PageData {
+  const items: RawPageItem[] = [];
+  for (const item of contentItems) {
+    if (!("str" in item) || !item.str || !item.str.trim()) continue;
+    items.push({
+      str: item.str,
+      x: item.transform?.[4] ?? 0,
+      y: item.transform?.[5] ?? 0,
+      width: item.width ?? item.str.length * 6,
+      height: item.height ?? 12,
+    });
+  }
+  return {
+    pageNum: 0,
+    width: viewport?.width ?? 612,
+    height: viewport?.height ?? 792,
+    items,
+  };
+}
+
 /**
  * Detect document type from extracted text.
  */
@@ -59,6 +99,14 @@ export function detectDocType(fullText: string): DocType {
   }
 
   return "unknown";
+}
+
+/**
+ * Detect document type from raw page items (without reconstructing text).
+ */
+export function detectDocTypeFromItems(pages: PageData[]): DocType {
+  const allText = pages.flatMap(p => p.items.map(i => i.str)).join(" ");
+  return detectDocType(allText);
 }
 
 /**

@@ -6,7 +6,7 @@ import { categorizeTransactions, invalidateRulesCache } from "@/lib/categorize";
 import { generateId } from "@/lib/format";
 import { ExpenseCategory } from "@/types/tax";
 import { supabase } from "@/integrations/supabase/client";
-import { reconstructPageText, detectDocType } from "@/lib/pdfTextExtract";
+import { extractRawItems, detectDocTypeFromItems, type PageData } from "@/lib/pdfTextExtract";
 import { toast } from "sonner";
 
 export interface AuditIssue {
@@ -165,48 +165,33 @@ export default function useImportLogic() {
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       const numPages = Math.min(pdf.numPages, 50);
-      const pageTexts: string[] = [];
+      const allPages: PageData[] = [];
       for (let p = 1; p <= numPages; p++) {
         setPdfProgress(Math.round((p / numPages) * 25));
         setPdfStatus(`Reading page ${p} of ${numPages}…`);
         const page = await pdf.getPage(p);
         const content = await page.getTextContent();
-        const textItems = content.items
-          .filter((item: any) => "str" in item && item.str)
-          .map((item: any) => ({
-            str: item.str,
-            transform: item.transform,
-            width: item.width,
-            height: item.height,
-          }));
-        pageTexts.push(reconstructPageText(textItems));
-      }
-      // Light pre-filter: only strip purely decorative/empty lines — never content that could be transactions
-      const EMPTY_LINE_RE = /^(\s*|\*{5,}|={5,}|-{8,}|_{5,})$/;
-
-      const filteredPageTexts = pageTexts.map((pageText) => {
-        const lines = pageText.split("\n");
-        return lines.filter((l) => !EMPTY_LINE_RE.test(l)).join("\n");
-      }).filter((p) => p.trim().length > 10);
-
-      const fullText = filteredPageTexts.join("\n\n--- PAGE BREAK ---\n\n");
-      const docType = detectDocType(fullText);
-
-      const CHUNK_SIZE = 20000; const textChunks: string[] = [];
-      if (fullText.length <= CHUNK_SIZE) { textChunks.push(fullText); } else {
-        let current = "";
-        for (const pt of filteredPageTexts) { if (current.length + pt.length > CHUNK_SIZE && current.length > 0) { textChunks.push(current); current = ""; } current += pt + "\n\n--- PAGE BREAK ---\n\n"; }
-        if (current.trim()) textChunks.push(current);
+        const viewport = page.getViewport({ scale: 1 });
+        const pageData = extractRawItems(content.items, { width: viewport.width, height: viewport.height });
+        pageData.pageNum = p;
+        allPages.push(pageData);
       }
 
-      // Parallel chunk analysis with rolling ETA
+      const docType = detectDocTypeFromItems(allPages);
+
+      // Chunk by page groups (6 pages per chunk)
+      const PAGES_PER_CHUNK = 6;
+      const pageChunks: PageData[][] = [];
+      for (let i = 0; i < allPages.length; i += PAGES_PER_CHUNK) {
+        pageChunks.push(allPages.slice(i, i + PAGES_PER_CHUNK));
+      }
+
       const allTx: any[] = []; const chunkErrors: string[] = [];
-      const totalChunks = textChunks.length;
+      const totalChunks = pageChunks.length;
       const concurrency = Math.min(6, totalChunks);
       let nextChunkIndex = 0;
       let completed = 0;
       const chunkTimes: number[] = [];
-      // For ≤7 chunks, need ceil(total/2) done before showing ETA; otherwise need 4
       const etaThreshold = totalChunks <= 7 ? Math.ceil(totalChunks / 2) : 4;
 
       const getEta = () => {
@@ -232,7 +217,9 @@ export default function useImportLogic() {
           const chunkStart = performance.now();
 
           try {
-            const chunkPromise = supabase.functions.invoke("parse-pdf", { body: { text: textChunks[chunkIndex], docType } });
+            const chunkPromise = supabase.functions.invoke("parse-pdf", {
+              body: { pages: pageChunks[chunkIndex], docType },
+            });
             const timeoutPromise = new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error(`Chunk ${chunkIndex + 1} timed out after ${timeoutMs / 1000}s`)), timeoutMs)
             );
