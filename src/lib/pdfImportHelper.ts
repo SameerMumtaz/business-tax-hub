@@ -10,6 +10,7 @@ export interface ParsedImportTx {
   description: string;
   amount: number;
   type: "income" | "expense";
+  pageNum?: number;
 }
 
 export interface ReconciliationResult {
