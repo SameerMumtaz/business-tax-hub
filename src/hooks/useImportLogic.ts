@@ -198,16 +198,14 @@ export default function useImportLogic() {
       const concurrency = Math.min(6, totalChunks);
       let nextChunkIndex = 0;
       let completed = 0;
-      const chunkTimes: number[] = [];
-      const etaThreshold = totalChunks <= 7 ? Math.ceil(totalChunks / 2) : 4;
+      const startTime = Date.now();
 
       const getEta = () => {
-        if (chunkTimes.length < etaThreshold) return "estimating…";
-        const window = totalChunks <= 7 ? chunkTimes.slice(-etaThreshold) : chunkTimes.slice(-4);
-        const avgMs = window.reduce((a, b) => a + b, 0) / window.length;
+        if (completed < 2) return "estimating…";
+        const elapsedMs = Date.now() - startTime;
+        const msPerChunk = elapsedMs / completed;
         const remaining = totalChunks - completed;
-        const rounds = Math.ceil(remaining / concurrency);
-        const etaSec = Math.max(1, Math.round((avgMs * rounds) / 1000));
+        const etaSec = Math.max(1, Math.round((msPerChunk * remaining) / 1000));
         return etaSec >= 60 ? `~${Math.ceil(etaSec / 60)}min remaining` : `~${etaSec}s remaining`;
       };
 
@@ -221,7 +219,7 @@ export default function useImportLogic() {
         while (nextChunkIndex < totalChunks) {
           const chunkIndex = nextChunkIndex++;
           const timeoutMs = 45000;
-          const chunkStart = performance.now();
+          
 
           try {
             const chunkPromise = supabase.functions.invoke("parse-pdf", {
@@ -237,7 +235,7 @@ export default function useImportLogic() {
           } catch (e) {
             chunkErrors.push(`Chunk ${chunkIndex + 1}: ${e instanceof Error ? e.message : "failed"}`);
           } finally {
-            chunkTimes.push(performance.now() - chunkStart);
+            // elapsed time tracked via startTime
             completed++;
             setPdfProgress(30 + Math.round((completed / totalChunks) * 55));
             updateStatus();
