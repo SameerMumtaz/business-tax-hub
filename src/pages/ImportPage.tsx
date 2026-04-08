@@ -51,7 +51,7 @@ export default function ImportPage() {
     toggleInclude, selectAll, deselectAll, deleteTransaction,
     toggleSort, updateCategory, visibleSuggestions, saveRule, dismissRule, saveAllRules, saveInlineRule,
     handleAudit, applyIssueSuggestion, dismissIssue, uncategorizedCount, handleImport, setStep, setTransactions,
-    incomeCount, expenseCountN, totalIncome, totalExpenseAmt, getAffectedTransactions, auditing,
+    incomeCount, expenseCountN, totalIncome, totalExpenseAmt, getAffectedTransactions, auditing, reconciliation,
   } = logic;
 
   const SortIcon = ({ field }: { field: typeof sortField }) => {
