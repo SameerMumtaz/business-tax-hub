@@ -216,6 +216,24 @@ export default function PersonalImportPage() {
           )}
         </div>
 
+        {/* Reconciliation banner */}
+        {reconciliation && reconciliation.status !== "no_reference" && (
+          <div className={`flex items-center gap-3 rounded-lg p-3 text-sm ${
+            reconciliation.status === "matched" ? "bg-chart-positive/10 text-chart-positive" : "bg-destructive/10 text-destructive"
+          }`}>
+            {reconciliation.status === "matched" ? <CheckCircle className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
+            <div className="flex-1">
+              {reconciliation.status === "matched" ? "Totals match statement" : "Totals don't match statement"}
+              {reconciliation.expectedIncome != null && (
+                <span className="ml-2 font-mono text-xs">Income: {formatCurrency(reconciliation.parsedIncome)}/{formatCurrency(reconciliation.expectedIncome)}</span>
+              )}
+              {reconciliation.expectedExpense != null && (
+                <span className="ml-2 font-mono text-xs">Expense: {formatCurrency(reconciliation.parsedExpense)}/{formatCurrency(reconciliation.expectedExpense)}</span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Review area */}
         {transactions.length > 0 && (
           <>
