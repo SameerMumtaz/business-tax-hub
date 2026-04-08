@@ -114,6 +114,11 @@ export default function ImportPage() {
               </div>
               <div className="flex gap-2 items-center flex-wrap">
                 {categorizing && <span className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Categorizing…</span>}
+                {transactions.filter((t) => t.include).length < transactions.length ? (
+                  <Button variant="outline" size="sm" onClick={selectAll}>Select All</Button>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={deselectAll}>Deselect All</Button>
+                )}
                 <Button variant="outline" onClick={handleAudit} disabled={categorizing}><ShieldAlert className="h-4 w-4 mr-2" />Quick Audit</Button>
                 <Button variant="outline" onClick={() => { setStep("upload"); setTransactions([]); }}>Cancel</Button>
                 <Button onClick={handleImport} disabled={categorizing || auditing || importing}>
