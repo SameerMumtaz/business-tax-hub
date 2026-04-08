@@ -53,11 +53,14 @@ export default function PersonalImportPage() {
   const addExpense = useAddPersonalExpense();
   const [transactions, setTransactions] = useState<ReviewTx[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [filterCat, setFilterCat] = useState("all");
   const [filterType, setFilterType] = useState("all");
   const fileRef = useRef<HTMLInputElement>(null);
+  const [reconciliation, setReconciliation] = useState<ReconciliationResult | null>(null);
 
   const handlePdfUpload = useCallback(async (file: File) => {
     setUploading(true);
