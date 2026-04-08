@@ -48,7 +48,7 @@ export default function ImportPage() {
     inlineRuleIssueIdx, setInlineRuleIssueIdx, inlineRuleKeyword, setInlineRuleKeyword, inlineRuleCategory, setInlineRuleCategory,
     currentPage, setCurrentPage, PAGE_SIZE, sortedTransactions, totalPages, pagedTransactions, transactions,
     navigateToTransaction, handleFileUpload, handleDrop, handleFileInput,
-    toggleInclude, deleteTransaction,
+    toggleInclude, selectAll, deselectAll, deleteTransaction,
     toggleSort, updateCategory, visibleSuggestions, saveRule, dismissRule, saveAllRules, saveInlineRule,
     handleAudit, applyIssueSuggestion, dismissIssue, uncategorizedCount, handleImport, setStep, setTransactions,
     incomeCount, expenseCountN, totalIncome, totalExpenseAmt, getAffectedTransactions, auditing,
