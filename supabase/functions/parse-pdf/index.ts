@@ -444,11 +444,21 @@ function structuredRegexParse(pages: PagePayload[], columns: ColumnDef[]): Parse
   const yearMatch = allText.match(/(?:statement|through|ending|period)[:\s]*\d{1,2}[\/\-]\d{1,2}[\/\-](\d{4})/i);
   const year = yearMatch?.[1] || new Date().getFullYear().toString();
 
+  let currentSection: TxType | null = null;
+
   for (const page of pages) {
     const rows = groupIntoRows(page.items);
 
     for (const row of rows) {
       const rowText = row.items.map((i) => i.str).join(" ");
+
+      // Check for section headers
+      const sectionType = detectSectionType(rowText);
+      if (sectionType) {
+        currentSection = sectionType;
+        continue;
+      }
+
       if (JUNK_RE.test(rowText)) continue;
 
       const cells: Record<string, string> = {};
@@ -470,7 +480,7 @@ function structuredRegexParse(pages: PagePayload[], columns: ColumnDef[]): Parse
       if (!desc || desc.length < 2) continue;
 
       let amount = 0;
-      let txType: TxType = "expense";
+      let txType: TxType = currentSection || "expense";
 
       if (debitCol && creditCol) {
         const debitMatch = cells["debit"]?.match(AMOUNT_RE);
@@ -481,6 +491,13 @@ function structuredRegexParse(pages: PagePayload[], columns: ColumnDef[]): Parse
         } else if (creditMatch) {
           amount = parseFloat(creditMatch[1].replace(/,/g, ""));
           txType = "income";
+        }
+      } else if (currentSection) {
+        // Section-based: use any numeric column for amount, section determines type
+        const amtMatch = (cells["debit"] || cells["amount"] || cells["credit"] || "").match(AMOUNT_RE);
+        if (amtMatch) {
+          amount = parseFloat(amtMatch[1].replace(/,/g, ""));
+          txType = currentSection;
         }
       } else if (amountCol) {
         const amtMatch = cells["amount"]?.match(AMOUNT_RE);
