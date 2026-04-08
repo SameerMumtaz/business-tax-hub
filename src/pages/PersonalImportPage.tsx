@@ -6,10 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Upload, FileText, Check, Loader2 } from "lucide-react";
+import { Upload, FileText, Check, Loader2, AlertTriangle, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
-import { extractRawItems, detectDocTypeFromItems, prescanDocument, getInitialSectionForChunk, type PageData } from "@/lib/pdfTextExtract";
+import { processStatementPdf, type ReconciliationResult } from "@/lib/pdfImportHelper";
 
 const PERSONAL_CATEGORIES = [
   "Housing", "Medical & Health", "Charitable Giving", "Education", "Childcare",
