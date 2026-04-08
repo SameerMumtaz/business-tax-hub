@@ -235,7 +235,7 @@ export default function useImportLogic() {
           } catch (e) {
             chunkErrors.push(`Chunk ${chunkIndex + 1}: ${e instanceof Error ? e.message : "failed"}`);
           } finally {
-            chunkTimes.push(performance.now() - chunkStart);
+            // elapsed time tracked via startTime
             completed++;
             setPdfProgress(30 + Math.round((completed / totalChunks) * 55));
             updateStatus();
