@@ -54,10 +54,13 @@ const HEADER_KEYWORDS: Record<string, string[]> = {
 function detectColumns(pages: PagePayload[]): ColumnDef[] {
   const candidates: { name: string; x: number; width: number }[] = [];
 
-  // Scan first 3 pages for header keywords
+  // Scan first 3 pages for header keywords — but EXCLUDE section headers
+  // like "Deposits and Other Credits" which are section dividers, not column labels.
   for (const page of pages.slice(0, 3)) {
     for (const item of page.items) {
       const lower = item.str.toLowerCase().trim();
+      // Skip items that are section headers (full-width banners)
+      if (SECTION_HEADER_RE.test(lower)) continue;
       for (const [colName, keywords] of Object.entries(HEADER_KEYWORDS)) {
         if (keywords.some((kw) => lower === kw || lower.startsWith(kw))) {
           candidates.push({ name: colName, x: item.x, width: item.width });
