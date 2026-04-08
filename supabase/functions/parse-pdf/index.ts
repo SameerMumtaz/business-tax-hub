@@ -157,6 +157,18 @@ function detectRepeatedHeaders(pages: PagePayload[]): Set<string> {
   return repeated;
 }
 
+// ─── Section Detection ──────────────────────────────────────────────────────
+
+const DEPOSIT_SECTION_RE = /\b(deposits?\s+and\s+other\s+credits?|deposits?\s+and\s+additions|deposits?\s*\/?\s*credits?|other\s+credits?|electronic\s+deposits?|direct\s+deposits?)\b/i;
+const WITHDRAWAL_SECTION_RE = /\b(withdrawals?\s+and\s+other\s+debits?|withdrawals?\s+and\s+subtractions|withdrawals?\s*\/?\s*debits?|other\s+debits?|electronic\s+withdrawals?|purchases?\s+and\s+adjustments?|checks?\s+paid|checks?\s+and\s+substitute\s+checks?)\b/i;
+const SECTION_HEADER_RE = /\b(deposits?\s+and\s+other\s+credits?|withdrawals?\s+and\s+other\s+debits?|deposits?\s+and\s+additions|withdrawals?\s+and\s+subtractions|deposits?\s*\/?\s*credits?|withdrawals?\s*\/?\s*debits?|other\s+credits?|other\s+debits?|electronic\s+deposits?|electronic\s+withdrawals?|direct\s+deposits?|purchases?\s+and\s+adjustments?|checks?\s+paid|checks?\s+and\s+substitute\s+checks?|daily\s+ledger\s+balance)\b/i;
+
+function detectSectionType(text: string): "income" | "expense" | null {
+  if (DEPOSIT_SECTION_RE.test(text)) return "income";
+  if (WITHDRAWAL_SECTION_RE.test(text)) return "expense";
+  return null;
+}
+
 // ─── Build Structured Table ─────────────────────────────────────────────────
 
 function assignColumn(item: RawItem, columns: ColumnDef[]): string {
@@ -177,12 +189,16 @@ function buildStructuredTable(pages: PagePayload[], columns: ColumnDef[]): strin
   const repeatedHeaders = detectRepeatedHeaders(pages);
   const JUNK_RE = /\b(subtotal|total for|beginning balance|ending balance|closing balance|opening balance|daily.*balance|account ending|statement period|page \d+ of \d+|continued|account number|member fdic)\b/i;
 
+  const hasDebitCol = columns.some((c) => c.name === "debit");
+  const hasCreditCol = columns.some((c) => c.name === "credit");
+  const isSectionBased = !hasCreditCol || !hasDebitCol; // If missing one, likely section-based
+
   const headerLine = "| " + columns.map((c) => c.name.charAt(0).toUpperCase() + c.name.slice(1)).join(" | ") + " |";
   const sepLine = "| " + columns.map(() => "---").join(" | ") + " |";
   const dataLines: string[] = [];
+  let currentSection: "income" | "expense" | null = null;
 
   for (const page of pages) {
-    // Filter out repeated headers/footers
     const filteredItems = page.items.filter((item) => {
       const norm = item.str.trim().toLowerCase();
       return !repeatedHeaders.has(norm);
@@ -192,8 +208,25 @@ function buildStructuredTable(pages: PagePayload[], columns: ColumnDef[]): strin
 
     for (const row of rows) {
       const rowText = row.items.map((i) => i.str).join(" ");
+
+      // Check for section headers BEFORE filtering junk
+      const sectionType = detectSectionType(rowText);
+      if (sectionType) {
+        currentSection = sectionType;
+        if (isSectionBased) {
+          // Insert section marker into output for AI context
+          const sectionLabel = sectionType === "income"
+            ? ">>> SECTION: DEPOSITS / CREDITS (type = income) <<<"
+            : ">>> SECTION: WITHDRAWALS / DEBITS (type = expense) <<<";
+          dataLines.push(sectionLabel);
+        }
+        continue;
+      }
+
       if (JUNK_RE.test(rowText)) continue;
       if (row.items.length < 2) continue;
+      // Skip rows that look like column headers repeated mid-document
+      if (/^\s*(date|trans\s*date|post\s*date)\s*$/i.test(row.items[0]?.str?.trim())) continue;
 
       const cells: Record<string, string> = {};
       for (const col of columns) cells[col.name] = "";
@@ -214,7 +247,13 @@ function buildStructuredTable(pages: PagePayload[], columns: ColumnDef[]): strin
   }
 
   if (dataLines.length === 0) return "";
-  return `${headerLine}\n${sepLine}\n${dataLines.join("\n")}`;
+
+  const hasSectionMarkers = dataLines.some((l) => l.startsWith(">>>"));
+  const preamble = hasSectionMarkers
+    ? "NOTE: This statement uses SECTION-BASED layout. Lines starting with '>>>' indicate a section change. All transactions after a section marker belong to that section type (income or expense) until the next marker.\n\n"
+    : "";
+
+  return `${preamble}${headerLine}\n${sepLine}\n${dataLines.join("\n")}`;
 }
 
 // ─── Fallback: Reconstruct text from items ──────────────────────────────────
