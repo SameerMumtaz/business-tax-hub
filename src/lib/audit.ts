@@ -169,20 +169,25 @@ export function auditSales(sales: Sale[], expenses: Expense[], matchedSaleIds?: 
     }
   }
 
-  // 2. Large outliers
+  // 2. Large outliers — use median + 2 std-dev, separate from expense threshold
   const amounts = sales.map((s) => s.amount);
-  const avg = amounts.length > 0 ? amounts.reduce((a, b) => a + b, 0) / amounts.length : 0;
-  const threshold = Math.max(avg * 5, 10000);
-  for (const s of sales.filter((s) => s.amount > threshold)) {
-    issues.push({
-      type: "anomaly", severity: "low",
-      title: `Large sale: $${s.amount.toFixed(2)}`,
-      description: `"${s.client.slice(0, 50)}" is significantly above average ($${avg.toFixed(0)}).`,
-      affected_ids: [s.id],
-      suggestion: "review",
-      suggestion_detail: "Verify this amount is correct and properly documented.",
-      dollarImpact: s.amount,
-    });
+  if (amounts.length >= 5) {
+    const sorted = [...amounts].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    const mean = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+    const stdDev = Math.sqrt(amounts.reduce((s, v) => s + (v - mean) ** 2, 0) / amounts.length);
+    const threshold = Math.max(median + 2 * stdDev, 10000);
+    for (const s of sales.filter((s) => s.amount > threshold)) {
+      issues.push({
+        type: "anomaly", severity: "low",
+        title: `Large sale: $${s.amount.toFixed(2)}`,
+        description: `"${s.client.slice(0, 50)}" is significantly above the median ($${median.toFixed(0)}).`,
+        affected_ids: [s.id],
+        suggestion: "review",
+        suggestion_detail: "Verify this amount is correct and properly documented.",
+        dollarImpact: s.amount,
+      });
+    }
   }
 
   // 3. Sales without matched invoices
