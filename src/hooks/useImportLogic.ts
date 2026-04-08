@@ -355,7 +355,7 @@ export default function useImportLogic() {
     setAuditIssues([]); setAuditSummary(""); setAuditRiskLevel(""); setAuditEstimatedTax(""); setDismissedIssues(new Set());
     const issues: AuditIssue[] = [];
     const seen = new Map<string, ReviewTransaction[]>();
-    for (const t of transactions) { if (!t.include) continue; const key = `${t.date}|${t.amount.toFixed(2)}`; const group = seen.get(key) || []; group.push(t); seen.set(key, group); }
+    for (const t of transactions) { if (!t.include) continue; const key = `${t.date}|${t.amount.toFixed(2)}|${t.description.toLowerCase().trim()}`; const group = seen.get(key) || []; group.push(t); seen.set(key, group); }
     for (const [, group] of seen) { if (group.length >= 2) issues.push({ type: "duplicate", severity: "medium", title: `Possible duplicate: ${group[0].description.slice(0, 40)}`, description: `${group.length} transactions on ${group[0].date} for $${group[0].amount.toFixed(2)} each.`, affected_ids: group.map((t) => t.id), suggestion: "review", suggestion_detail: "Review these — they may be duplicates." }); }
     const uncategorized = transactions.filter((t) => t.include && t.category === "Other" && t.type === "expense");
     if (uncategorized.length > 5) issues.push({ type: "miscategorized", severity: "medium", title: `${uncategorized.length} expenses uncategorized`, description: "Uncategorized expenses may lead to missed deductions.", affected_ids: uncategorized.slice(0, 5).map((t) => t.id), suggestion: "review", suggestion_detail: "Edit categories manually or create a rule." });
