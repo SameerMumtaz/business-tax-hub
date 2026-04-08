@@ -46,10 +46,13 @@ const HEADER_KEYWORDS: Record<string, string[]> = {
   date: ["date", "trans date", "post date", "posting date", "transaction date", "effective date"],
   description: ["description", "details", "memo", "payee", "merchant", "transaction description", "narrative"],
   debit: ["debit", "debits", "withdrawal", "withdrawals", "charges", "amount deducted", "purchases"],
-  credit: ["credit", "credits", "deposit", "deposits", "payments", "amount added"],
-  amount: ["amount", "transaction amount"],
+  credit: ["credit", "credits", "deposit", "deposits", "payments", "amount added", "payment"],
+  amount: ["transaction amount"],
   balance: ["balance", "running balance", "available balance", "ending balance", "closing balance"],
 };
+
+// When we have debit but no credit, "amount" alone is ambiguous — 
+// it might be balance, credit, or a merged column. We resolve this contextually.
 
 function detectColumns(pages: PagePayload[]): ColumnDef[] {
   const candidates: { name: string; x: number; width: number }[] = [];
