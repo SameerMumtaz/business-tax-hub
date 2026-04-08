@@ -59,6 +59,12 @@ export default function ImportPage() {
     return sortDir === "asc" ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
   };
 
+  const selectedCount = transactions.filter((t) => t.include).length;
+  const excludedCount = Math.max(0, transactions.length - selectedCount);
+  const selectedTotalsDifferFromExtraction = reconciliation
+    ? Math.abs(reconciliation.parsedIncome - totalIncome) > 0.009 || Math.abs(reconciliation.parsedExpense - totalExpenseAmt) > 0.009
+    : false;
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -112,12 +118,17 @@ export default function ImportPage() {
               }`}>
                 {reconciliation.status === "matched" ? <CheckCircle className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
                 <div className="flex-1 flex flex-wrap gap-x-4 gap-y-1">
-                  <span>{reconciliation.status === "matched" ? "Totals match statement" : "Totals don't match statement"}</span>
+                  <span>{reconciliation.status === "matched" ? "Extracted totals match statement" : "Extracted totals don't match statement"}</span>
                   {reconciliation.expectedIncome != null && (
-                    <span className="font-mono text-xs">Deposits: {formatCurrency(reconciliation.parsedIncome)} / {formatCurrency(reconciliation.expectedIncome)} expected</span>
+                    <span className="font-mono text-xs">Extracted deposits: {formatCurrency(reconciliation.parsedIncome)} / {formatCurrency(reconciliation.expectedIncome)} expected</span>
                   )}
                   {reconciliation.expectedExpense != null && (
-                    <span className="font-mono text-xs">Withdrawals: {formatCurrency(reconciliation.parsedExpense)} / {formatCurrency(reconciliation.expectedExpense)} expected</span>
+                    <span className="font-mono text-xs">Extracted withdrawals: {formatCurrency(reconciliation.parsedExpense)} / {formatCurrency(reconciliation.expectedExpense)} expected</span>
+                  )}
+                  {selectedTotalsDifferFromExtraction && (
+                    <span className="text-xs text-foreground/80">
+                      Selected import totals differ because {excludedCount} transaction{excludedCount === 1 ? " is" : "s are"} excluded from import.
+                    </span>
                   )}
                 </div>
               </div>
@@ -126,13 +137,14 @@ export default function ImportPage() {
             {/* Summary bar */}
             <div className="flex flex-wrap items-center justify-between gap-3 bg-card border rounded-lg p-4">
               <div className="flex gap-6 text-sm">
-                <div><span className="text-muted-foreground">Income:</span> <span className="font-mono text-chart-positive">{incomeCount} ({formatCurrency(totalIncome)})</span></div>
-                <div><span className="text-muted-foreground">Expenses:</span> <span className="font-mono text-chart-negative">{expenseCountN} ({formatCurrency(totalExpenseAmt)})</span></div>
+                <div><span className="text-muted-foreground">Selected income:</span> <span className="font-mono text-chart-positive">{incomeCount} ({formatCurrency(totalIncome)})</span></div>
+                <div><span className="text-muted-foreground">Selected expenses:</span> <span className="font-mono text-chart-negative">{expenseCountN} ({formatCurrency(totalExpenseAmt)})</span></div>
+                {excludedCount > 0 && <div><span className="text-muted-foreground">Excluded:</span> <span className="font-mono">{excludedCount}</span></div>}
                 {uncategorizedCount > 0 && <div><span className="text-chart-warning font-medium">{uncategorizedCount} uncategorized</span></div>}
               </div>
               <div className="flex gap-2 items-center flex-wrap">
                 {categorizing && <span className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Categorizing…</span>}
-                {transactions.filter((t) => t.include).length < transactions.length ? (
+                {selectedCount < transactions.length ? (
                   <Button variant="outline" size="sm" onClick={selectAll}>Select All</Button>
                 ) : (
                   <Button variant="outline" size="sm" onClick={deselectAll}>Deselect All</Button>
@@ -140,7 +152,7 @@ export default function ImportPage() {
                 <Button variant="outline" onClick={handleAudit} disabled={categorizing}><ShieldAlert className="h-4 w-4 mr-2" />Quick Audit</Button>
                 <Button variant="outline" onClick={() => { setStep("upload"); setTransactions([]); }}>Cancel</Button>
                 <Button onClick={handleImport} disabled={categorizing || auditing || importing || (reconciliation?.status === "mismatched")}>
-                  {importing ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importing…</> : <><ArrowRight className="h-4 w-4 mr-2" />Import {transactions.filter((t) => t.include).length} Transactions</>}
+                  {importing ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importing…</> : <><ArrowRight className="h-4 w-4 mr-2" />Import {selectedCount} Transactions</>}
                 </Button>
               </div>
               {importing && (
