@@ -186,14 +186,12 @@ export default function useImportLogic() {
         pageChunks.push(allPages.slice(i, i + PAGES_PER_CHUNK));
       }
 
-      // Parallel chunk analysis with rolling ETA
       const allTx: any[] = []; const chunkErrors: string[] = [];
-      const totalChunks = textChunks.length;
+      const totalChunks = pageChunks.length;
       const concurrency = Math.min(6, totalChunks);
       let nextChunkIndex = 0;
       let completed = 0;
       const chunkTimes: number[] = [];
-      // For ≤7 chunks, need ceil(total/2) done before showing ETA; otherwise need 4
       const etaThreshold = totalChunks <= 7 ? Math.ceil(totalChunks / 2) : 4;
 
       const getEta = () => {
@@ -219,7 +217,9 @@ export default function useImportLogic() {
           const chunkStart = performance.now();
 
           try {
-            const chunkPromise = supabase.functions.invoke("parse-pdf", { body: { text: textChunks[chunkIndex], docType } });
+            const chunkPromise = supabase.functions.invoke("parse-pdf", {
+              body: { pages: pageChunks[chunkIndex], docType },
+            });
             const timeoutPromise = new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error(`Chunk ${chunkIndex + 1} timed out after ${timeoutMs / 1000}s`)), timeoutMs)
             );
