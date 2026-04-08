@@ -94,6 +94,25 @@ function detectColumns(pages: PagePayload[]): ColumnDef[] {
 
   // Sort columns left-to-right
   columns.sort((a, b) => a.xCenter - b.xCenter);
+
+  // Disambiguation: if we have debit + amount but no credit, the "amount" column
+  // to the RIGHT of debit is almost certainly the balance column (mislabeled).
+  // Reclassify it as balance to prevent the AI from using it as transaction amounts.
+  const hasDebit = columns.some((c) => c.name === "debit");
+  const hasCredit = columns.some((c) => c.name === "credit");
+  const hasBalance = columns.some((c) => c.name === "balance");
+  if (hasDebit && !hasCredit && !hasBalance) {
+    const debitCol = columns.find((c) => c.name === "debit")!;
+    const amountCols = columns.filter((c) => c.name === "amount");
+    for (const amt of amountCols) {
+      if (amt.xCenter > debitCol.xCenter) {
+        // Rightmost numeric column after debit with no credit = likely balance
+        amt.name = "balance";
+        console.log("Reclassified rightmost 'amount' column as 'balance' (no credit column found)");
+      }
+    }
+  }
+
   return columns;
 }
 
