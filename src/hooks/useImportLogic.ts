@@ -193,20 +193,34 @@ export default function useImportLogic() {
         pageChunks.push(allPages.slice(i, i + PAGES_PER_CHUNK));
       }
 
+      const chunkWeights = pageChunks.map((chunk) =>
+        chunk.reduce((sum, page) => sum + Math.max(1, page.items.length), 0)
+      );
+      const totalWeight = chunkWeights.reduce((sum, weight) => sum + weight, 0);
+
       const allTx: any[] = []; const chunkErrors: string[] = [];
       const totalChunks = pageChunks.length;
       const concurrency = Math.min(6, totalChunks);
       let nextChunkIndex = 0;
       let completed = 0;
-      let emaMs = 0;
-      const EMA_ALPHA = 0.35;
+      let completedWeight = 0;
+      let emaMsPerWeight = 0;
+      const EMA_ALPHA = 0.25;
       const chunkStarts = new Map<number, number>();
+      const inFlight = new Set<number>();
+      const representativeWeightThreshold = chunkWeights.length > 0
+        ? [...chunkWeights].sort((a, b) => a - b)[Math.floor(chunkWeights.length / 2)]
+        : 0;
+      let representativeSampleSeen = false;
 
       const getEta = () => {
-        if (completed < 2) return "estimating…";
-        const remaining = totalChunks - completed;
-        const rounds = Math.ceil(remaining / concurrency);
-        const etaSec = Math.max(1, Math.round((emaMs * rounds) / 1000));
+        if (completed === 0 || !representativeSampleSeen || emaMsPerWeight <= 0) return "estimating…";
+        let remainingWeight = totalWeight - completedWeight;
+        for (const idx of inFlight) remainingWeight -= chunkWeights[idx] ?? 0;
+        remainingWeight = Math.max(0, remainingWeight);
+        if (remainingWeight === 0) return "<1s remaining";
+        const parallelWeight = Math.max(1, concurrency);
+        const etaSec = Math.max(1, Math.round((remainingWeight * emaMsPerWeight) / parallelWeight / 1000));
         return etaSec >= 60 ? `~${Math.ceil(etaSec / 60)}min remaining` : `~${etaSec}s remaining`;
       };
 
@@ -221,6 +235,7 @@ export default function useImportLogic() {
           const chunkIndex = nextChunkIndex++;
           const timeoutMs = 45000;
           chunkStarts.set(chunkIndex, performance.now());
+          inFlight.add(chunkIndex);
 
           try {
             const chunkPromise = supabase.functions.invoke("parse-pdf", {
@@ -237,9 +252,16 @@ export default function useImportLogic() {
             chunkErrors.push(`Chunk ${chunkIndex + 1}: ${e instanceof Error ? e.message : "failed"}`);
           } finally {
             const elapsed = performance.now() - (chunkStarts.get(chunkIndex) ?? performance.now());
+            const weight = Math.max(1, chunkWeights[chunkIndex] ?? 1);
+            const sampleMsPerWeight = elapsed / weight;
             chunkStarts.delete(chunkIndex);
-            emaMs = completed === 0 ? elapsed : emaMs * (1 - EMA_ALPHA) + elapsed * EMA_ALPHA;
+            inFlight.delete(chunkIndex);
+            representativeSampleSeen ||= weight >= representativeWeightThreshold;
+            emaMsPerWeight = emaMsPerWeight === 0
+              ? sampleMsPerWeight
+              : emaMsPerWeight * (1 - EMA_ALPHA) + sampleMsPerWeight * EMA_ALPHA;
             completed++;
+            completedWeight += weight;
             setPdfProgress(30 + Math.round((completed / totalChunks) * 55));
             updateStatus();
           }
