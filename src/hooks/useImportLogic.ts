@@ -359,6 +359,6 @@ export default function useImportLogic() {
     navigateToTransaction, handlePdfUpload, handleFileUpload, handleDrop, handleFileInput, toggleInclude, selectAll, deselectAll, deleteTransaction,
     toggleSort, updateCategory, ruleSuggestions, visibleSuggestions, saveRule, dismissRule, saveAllRules, saveInlineRule,
     handleAudit, applyIssueSuggestion, dismissIssue, uncategorizedCount, handleImport, setStep, setTransactions,
-    incomeCount, expenseCountN, totalIncome, totalExpenseAmt, getAffectedTransactions,
+    incomeCount, expenseCountN, totalIncome, totalExpenseAmt, getAffectedTransactions, reconciliation,
   };
 }
