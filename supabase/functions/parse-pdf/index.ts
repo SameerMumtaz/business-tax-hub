@@ -616,7 +616,8 @@ async function processStructuredPages(pages: PagePayload[]): Promise<{ transacti
       const truncated = table.length > 80000 ? table.slice(0, 80000) : table;
 
       try {
-        transactions = await parseWithAI(truncated, true);
+        const colNames = columns.map((c) => c.name);
+        transactions = await parseWithAI(truncated, true, colNames);
         console.log(`AI structured parser returned ${transactions.length} transactions`);
       } catch (aiErr) {
         const errMsg = aiErr instanceof Error ? aiErr.message : "Unknown";
