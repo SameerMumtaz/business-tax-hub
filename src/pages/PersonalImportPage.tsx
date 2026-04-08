@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Upload, FileText, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { extractRawItems, detectDocTypeFromItems, type PageData } from "@/lib/pdfTextExtract";
+import { extractRawItems, detectDocTypeFromItems, prescanDocument, getInitialSectionForChunk, type PageData } from "@/lib/pdfTextExtract";
 
 const PERSONAL_CATEGORIES = [
   "Housing", "Medical & Health", "Charitable Giving", "Education", "Childcare",
@@ -80,7 +80,9 @@ export default function PersonalImportPage() {
 
       const docType = detectDocTypeFromItems(allPages);
 
-      // Chunk by page groups (6 pages per chunk) with parallel processing
+      // Pre-scan entire document for columns and section boundaries BEFORE chunking
+      const prescan = prescanDocument(allPages);
+
       const PAGES_PER_CHUNK = 6;
       const pageChunks: PageData[][] = [];
       for (let i = 0; i < allPages.length; i += PAGES_PER_CHUNK) {
@@ -94,8 +96,15 @@ export default function PersonalImportPage() {
       const worker = async () => {
         while (nextIdx < pageChunks.length) {
           const idx = nextIdx++;
+          const chunkStartPage = pageChunks[idx][0]?.pageNum || 1;
+          const initialSection = getInitialSectionForChunk(chunkStartPage, prescan.sectionBoundaries);
           const { data, error } = await supabase.functions.invoke("parse-pdf", {
-            body: { pages: pageChunks[idx], docType },
+            body: {
+              pages: pageChunks[idx],
+              docType,
+              detectedColumns: prescan.columns,
+              initialSection,
+            },
           });
           if (error) throw error;
           if (data?.transactions?.length) allTx.push(...data.transactions);
