@@ -198,14 +198,15 @@ export default function useImportLogic() {
       const concurrency = Math.min(6, totalChunks);
       let nextChunkIndex = 0;
       let completed = 0;
-      const startTime = Date.now();
+      let emaMs = 0;
+      const EMA_ALPHA = 0.35;
+      const chunkStarts = new Map<number, number>();
 
       const getEta = () => {
         if (completed < 2) return "estimating…";
-        const elapsedMs = Date.now() - startTime;
-        const msPerChunk = elapsedMs / completed;
         const remaining = totalChunks - completed;
-        const etaSec = Math.max(1, Math.round((msPerChunk * remaining) / 1000));
+        const rounds = Math.ceil(remaining / concurrency);
+        const etaSec = Math.max(1, Math.round((emaMs * rounds) / 1000));
         return etaSec >= 60 ? `~${Math.ceil(etaSec / 60)}min remaining` : `~${etaSec}s remaining`;
       };
 
@@ -219,7 +220,7 @@ export default function useImportLogic() {
         while (nextChunkIndex < totalChunks) {
           const chunkIndex = nextChunkIndex++;
           const timeoutMs = 45000;
-          
+          chunkStarts.set(chunkIndex, performance.now());
 
           try {
             const chunkPromise = supabase.functions.invoke("parse-pdf", {
@@ -235,7 +236,9 @@ export default function useImportLogic() {
           } catch (e) {
             chunkErrors.push(`Chunk ${chunkIndex + 1}: ${e instanceof Error ? e.message : "failed"}`);
           } finally {
-            // elapsed time tracked via startTime
+            const elapsed = performance.now() - (chunkStarts.get(chunkIndex) ?? performance.now());
+            chunkStarts.delete(chunkIndex);
+            emaMs = completed === 0 ? elapsed : emaMs * (1 - EMA_ALPHA) + elapsed * EMA_ALPHA;
             completed++;
             setPdfProgress(30 + Math.round((completed / totalChunks) * 55));
             updateStatus();
