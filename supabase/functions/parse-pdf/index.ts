@@ -46,22 +46,21 @@ const HEADER_KEYWORDS: Record<string, string[]> = {
   date: ["date", "trans date", "post date", "posting date", "transaction date", "effective date"],
   description: ["description", "details", "memo", "payee", "merchant", "transaction description", "narrative"],
   debit: ["debit", "debits", "withdrawal", "withdrawals", "charges", "amount deducted", "purchases"],
-  credit: ["credit", "credits", "deposit", "deposits", "amount added"],
+  credit: ["credit", "credits", "deposit", "deposits", "payments", "amount added"],
   amount: ["amount", "transaction amount"],
   balance: ["balance", "running balance", "available balance", "ending balance", "closing balance"],
 };
 
-// Priority order for keyword matching — more specific names win over generic ones.
-// "payment" and "payments" are intentionally excluded from keywords because they appear
-// in both debit contexts ("payment to") and credit contexts ("payment received").
-
 function detectColumns(pages: PagePayload[]): ColumnDef[] {
   const candidates: { name: string; x: number; width: number }[] = [];
 
-  // Scan first 3 pages for header keywords
+  // Scan first 3 pages for header keywords — but EXCLUDE section headers
+  // like "Deposits and Other Credits" which are section dividers, not column labels.
   for (const page of pages.slice(0, 3)) {
     for (const item of page.items) {
       const lower = item.str.toLowerCase().trim();
+      // Skip items that are section headers (full-width banners)
+      if (SECTION_HEADER_RE.test(lower)) continue;
       for (const [colName, keywords] of Object.entries(HEADER_KEYWORDS)) {
         if (keywords.some((kw) => lower === kw || lower.startsWith(kw))) {
           candidates.push({ name: colName, x: item.x, width: item.width });
@@ -94,25 +93,6 @@ function detectColumns(pages: PagePayload[]): ColumnDef[] {
 
   // Sort columns left-to-right
   columns.sort((a, b) => a.xCenter - b.xCenter);
-
-  // Disambiguation: if we have debit + amount but no credit, the "amount" column
-  // to the RIGHT of debit is almost certainly the balance column (mislabeled).
-  // Reclassify it as balance to prevent the AI from using it as transaction amounts.
-  const hasDebit = columns.some((c) => c.name === "debit");
-  const hasCredit = columns.some((c) => c.name === "credit");
-  const hasBalance = columns.some((c) => c.name === "balance");
-  if (hasDebit && !hasCredit && !hasBalance) {
-    const debitCol = columns.find((c) => c.name === "debit")!;
-    const amountCols = columns.filter((c) => c.name === "amount");
-    for (const amt of amountCols) {
-      if (amt.xCenter > debitCol.xCenter) {
-        // Rightmost numeric column after debit with no credit = likely balance
-        amt.name = "balance";
-        console.log("Reclassified rightmost 'amount' column as 'balance' (no credit column found)");
-      }
-    }
-  }
-
   return columns;
 }
 
@@ -180,6 +160,18 @@ function detectRepeatedHeaders(pages: PagePayload[]): Set<string> {
   return repeated;
 }
 
+// ─── Section Detection ──────────────────────────────────────────────────────
+
+const DEPOSIT_SECTION_RE = /\b(deposits?\s+and\s+other\s+credits?|deposits?\s+and\s+additions|deposits?\s*\/?\s*credits?|other\s+credits?|electronic\s+deposits?|direct\s+deposits?)\b/i;
+const WITHDRAWAL_SECTION_RE = /\b(withdrawals?\s+and\s+other\s+debits?|withdrawals?\s+and\s+subtractions|withdrawals?\s*\/?\s*debits?|other\s+debits?|electronic\s+withdrawals?|purchases?\s+and\s+adjustments?|checks?\s+paid|checks?\s+and\s+substitute\s+checks?)\b/i;
+const SECTION_HEADER_RE = /\b(deposits?\s+and\s+other\s+credits?|withdrawals?\s+and\s+other\s+debits?|deposits?\s+and\s+additions|withdrawals?\s+and\s+subtractions|deposits?\s*\/?\s*credits?|withdrawals?\s*\/?\s*debits?|other\s+credits?|other\s+debits?|electronic\s+deposits?|electronic\s+withdrawals?|direct\s+deposits?|purchases?\s+and\s+adjustments?|checks?\s+paid|checks?\s+and\s+substitute\s+checks?|daily\s+ledger\s+balance)\b/i;
+
+function detectSectionType(text: string): "income" | "expense" | null {
+  if (DEPOSIT_SECTION_RE.test(text)) return "income";
+  if (WITHDRAWAL_SECTION_RE.test(text)) return "expense";
+  return null;
+}
+
 // ─── Build Structured Table ─────────────────────────────────────────────────
 
 function assignColumn(item: RawItem, columns: ColumnDef[]): string {
@@ -200,12 +192,16 @@ function buildStructuredTable(pages: PagePayload[], columns: ColumnDef[]): strin
   const repeatedHeaders = detectRepeatedHeaders(pages);
   const JUNK_RE = /\b(subtotal|total for|beginning balance|ending balance|closing balance|opening balance|daily.*balance|account ending|statement period|page \d+ of \d+|continued|account number|member fdic)\b/i;
 
+  const hasDebitCol = columns.some((c) => c.name === "debit");
+  const hasCreditCol = columns.some((c) => c.name === "credit");
+  const isSectionBased = !hasCreditCol || !hasDebitCol; // If missing one, likely section-based
+
   const headerLine = "| " + columns.map((c) => c.name.charAt(0).toUpperCase() + c.name.slice(1)).join(" | ") + " |";
   const sepLine = "| " + columns.map(() => "---").join(" | ") + " |";
   const dataLines: string[] = [];
+  let currentSection: "income" | "expense" | null = null;
 
   for (const page of pages) {
-    // Filter out repeated headers/footers
     const filteredItems = page.items.filter((item) => {
       const norm = item.str.trim().toLowerCase();
       return !repeatedHeaders.has(norm);
@@ -215,8 +211,25 @@ function buildStructuredTable(pages: PagePayload[], columns: ColumnDef[]): strin
 
     for (const row of rows) {
       const rowText = row.items.map((i) => i.str).join(" ");
+
+      // Check for section headers BEFORE filtering junk
+      const sectionType = detectSectionType(rowText);
+      if (sectionType) {
+        currentSection = sectionType;
+        if (isSectionBased) {
+          // Insert section marker into output for AI context
+          const sectionLabel = sectionType === "income"
+            ? ">>> SECTION: DEPOSITS / CREDITS (type = income) <<<"
+            : ">>> SECTION: WITHDRAWALS / DEBITS (type = expense) <<<";
+          dataLines.push(sectionLabel);
+        }
+        continue;
+      }
+
       if (JUNK_RE.test(rowText)) continue;
       if (row.items.length < 2) continue;
+      // Skip rows that look like column headers repeated mid-document
+      if (/^\s*(date|trans\s*date|post\s*date)\s*$/i.test(row.items[0]?.str?.trim())) continue;
 
       const cells: Record<string, string> = {};
       for (const col of columns) cells[col.name] = "";
@@ -237,7 +250,13 @@ function buildStructuredTable(pages: PagePayload[], columns: ColumnDef[]): strin
   }
 
   if (dataLines.length === 0) return "";
-  return `${headerLine}\n${sepLine}\n${dataLines.join("\n")}`;
+
+  const hasSectionMarkers = dataLines.some((l) => l.startsWith(">>>"));
+  const preamble = hasSectionMarkers
+    ? "NOTE: This statement uses SECTION-BASED layout. Lines starting with '>>>' indicate a section change. All transactions after a section marker belong to that section type (income or expense) until the next marker.\n\n"
+    : "";
+
+  return `${preamble}${headerLine}\n${sepLine}\n${dataLines.join("\n")}`;
 }
 
 // ─── Fallback: Reconstruct text from items ──────────────────────────────────
@@ -277,34 +296,27 @@ async function parseWithAI(input: string, isStructured: boolean, columnNames?: s
   if (isStructured && columnNames) {
     const hasDebit = columnNames.includes("debit");
     const hasCredit = columnNames.includes("credit");
-    const hasAmount = columnNames.includes("amount");
     const hasBalance = columnNames.includes("balance");
+    const hasSectionMarkers = input.includes(">>> SECTION:");
 
     const colList = columnNames.map((n) => n.charAt(0).toUpperCase() + n.slice(1)).join(", ");
 
-    let typeRules = "";
-    if (hasDebit && hasCredit) {
+    let typeRules: string;
+
+    if (hasSectionMarkers) {
+      typeRules = `- This statement uses a SECTION-BASED layout with section markers like ">>> SECTION: DEPOSITS / CREDITS (type = income) <<<" and ">>> SECTION: WITHDRAWALS / DEBITS (type = expense) <<<".
+- ALL transactions after a "DEPOSITS / CREDITS" marker are type = "income" until the next section marker.
+- ALL transactions after a "WITHDRAWALS / DEBITS" marker are type = "expense" until the next section marker.
+- The section marker determines the type — do NOT guess from the description.
+- Use the Amount/Debit column value for the transaction amount (always output as positive number).`;
+    } else if (hasDebit && hasCredit) {
       typeRules = `- This table has SEPARATE Debit and Credit columns.
-- If a row has a value in the Debit column → type = "expense" (money leaving the account)
-- If a row has a value in the Credit column → type = "income" (money entering the account)
-- Use the amount from whichever column (Debit or Credit) has the value. The other will be empty.
-- Do NOT use the Balance column for the transaction amount.`;
-    } else if (hasDebit && !hasCredit && hasAmount) {
-      typeRules = `- This table has a Debit column and a separate Amount column.
-- The Debit column shows withdrawals/expenses. The Amount column may show credits/deposits OR be a combined column.
-- If a row has a value in Debit → type = "expense", use the Debit amount
-- If a row has NO value in Debit but has a value in Amount → type = "income", use the Amount value
-- Do NOT use Balance for transaction amounts.`;
-    } else if (hasDebit && !hasCredit && !hasAmount) {
-      typeRules = `- This table has only a Debit column (no separate Credit column).
-- All values in the Debit column are expenses (type = "expense").
-- If a row has no debit value, skip it — there's no way to determine the credit amount.`;
-    } else if (!hasDebit && !hasCredit && hasAmount) {
-      typeRules = `- This table has a single Amount column (no separate Debit/Credit).
-- Determine type from the description context:
-  - Deposits, refunds, transfers in, payroll, direct deposit → type = "income"
-  - All other transactions (purchases, payments, fees, charges) → type = "expense"
-- If the amount is negative, it is an expense. If positive, determine from context.`;
+- If a row has a value in the Debit column → type = "expense"
+- If a row has a value in the Credit column → type = "income"
+- Use the amount from whichever column has the value.`;
+    } else if (hasDebit && !hasCredit) {
+      typeRules = `- This table has only a Debit column. All amounts are expenses (type = "expense").
+- If a deposit/credit appears, it should be rare — classify based on description context.`;
     } else {
       typeRules = `- Determine type from context: deposits/credits/refunds = "income", withdrawals/debits/purchases = "expense".`;
     }
@@ -318,8 +330,8 @@ ${typeRules}
 CRITICAL RULES:
 - Extract ONLY actual transactions (purchases, payments, deposits, withdrawals, transfers)
 ${hasBalance ? "- IGNORE the Balance column — it shows running totals, NOT transaction amounts" : ""}
-- IGNORE subtotals, section totals, summary rows, daily balance rows, statement summaries
-- The "amount" field in your output must ALWAYS be a positive number
+- IGNORE subtotals, section totals, summary rows, daily balance rows
+- The "amount" field must ALWAYS be a positive number
 - Clean merchant names: remove reference numbers, card masks (XXXX1234), internal codes
 - Infer the full year (YYYY) from statement context if dates only show month/day
 - Each row with a date is ONE transaction — do not skip or merge rows`;
@@ -328,9 +340,9 @@ ${hasBalance ? "- IGNORE the Balance column — it shows running totals, NOT tra
 
 CRITICAL RULES:
 - deposits/credits/refunds/payments received = type "income"
-- withdrawals/debits/purchases/payments made/fees = type "expense"  
+- withdrawals/debits/purchases/payments made/fees = type "expense"
 - amount must always be a positive number
-- Clean merchant names: remove reference numbers, card masks, internal codes`;
+- Clean merchant names`;
   }
 
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -351,7 +363,7 @@ CRITICAL RULES:
           function: {
             name: "extract_transactions",
             description:
-              "Extract all individual financial transactions. Skip subtotals, running balances, section headers, account summaries, daily balances, and totals. Only include actual purchases, payments, deposits, withdrawals, and transfers.",
+              "Extract all individual financial transactions. Skip subtotals, running balances, section headers, account summaries, daily balances, and totals.",
             parameters: {
               type: "object",
               properties: {
@@ -360,23 +372,10 @@ CRITICAL RULES:
                   items: {
                     type: "object",
                     properties: {
-                      date: {
-                        type: "string",
-                        description: "Transaction date in YYYY-MM-DD format.",
-                      },
-                      description: {
-                        type: "string",
-                        description: "Cleaned merchant/payee name. Remove reference numbers, card numbers, and internal codes.",
-                      },
-                      amount: {
-                        type: "number",
-                        description: "Transaction amount as a POSITIVE number. Never use the balance column value.",
-                      },
-                      type: {
-                        type: "string",
-                        enum: ["income", "expense"],
-                        description: "Based on column position: Debit column = expense, Credit column = income. For single Amount column: deposits/credits/refunds = income, everything else = expense.",
-                      },
+                      date: { type: "string", description: "Transaction date in YYYY-MM-DD format." },
+                      description: { type: "string", description: "Cleaned merchant/payee name." },
+                      amount: { type: "number", description: "Transaction amount as a POSITIVE number. Never use the balance column." },
+                      type: { type: "string", enum: ["income", "expense"], description: "Based on section headers or column position. Debit/withdrawal section = expense. Credit/deposit section = income." },
                     },
                     required: ["date", "description", "amount", "type"],
                     additionalProperties: false,
@@ -445,11 +444,21 @@ function structuredRegexParse(pages: PagePayload[], columns: ColumnDef[]): Parse
   const yearMatch = allText.match(/(?:statement|through|ending|period)[:\s]*\d{1,2}[\/\-]\d{1,2}[\/\-](\d{4})/i);
   const year = yearMatch?.[1] || new Date().getFullYear().toString();
 
+  let currentSection: TxType | null = null;
+
   for (const page of pages) {
     const rows = groupIntoRows(page.items);
 
     for (const row of rows) {
       const rowText = row.items.map((i) => i.str).join(" ");
+
+      // Check for section headers
+      const sectionType = detectSectionType(rowText);
+      if (sectionType) {
+        currentSection = sectionType;
+        continue;
+      }
+
       if (JUNK_RE.test(rowText)) continue;
 
       const cells: Record<string, string> = {};
@@ -471,7 +480,7 @@ function structuredRegexParse(pages: PagePayload[], columns: ColumnDef[]): Parse
       if (!desc || desc.length < 2) continue;
 
       let amount = 0;
-      let txType: TxType = "expense";
+      let txType: TxType = currentSection || "expense";
 
       if (debitCol && creditCol) {
         const debitMatch = cells["debit"]?.match(AMOUNT_RE);
@@ -482,6 +491,13 @@ function structuredRegexParse(pages: PagePayload[], columns: ColumnDef[]): Parse
         } else if (creditMatch) {
           amount = parseFloat(creditMatch[1].replace(/,/g, ""));
           txType = "income";
+        }
+      } else if (currentSection) {
+        // Section-based: use any numeric column for amount, section determines type
+        const amtMatch = (cells["debit"] || cells["amount"] || cells["credit"] || "").match(AMOUNT_RE);
+        if (amtMatch) {
+          amount = parseFloat(amtMatch[1].replace(/,/g, ""));
+          txType = currentSection;
         }
       } else if (amountCol) {
         const amtMatch = cells["amount"]?.match(AMOUNT_RE);

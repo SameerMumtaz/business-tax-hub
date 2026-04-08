@@ -193,34 +193,19 @@ export default function useImportLogic() {
         pageChunks.push(allPages.slice(i, i + PAGES_PER_CHUNK));
       }
 
-      const chunkWeights = pageChunks.map((chunk) =>
-        chunk.reduce((sum, page) => sum + Math.max(1, page.items.length), 0)
-      );
-      const totalWeight = chunkWeights.reduce((sum, weight) => sum + weight, 0);
-
       const allTx: any[] = []; const chunkErrors: string[] = [];
       const totalChunks = pageChunks.length;
       const concurrency = Math.min(6, totalChunks);
       let nextChunkIndex = 0;
       let completed = 0;
-      let completedWeight = 0;
-      let emaMsPerWeight = 0;
-      const EMA_ALPHA = 0.25;
-      const chunkStarts = new Map<number, number>();
-      const inFlight = new Set<number>();
-      const representativeWeightThreshold = chunkWeights.length > 0
-        ? [...chunkWeights].sort((a, b) => a - b)[Math.floor(chunkWeights.length / 2)]
-        : 0;
-      let representativeSampleSeen = false;
+      const startTime = Date.now();
 
       const getEta = () => {
-        if (completed === 0 || !representativeSampleSeen || emaMsPerWeight <= 0) return "estimating…";
-        let remainingWeight = totalWeight - completedWeight;
-        for (const idx of inFlight) remainingWeight -= chunkWeights[idx] ?? 0;
-        remainingWeight = Math.max(0, remainingWeight);
-        if (remainingWeight === 0) return "<1s remaining";
-        const parallelWeight = Math.max(1, concurrency);
-        const etaSec = Math.max(1, Math.round((remainingWeight * emaMsPerWeight) / parallelWeight / 1000));
+        if (completed < 2) return "estimating…";
+        const elapsedMs = Date.now() - startTime;
+        const msPerChunk = elapsedMs / completed;
+        const remaining = totalChunks - completed;
+        const etaSec = Math.max(1, Math.round((msPerChunk * remaining) / 1000));
         return etaSec >= 60 ? `~${Math.ceil(etaSec / 60)}min remaining` : `~${etaSec}s remaining`;
       };
 
@@ -234,8 +219,7 @@ export default function useImportLogic() {
         while (nextChunkIndex < totalChunks) {
           const chunkIndex = nextChunkIndex++;
           const timeoutMs = 45000;
-          chunkStarts.set(chunkIndex, performance.now());
-          inFlight.add(chunkIndex);
+          
 
           try {
             const chunkPromise = supabase.functions.invoke("parse-pdf", {
@@ -251,17 +235,8 @@ export default function useImportLogic() {
           } catch (e) {
             chunkErrors.push(`Chunk ${chunkIndex + 1}: ${e instanceof Error ? e.message : "failed"}`);
           } finally {
-            const elapsed = performance.now() - (chunkStarts.get(chunkIndex) ?? performance.now());
-            const weight = Math.max(1, chunkWeights[chunkIndex] ?? 1);
-            const sampleMsPerWeight = elapsed / weight;
-            chunkStarts.delete(chunkIndex);
-            inFlight.delete(chunkIndex);
-            representativeSampleSeen ||= weight >= representativeWeightThreshold;
-            emaMsPerWeight = emaMsPerWeight === 0
-              ? sampleMsPerWeight
-              : emaMsPerWeight * (1 - EMA_ALPHA) + sampleMsPerWeight * EMA_ALPHA;
+            // elapsed time tracked via startTime
             completed++;
-            completedWeight += weight;
             setPdfProgress(30 + Math.round((completed / totalChunks) * 55));
             updateStatus();
           }
@@ -378,7 +353,7 @@ export default function useImportLogic() {
     setAuditIssues([]); setAuditSummary(""); setAuditRiskLevel(""); setAuditEstimatedTax(""); setDismissedIssues(new Set());
     const issues: AuditIssue[] = [];
     const seen = new Map<string, ReviewTransaction[]>();
-    for (const t of transactions) { if (!t.include) continue; const key = `${t.date}|${t.amount.toFixed(2)}|${t.description.toLowerCase().trim()}`; const group = seen.get(key) || []; group.push(t); seen.set(key, group); }
+    for (const t of transactions) { if (!t.include) continue; const key = `${t.date}|${t.amount.toFixed(2)}`; const group = seen.get(key) || []; group.push(t); seen.set(key, group); }
     for (const [, group] of seen) { if (group.length >= 2) issues.push({ type: "duplicate", severity: "medium", title: `Possible duplicate: ${group[0].description.slice(0, 40)}`, description: `${group.length} transactions on ${group[0].date} for $${group[0].amount.toFixed(2)} each.`, affected_ids: group.map((t) => t.id), suggestion: "review", suggestion_detail: "Review these — they may be duplicates." }); }
     const uncategorized = transactions.filter((t) => t.include && t.category === "Other" && t.type === "expense");
     if (uncategorized.length > 5) issues.push({ type: "miscategorized", severity: "medium", title: `${uncategorized.length} expenses uncategorized`, description: "Uncategorized expenses may lead to missed deductions.", affected_ids: uncategorized.slice(0, 5).map((t) => t.id), suggestion: "review", suggestion_detail: "Edit categories manually or create a rule." });
