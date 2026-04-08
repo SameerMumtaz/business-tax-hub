@@ -64,63 +64,19 @@ export default function PersonalImportPage() {
 
   const handlePdfUpload = useCallback(async (file: File) => {
     setUploading(true);
+    setReconciliation(null);
     try {
-      const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
-      const buf = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-      const numPages = Math.min(pdf.numPages, 50);
-      const allPages: PageData[] = [];
-      for (let p = 1; p <= numPages; p++) {
-        const page = await pdf.getPage(p);
-        const content = await page.getTextContent();
-        const viewport = page.getViewport({ scale: 1 });
-        const pageData = extractRawItems(content.items, { width: viewport.width, height: viewport.height });
-        pageData.pageNum = p;
-        allPages.push(pageData);
-      }
+      const result = await processStatementPdf(file, (status, percent) => {
+        setUploadStatus(status);
+        setUploadProgress(percent);
+      });
 
-      const docType = detectDocTypeFromItems(allPages);
-
-      // Pre-scan entire document for columns and section boundaries BEFORE chunking
-      const prescan = prescanDocument(allPages);
-
-      const PAGES_PER_CHUNK = 6;
-      const pageChunks: PageData[][] = [];
-      for (let i = 0; i < allPages.length; i += PAGES_PER_CHUNK) {
-        pageChunks.push(allPages.slice(i, i + PAGES_PER_CHUNK));
-      }
-
-      const allTx: any[] = [];
-      const concurrency = Math.min(6, pageChunks.length);
-      let nextIdx = 0;
-
-      const worker = async () => {
-        while (nextIdx < pageChunks.length) {
-          const idx = nextIdx++;
-          const chunkStartPage = pageChunks[idx][0]?.pageNum || 1;
-          const initialSection = getInitialSectionForChunk(chunkStartPage, prescan.sectionBoundaries);
-          const { data, error } = await supabase.functions.invoke("parse-pdf", {
-            body: {
-              pages: pageChunks[idx],
-              docType,
-              detectedColumns: prescan.columns,
-              initialSection,
-            },
-          });
-          if (error) throw error;
-          if (data?.transactions?.length) allTx.push(...data.transactions);
-        }
-      };
-
-      await Promise.all(Array.from({ length: concurrency }, () => worker()));
-
-      if (allTx.length === 0) {
+      if (result.transactions.length === 0) {
         toast.error("No transactions found in PDF");
         return;
       }
 
-      const parsed: ReviewTx[] = allTx.map((t: any, i: number) => {
+      const parsed: ReviewTx[] = result.transactions.map((t, i) => {
         const cat = autoCategorize(t.description);
         return {
           id: `imp-${i}-${Date.now()}`,
@@ -144,11 +100,16 @@ export default function PersonalImportPage() {
       });
 
       setTransactions(parsed);
-      toast.success(`Extracted ${parsed.length} transactions`);
+      setReconciliation(result.reconciliation);
+
+      const reconMsg = result.reconciliation.status === "matched" ? " ✓ Reconciled" : result.reconciliation.status === "mismatched" ? " ⚠ Totals mismatch" : "";
+      toast.success(`Extracted ${parsed.length} transactions${reconMsg}`);
     } catch (e: any) {
       toast.error(e.message || "Failed to parse PDF");
     } finally {
       setUploading(false);
+      setUploadStatus("");
+      setUploadProgress(0);
     }
   }, [existingExpenses]);
 
