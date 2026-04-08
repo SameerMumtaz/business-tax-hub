@@ -244,12 +244,12 @@ export async function processStatementPdf(
 
   let reconciliation: ReconciliationResult;
   if (summary.depositTotal != null || summary.withdrawalTotal != null) {
-    const tolerance = 0.05; // 5% tolerance for vision extraction
+    const toleranceDollars = 1; // Fail closed unless totals are effectively exact
     const incomeMatch = summary.depositTotal != null
-      ? Math.abs(incomeTotal - summary.depositTotal) / Math.max(summary.depositTotal, 1) <= tolerance
+      ? Math.abs(incomeTotal - summary.depositTotal) <= toleranceDollars
       : true;
     const expenseMatch = summary.withdrawalTotal != null
-      ? Math.abs(expenseTotal - summary.withdrawalTotal) / Math.max(summary.withdrawalTotal, 1) <= tolerance
+      ? Math.abs(expenseTotal - summary.withdrawalTotal) <= toleranceDollars
       : true;
 
     reconciliation = {

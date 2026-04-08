@@ -144,7 +144,12 @@ export default function PersonalImportPage() {
   }, [transactions, filterCat, filterType]);
 
   const included = transactions.filter((t) => t.include);
+  const excludedCount = Math.max(0, transactions.length - included.length);
   const totalToImport = included.reduce((s, t) => s + t.amount, 0);
+  const selectedTotalsDifferFromExtraction = reconciliation
+    ? Math.abs(reconciliation.parsedIncome - included.filter((t) => t.type === "income").reduce((sum, t) => sum + t.amount, 0)) > 0.009 ||
+      Math.abs(reconciliation.parsedExpense - included.filter((t) => t.type === "expense").reduce((sum, t) => sum + t.amount, 0)) > 0.009
+    : false;
 
   const handleImport = async () => {
     if (included.length === 0) { toast.error("No transactions selected"); return; }
@@ -222,13 +227,20 @@ export default function PersonalImportPage() {
             reconciliation.status === "matched" ? "bg-chart-positive/10 text-chart-positive" : "bg-destructive/10 text-destructive"
           }`}>
             {reconciliation.status === "matched" ? <CheckCircle className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
-            <div className="flex-1">
-              {reconciliation.status === "matched" ? "Totals match statement" : "Totals don't match statement"}
+            <div className="flex-1 space-y-1">
+              <div>
+                {reconciliation.status === "matched" ? "Extracted totals match statement" : "Extracted totals don't match statement"}
+              </div>
               {reconciliation.expectedIncome != null && (
-                <span className="ml-2 font-mono text-xs">Income: {formatCurrency(reconciliation.parsedIncome)}/{formatCurrency(reconciliation.expectedIncome)}</span>
+                <span className="mr-3 font-mono text-xs">Extracted deposits: {formatCurrency(reconciliation.parsedIncome)}/{formatCurrency(reconciliation.expectedIncome)}</span>
               )}
               {reconciliation.expectedExpense != null && (
-                <span className="ml-2 font-mono text-xs">Expense: {formatCurrency(reconciliation.parsedExpense)}/{formatCurrency(reconciliation.expectedExpense)}</span>
+                <span className="font-mono text-xs">Extracted withdrawals: {formatCurrency(reconciliation.parsedExpense)}/{formatCurrency(reconciliation.expectedExpense)}</span>
+              )}
+              {selectedTotalsDifferFromExtraction && (
+                <div className="text-xs text-foreground/80">
+                  Import totals differ because {excludedCount} transaction{excludedCount === 1 ? " is" : "s are"} excluded from this import.
+                </div>
               )}
             </div>
           </div>
