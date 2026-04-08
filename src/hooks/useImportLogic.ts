@@ -98,6 +98,7 @@ export default function useImportLogic() {
   const [pdfStatus, setPdfStatus] = useState("");
   const [pdfProgress, setPdfProgress] = useState(0);
   const pdfInputRef = useRef<HTMLInputElement>(null);
+  const [reconciliation, setReconciliation] = useState<ReconciliationResult | null>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const highlightedRowRef = useRef<HTMLTableRowElement>(null);
   const [inlineRuleIssueIdx, setInlineRuleIssueIdx] = useState<number | null>(null);
