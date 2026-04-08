@@ -186,6 +186,10 @@ export default function useImportLogic() {
 
       const docType = detectDocTypeFromItems(allPages);
 
+      // Pre-scan entire document for columns and section boundaries BEFORE chunking
+      const prescan = prescanDocument(allPages);
+      console.log(`Pre-scan: ${prescan.columns.length} columns (${prescan.columns.map(c => c.name).join(", ")}), ${prescan.sectionBoundaries.length} section boundaries`);
+
       // Chunk by page groups (6 pages per chunk)
       const PAGES_PER_CHUNK = 6;
       const pageChunks: PageData[][] = [];
@@ -220,6 +224,9 @@ export default function useImportLogic() {
           const chunkIndex = nextChunkIndex++;
           const timeoutMs = 45000;
           
+          // Determine initial section for this chunk based on global pre-scan
+          const chunkStartPage = pageChunks[chunkIndex][0]?.pageNum || 1;
+          const initialSection = getInitialSectionForChunk(chunkStartPage, prescan.sectionBoundaries);
 
           try {
             const chunkPromise = supabase.functions.invoke("parse-pdf", {
