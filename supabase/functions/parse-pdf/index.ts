@@ -46,13 +46,14 @@ const HEADER_KEYWORDS: Record<string, string[]> = {
   date: ["date", "trans date", "post date", "posting date", "transaction date", "effective date"],
   description: ["description", "details", "memo", "payee", "merchant", "transaction description", "narrative"],
   debit: ["debit", "debits", "withdrawal", "withdrawals", "charges", "amount deducted", "purchases"],
-  credit: ["credit", "credits", "deposit", "deposits", "payments", "amount added", "payment"],
-  amount: ["transaction amount"],
+  credit: ["credit", "credits", "deposit", "deposits", "amount added"],
+  amount: ["amount", "transaction amount"],
   balance: ["balance", "running balance", "available balance", "ending balance", "closing balance"],
 };
 
-// When we have debit but no credit, "amount" alone is ambiguous — 
-// it might be balance, credit, or a merged column. We resolve this contextually.
+// Priority order for keyword matching — more specific names win over generic ones.
+// "payment" and "payments" are intentionally excluded from keywords because they appear
+// in both debit contexts ("payment to") and credit contexts ("payment received").
 
 function detectColumns(pages: PagePayload[]): ColumnDef[] {
   const candidates: { name: string; x: number; width: number }[] = [];
@@ -93,6 +94,25 @@ function detectColumns(pages: PagePayload[]): ColumnDef[] {
 
   // Sort columns left-to-right
   columns.sort((a, b) => a.xCenter - b.xCenter);
+
+  // Disambiguation: if we have debit + amount but no credit, the "amount" column
+  // to the RIGHT of debit is almost certainly the balance column (mislabeled).
+  // Reclassify it as balance to prevent the AI from using it as transaction amounts.
+  const hasDebit = columns.some((c) => c.name === "debit");
+  const hasCredit = columns.some((c) => c.name === "credit");
+  const hasBalance = columns.some((c) => c.name === "balance");
+  if (hasDebit && !hasCredit && !hasBalance) {
+    const debitCol = columns.find((c) => c.name === "debit")!;
+    const amountCols = columns.filter((c) => c.name === "amount");
+    for (const amt of amountCols) {
+      if (amt.xCenter > debitCol.xCenter) {
+        // Rightmost numeric column after debit with no credit = likely balance
+        amt.name = "balance";
+        console.log("Reclassified rightmost 'amount' column as 'balance' (no credit column found)");
+      }
+    }
+  }
+
   return columns;
 }
 
@@ -248,22 +268,70 @@ function reconstructTextFromPages(pages: PagePayload[]): string {
 
 // ─── AI-Powered Parser ──────────────────────────────────────────────────────
 
-async function parseWithAI(input: string, isStructured: boolean): Promise<ParsedTx[]> {
+async function parseWithAI(input: string, isStructured: boolean, columnNames?: string[]): Promise<ParsedTx[]> {
   const apiKey = Deno.env.get("LOVABLE_API_KEY");
   if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
 
-  const systemPrompt = isStructured
-    ? `You are a financial data extraction engine. You will receive a markdown table extracted from a bank or credit card statement. The table has labeled columns (Date, Description, Debit, Credit, Amount, Balance, etc.).
+  let systemPrompt: string;
+
+  if (isStructured && columnNames) {
+    const hasDebit = columnNames.includes("debit");
+    const hasCredit = columnNames.includes("credit");
+    const hasAmount = columnNames.includes("amount");
+    const hasBalance = columnNames.includes("balance");
+
+    const colList = columnNames.map((n) => n.charAt(0).toUpperCase() + n.slice(1)).join(", ");
+
+    let typeRules = "";
+    if (hasDebit && hasCredit) {
+      typeRules = `- This table has SEPARATE Debit and Credit columns.
+- If a row has a value in the Debit column → type = "expense" (money leaving the account)
+- If a row has a value in the Credit column → type = "income" (money entering the account)
+- Use the amount from whichever column (Debit or Credit) has the value. The other will be empty.
+- Do NOT use the Balance column for the transaction amount.`;
+    } else if (hasDebit && !hasCredit && hasAmount) {
+      typeRules = `- This table has a Debit column and a separate Amount column.
+- The Debit column shows withdrawals/expenses. The Amount column may show credits/deposits OR be a combined column.
+- If a row has a value in Debit → type = "expense", use the Debit amount
+- If a row has NO value in Debit but has a value in Amount → type = "income", use the Amount value
+- Do NOT use Balance for transaction amounts.`;
+    } else if (hasDebit && !hasCredit && !hasAmount) {
+      typeRules = `- This table has only a Debit column (no separate Credit column).
+- All values in the Debit column are expenses (type = "expense").
+- If a row has no debit value, skip it — there's no way to determine the credit amount.`;
+    } else if (!hasDebit && !hasCredit && hasAmount) {
+      typeRules = `- This table has a single Amount column (no separate Debit/Credit).
+- Determine type from the description context:
+  - Deposits, refunds, transfers in, payroll, direct deposit → type = "income"
+  - All other transactions (purchases, payments, fees, charges) → type = "expense"
+- If the amount is negative, it is an expense. If positive, determine from context.`;
+    } else {
+      typeRules = `- Determine type from context: deposits/credits/refunds = "income", withdrawals/debits/purchases = "expense".`;
+    }
+
+    systemPrompt = `You are a financial data extraction engine. You will receive a markdown table from a bank or credit card statement.
+
+TABLE COLUMNS: ${colList}
+
+${typeRules}
 
 CRITICAL RULES:
 - Extract ONLY actual transactions (purchases, payments, deposits, withdrawals, transfers)
-- IGNORE the Balance column — it shows running totals, not transaction amounts
-- IGNORE subtotals, section totals, summary rows, daily balance rows
-- For Debit/Credit columns: Debit = expense, Credit = income
-- For single Amount column: negative or withdrawal = expense, positive or deposit = income
-- Clean merchant names: remove reference numbers, card masks, internal codes
-- Infer the year from statement context if dates only show month/day`
-    : `You are a financial data extraction engine. Extract transactions from bank/credit card statement text using the provided tool.`;
+${hasBalance ? "- IGNORE the Balance column — it shows running totals, NOT transaction amounts" : ""}
+- IGNORE subtotals, section totals, summary rows, daily balance rows, statement summaries
+- The "amount" field in your output must ALWAYS be a positive number
+- Clean merchant names: remove reference numbers, card masks (XXXX1234), internal codes
+- Infer the full year (YYYY) from statement context if dates only show month/day
+- Each row with a date is ONE transaction — do not skip or merge rows`;
+  } else {
+    systemPrompt = `You are a financial data extraction engine. Extract transactions from bank/credit card statement text.
+
+CRITICAL RULES:
+- deposits/credits/refunds/payments received = type "income"
+- withdrawals/debits/purchases/payments made/fees = type "expense"  
+- amount must always be a positive number
+- Clean merchant names: remove reference numbers, card masks, internal codes`;
+  }
 
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -272,7 +340,7 @@ CRITICAL RULES:
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash-lite",
+      model: "google/gemini-2.5-flash",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: input },
@@ -298,16 +366,16 @@ CRITICAL RULES:
                       },
                       description: {
                         type: "string",
-                        description: "Cleaned merchant/payee name.",
+                        description: "Cleaned merchant/payee name. Remove reference numbers, card numbers, and internal codes.",
                       },
                       amount: {
                         type: "number",
-                        description: "Transaction amount as a positive number.",
+                        description: "Transaction amount as a POSITIVE number. Never use the balance column value.",
                       },
                       type: {
                         type: "string",
                         enum: ["income", "expense"],
-                        description: "deposits/credits/refunds = income, withdrawals/debits/purchases = expense.",
+                        description: "Based on column position: Debit column = expense, Credit column = income. For single Amount column: deposits/credits/refunds = income, everything else = expense.",
                       },
                     },
                     required: ["date", "description", "amount", "type"],
@@ -567,7 +635,8 @@ async function processStructuredPages(pages: PagePayload[]): Promise<{ transacti
       const truncated = table.length > 80000 ? table.slice(0, 80000) : table;
 
       try {
-        transactions = await parseWithAI(truncated, true);
+        const colNames = columns.map((c) => c.name);
+        transactions = await parseWithAI(truncated, true, colNames);
         console.log(`AI structured parser returned ${transactions.length} transactions`);
       } catch (aiErr) {
         const errMsg = aiErr instanceof Error ? aiErr.message : "Unknown";
