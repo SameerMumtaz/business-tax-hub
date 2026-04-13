@@ -285,27 +285,101 @@ export default function useImportLogic() {
     if (transactions.length === 0) return;
     setAuditIssues([]); setAuditSummary(""); setAuditRiskLevel(""); setAuditEstimatedTax(""); setDismissedIssues(new Set());
     const issues: AuditIssue[] = [];
+    const included = transactions.filter((t) => t.include);
     const seen = new Map<string, ReviewTransaction[]>();
-    for (const t of transactions) { if (!t.include) continue; const key = `${t.date}|${t.amount.toFixed(2)}`; const group = seen.get(key) || []; group.push(t); seen.set(key, group); }
-    for (const [, group] of seen) { if (group.length >= 2) issues.push({ type: "duplicate", severity: "medium", title: `Possible duplicate: ${group[0].description.slice(0, 40)}`, description: `${group.length} transactions on ${group[0].date} for $${group[0].amount.toFixed(2)} each.`, affected_ids: group.map((t) => t.id), suggestion: "review", suggestion_detail: "Review these — they may be duplicates." }); }
-    const uncategorized = transactions.filter((t) => t.include && t.category === "Other" && t.type === "expense");
-    if (uncategorized.length > 5) issues.push({ type: "miscategorized", severity: "medium", title: `${uncategorized.length} expenses uncategorized`, description: "Uncategorized expenses may lead to missed deductions.", affected_ids: uncategorized.slice(0, 5).map((t) => t.id), suggestion: "review", suggestion_detail: "Edit categories manually or create a rule." });
-    const amounts = transactions.filter((t) => t.include).map((t) => t.amount);
-    const avg = amounts.length > 0 ? amounts.reduce((a, b) => a + b, 0) / amounts.length : 0;
-    const threshold = Math.max(avg * 5, 5000);
-    for (const t of transactions.filter((t) => t.include && t.amount > threshold)) issues.push({ type: "anomaly", severity: "low", title: `Large transaction: $${t.amount.toFixed(2)}`, description: `"${t.description.slice(0, 50)}" is above average ($${avg.toFixed(0)}).`, affected_ids: [t.id], suggestion: "review", suggestion_detail: "Verify amount and category." });
+    for (const t of included) {
+      const key = `${t.date}|${t.amount.toFixed(2)}`;
+      const group = seen.get(key) || [];
+      group.push(t);
+      seen.set(key, group);
+    }
+    for (const [, group] of seen) {
+      if (group.length >= 2) {
+        issues.push({
+          type: "duplicate",
+          severity: "medium",
+          title: `Possible duplicate: ${group[0].description.slice(0, 40)}`,
+          description: `${group.length} transactions on ${group[0].date} for $${group[0].amount.toFixed(2)} each.`,
+          affected_ids: group.map((t) => t.id),
+          suggestion: "review",
+          suggestion_detail: "Review these — they may be duplicates.",
+        });
+      }
+    }
+
+    const expenseTransactions = included.filter((t) => t.type === "expense");
+    const uncategorized = expenseTransactions.filter((t) => t.category === "Other");
+    if (uncategorized.length > 5) {
+      issues.push({
+        type: "miscategorized",
+        severity: "medium",
+        title: `${uncategorized.length} expenses uncategorized`,
+        description: "Uncategorized expenses may lead to missed deductions.",
+        affected_ids: uncategorized.slice(0, 5).map((t) => t.id),
+        suggestion: "review",
+        suggestion_detail: "Edit categories manually or create a rule.",
+      });
+    }
+
+    const expenseAmounts = expenseTransactions.map((t) => t.amount);
+    if (expenseAmounts.length >= 10) {
+      const sorted = [...expenseAmounts].sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)];
+      const mean = expenseAmounts.reduce((a, b) => a + b, 0) / expenseAmounts.length;
+      const stdDev = Math.sqrt(expenseAmounts.reduce((s, v) => s + (v - mean) ** 2, 0) / expenseAmounts.length);
+      const threshold = Math.max(median + 3 * stdDev, 10000);
+
+      for (const t of expenseTransactions.filter((t) => t.amount > threshold)) {
+        issues.push({
+          type: "anomaly",
+          severity: "low",
+          title: `Unusually large expense: $${t.amount.toFixed(2)}`,
+          description: `"${t.description.slice(0, 50)}" is well above typical spending ($${median.toFixed(0)} median).`,
+          affected_ids: [t.id],
+          suggestion: "review",
+          suggestion_detail: "Double-check this amount and ensure it's properly categorized.",
+        });
+      }
+    }
+
     const personalRx = /\b(netflix|hulu|disney\+|spotify|apple music|gym|fitness|personal|grocery|groceries|whole foods|trader joe)\b/i;
-    const personal = transactions.filter((t) => t.include && t.type === "expense" && personalRx.test(t.description));
-    if (personal.length > 0) issues.push({ type: "personal_expense", severity: "high", title: `${personal.length} possible personal expense(s)`, description: "These look like personal expenses — an IRS red flag.", affected_ids: personal.map((t) => t.id), suggestion: "review", suggestion_detail: "Exclude personal expenses from business deductions.", irs_reference: "IRC §262" });
-    const roundExpenses = transactions.filter((t) => t.include && t.type === "expense" && t.amount >= 500 && t.amount % 100 === 0);
-    if (roundExpenses.length > 3) issues.push({ type: "documentation", severity: "low", title: `${roundExpenses.length} round-number expenses`, description: "Multiple round-number expenses may look like estimates.", affected_ids: roundExpenses.slice(0, 5).map((t) => t.id), suggestion: "review", suggestion_detail: "Ensure you have receipts." });
+    const personal = expenseTransactions.filter((t) => personalRx.test(t.description));
+    if (personal.length > 0) {
+      issues.push({
+        type: "personal_expense",
+        severity: "high",
+        title: `${personal.length} possible personal expense(s)`,
+        description: "These look like personal expenses — an IRS red flag.",
+        affected_ids: personal.map((t) => t.id),
+        suggestion: "review",
+        suggestion_detail: "Exclude personal expenses from business deductions.",
+        irs_reference: "IRC §262",
+      });
+    }
+
     const totalByVendor = new Map<string, number>();
-    for (const t of transactions) { if (!t.include || t.type !== "expense") continue; totalByVendor.set(t.description.toLowerCase().slice(0, 30), (totalByVendor.get(t.description.toLowerCase().slice(0, 30)) || 0) + t.amount); }
+    for (const t of expenseTransactions) {
+      const key = t.description.toLowerCase().slice(0, 30);
+      totalByVendor.set(key, (totalByVendor.get(key) || 0) + t.amount);
+    }
     const over600 = Array.from(totalByVendor.entries()).filter(([, amt]) => amt >= 600);
-    if (over600.length > 0) issues.push({ type: "1099_compliance", severity: "medium", title: `${over600.length} vendor(s) over $600`, description: "May require 1099-NEC.", affected_ids: [], suggestion: "review", suggestion_detail: "Check if vendors are contractors.", irs_reference: "IRC §6041" });
-    const totalExp = transactions.filter((t) => t.include && t.type === "expense").reduce((s, t) => s + t.amount, 0);
-    const totalInc = transactions.filter((t) => t.include && t.type === "income").reduce((s, t) => s + t.amount, 0);
-    const net = totalInc - totalExp; const estTax = net > 0 ? net * 0.3 : 0;
+    if (over600.length > 0) {
+      issues.push({
+        type: "1099_compliance",
+        severity: "medium",
+        title: `${over600.length} vendor(s) over $600`,
+        description: "May require 1099-NEC.",
+        affected_ids: [],
+        suggestion: "review",
+        suggestion_detail: "Check if vendors are contractors.",
+        irs_reference: "IRC §6041",
+      });
+    }
+
+    const totalExp = expenseTransactions.reduce((s, t) => s + t.amount, 0);
+    const totalInc = included.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
+    const net = totalInc - totalExp;
+    const estTax = net > 0 ? net * 0.3 : 0;
     setAuditIssues(issues); setAuditSummary(issues.length === 0 ? "No issues — your data looks clean!" : `Found ${issues.length} issue(s).`);
     setAuditRiskLevel(issues.some((i) => i.severity === "high") ? "high" : issues.some((i) => i.severity === "medium") ? "medium" : "low");
     setAuditEstimatedTax(estTax > 0 ? `~$${Math.round(estTax).toLocaleString()}` : "");
