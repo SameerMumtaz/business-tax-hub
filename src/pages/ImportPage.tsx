@@ -271,7 +271,7 @@ export default function ImportPage() {
               </table>
               {totalPages > 1 && (
                 <div className="flex items-center justify-between pt-3 border-t">
-                  <span className="text-xs text-muted-foreground">Showing {currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, sortedTransactions.length)} of {sortedTransactions.length}</span>
+                  <span className="text-xs text-muted-foreground">Showing {currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, filteredTransactions.length)} of {filteredTransactions.length}</span>
                   <div className="flex gap-1">
                     <Button variant="outline" size="sm" className="h-7 text-xs" disabled={currentPage === 0} onClick={() => setCurrentPage(0)}>First</Button>
                     <Button variant="outline" size="sm" className="h-7 text-xs" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => p - 1)}>Prev</Button>
