@@ -124,10 +124,16 @@ export default function useImportLogic() {
     });
   }, [transactions, sortField, sortDir]);
 
-  const totalPages = Math.ceil(sortedTransactions.length / PAGE_SIZE);
+  const filteredTransactions = useMemo(() => {
+    if (viewFilter === "selected") return sortedTransactions.filter((t) => t.include);
+    if (viewFilter === "excluded") return sortedTransactions.filter((t) => !t.include);
+    return sortedTransactions;
+  }, [sortedTransactions, viewFilter]);
+
+  const totalPages = Math.ceil(filteredTransactions.length / PAGE_SIZE);
   const pagedTransactions = useMemo(
-    () => sortedTransactions.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE),
-    [sortedTransactions, currentPage]
+    () => filteredTransactions.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE),
+    [filteredTransactions, currentPage]
   );
 
   const navigateToTransaction = useCallback((id: string) => {
