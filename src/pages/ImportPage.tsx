@@ -133,8 +133,7 @@ function DropZone({ pdfProcessing, pdfStatus, pdfProgress, onDrop, onFileInput }
   );
 }
 
-
-  const logic = useImportLogic();
+export default function ImportPage() {
   const {
     step, importing, importProgress, importStatus, dragOver, setDragOver, pdfDragOver, setPdfDragOver,
     categorizing, sortField, sortDir, auditIssues, auditSummary, auditRiskLevel, auditEstimatedTax,
