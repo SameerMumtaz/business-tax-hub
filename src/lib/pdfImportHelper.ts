@@ -226,19 +226,35 @@ export async function processStatementPdf(
 
   onProgress("Analyzing…", 25);
 
-  // Step 4: Fire summary extraction AND first transaction chunks IN PARALLEL
-  const PAGES_PER_CHUNK = 3;
+  // Step 4a: Extract summary FIRST to get statement year (critical for accuracy)
+  onProgress("Extracting statement summary…", 25);
+  let summary: StatementSummary = {};
+  if (summaryImages.length > 0) {
+    try {
+      const { data, error } = await supabase.functions.invoke("parse-pdf", {
+        body: { mode: "summary", images: summaryImages },
+      });
+      if (!error && data?.summary) {
+        summary = data.summary;
+        console.log("Statement summary:", JSON.stringify(summary));
+      }
+    } catch (e) {
+      console.warn("Summary extraction failed:", e);
+    }
+  }
+
+  // Step 4b: Process transaction chunks sequentially (1 page per chunk for accuracy)
+  const PAGES_PER_CHUNK = 1;
   const chunks: PageImage[][] = [];
   for (let i = 0; i < pageImages.length; i += PAGES_PER_CHUNK) {
     chunks.push(pageImages.slice(i, i + PAGES_PER_CHUNK));
   }
 
-  let summary: StatementSummary = {};
   const allTx: ParsedImportTx[] = [];
   const chunkErrors: string[] = [];
   const chunkStats: { chunkIdx: number; count: number; income: number; expense: number }[] = [];
   const totalChunks = chunks.length;
-  const CONCURRENCY = Math.min(3, totalChunks);
+  const CONCURRENCY = Math.min(2, totalChunks);
   let nextChunkIndex = 0;
   let completed = 0;
   const chunkStartTime = Date.now();
@@ -265,18 +281,6 @@ export async function processStatementPdf(
     return data?.transactions || [];
   };
 
-  // Extract summary concurrently with first transaction chunks
-  const summaryPromise = summaryImages.length > 0
-    ? supabase.functions.invoke("parse-pdf", { body: { mode: "summary", images: summaryImages } })
-        .then(({ data, error }) => {
-          if (!error && data?.summary) {
-            summary = data.summary;
-            console.log("Statement summary:", JSON.stringify(summary));
-          }
-        })
-        .catch((e) => console.warn("Summary extraction failed:", e))
-    : Promise.resolve();
-
   const runWorker = async () => {
     while (nextChunkIndex < totalChunks) {
       const chunkIndex = nextChunkIndex++;
@@ -294,18 +298,34 @@ export async function processStatementPdf(
       } finally {
         completed++;
         onProgress(
-          `Analyzing transactions… ${completed}/${totalChunks} chunks done, ${getEta()}`,
-          25 + Math.round((completed / totalChunks) * 55),
+          `Analyzing transactions… ${completed}/${totalChunks} pages done, ${getEta()}`,
+          30 + Math.round((completed / totalChunks) * 50),
         );
       }
     }
   };
 
-  // Run summary + all transaction workers in parallel
-  await Promise.all([
-    summaryPromise,
-    ...Array.from({ length: CONCURRENCY }, () => runWorker()),
-  ]);
+  // Run transaction workers (with limited concurrency)
+  await Promise.all(
+    Array.from({ length: CONCURRENCY }, () => runWorker()),
+  );
+
+  // Step 4c: Cross-chunk deduplication (catches duplicates from overlapping page reads)
+  const seenKeys = new Set<string>();
+  const dedupedTx: ParsedImportTx[] = [];
+  for (const tx of allTx) {
+    const key = `${tx.date}|${tx.amount.toFixed(2)}|${tx.type}|${tx.description.toLowerCase().trim()}`;
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      dedupedTx.push(tx);
+    }
+  }
+  const crossChunkDupes = allTx.length - dedupedTx.length;
+  if (crossChunkDupes > 0) {
+    console.log(`Cross-chunk dedup removed ${crossChunkDupes} duplicate(s)`);
+  }
+  allTx.length = 0;
+  allTx.push(...dedupedTx);
 
   // Step 5: Reconcile
   onProgress("Reconciling results…", 85);
