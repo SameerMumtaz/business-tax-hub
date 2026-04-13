@@ -145,6 +145,11 @@ export default function ImportPage() {
               </div>
               <div className="flex gap-2 items-center flex-wrap">
                 {categorizing && <span className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Categorizing…</span>}
+                <div className="flex border rounded-md overflow-hidden">
+                  <button onClick={() => { setViewFilter("all"); setCurrentPage(0); }} className={`px-3 py-1.5 text-xs font-medium transition-colors ${viewFilter === "all" ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted"}`}>All ({transactions.length})</button>
+                  <button onClick={() => { setViewFilter("selected"); setCurrentPage(0); }} className={`px-3 py-1.5 text-xs font-medium transition-colors border-l ${viewFilter === "selected" ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted"}`}>Selected ({selectedCount})</button>
+                  <button onClick={() => { setViewFilter("excluded"); setCurrentPage(0); }} className={`px-3 py-1.5 text-xs font-medium transition-colors border-l ${viewFilter === "excluded" ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted"}`}>Excluded ({excludedCount})</button>
+                </div>
                 {selectedCount < transactions.length ? (
                   <Button variant="outline" size="sm" onClick={selectAll}>Select All</Button>
                 ) : (
