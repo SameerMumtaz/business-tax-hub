@@ -55,8 +55,7 @@ interface PageImage {
 async function renderPageToImage(
   pdf: any,
   pageNum: number,
-  scale: number = 1.2,
-  quality: number = 0.5,
+  scale: number = 1.5,
 ): Promise<PageImage> {
   const page = await pdf.getPage(pageNum);
   const viewport = page.getViewport({ scale });
@@ -65,7 +64,7 @@ async function renderPageToImage(
   canvas.height = viewport.height;
   const ctx = canvas.getContext("2d")!;
   await page.render({ canvasContext: ctx, viewport }).promise;
-  const dataUrl = canvas.toDataURL("image/jpeg", quality);
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
   const base64 = dataUrl.split(",")[1];
   canvas.width = 0;
   canvas.height = 0;
@@ -76,14 +75,13 @@ async function renderPageToImage(
 async function renderPagesParallel(
   pdf: any,
   pageNums: number[],
-  scale: number = 1.2,
-  quality: number = 0.5,
-  batchSize: number = 6,
+  scale: number = 1.5,
+  batchSize: number = 4,
 ): Promise<PageImage[]> {
   const results: PageImage[] = [];
   for (let i = 0; i < pageNums.length; i += batchSize) {
     const batch = pageNums.slice(i, i + batchSize);
-    const rendered = await Promise.all(batch.map((p) => renderPageToImage(pdf, p, scale, quality)));
+    const rendered = await Promise.all(batch.map((p) => renderPageToImage(pdf, p, scale)));
     results.push(...rendered);
   }
   return results;
@@ -221,15 +219,15 @@ export async function processStatementPdf(
   // Render summary pages at 2.0x (for number accuracy) and transaction pages at 1.5x simultaneously
   const [summaryImages, pageImages] = await Promise.all([
     summaryPages.length > 0
-      ? renderPagesParallel(pdf, summaryPages.slice(0, 2), 1.5, 0.6)
+      ? renderPagesParallel(pdf, summaryPages.slice(0, 2), 2.0)
       : Promise.resolve([]),
-    renderPagesParallel(pdf, pagesToRender, 1.2, 0.5),
+    renderPagesParallel(pdf, pagesToRender, 1.5),
   ]);
 
   onProgress("Analyzing…", 25);
 
   // Step 4: Fire summary extraction AND first transaction chunks IN PARALLEL
-  const PAGES_PER_CHUNK = 5;
+  const PAGES_PER_CHUNK = 3;
   const chunks: PageImage[][] = [];
   for (let i = 0; i < pageImages.length; i += PAGES_PER_CHUNK) {
     chunks.push(pageImages.slice(i, i + PAGES_PER_CHUNK));
@@ -240,7 +238,7 @@ export async function processStatementPdf(
   const chunkErrors: string[] = [];
   const chunkStats: { chunkIdx: number; count: number; income: number; expense: number }[] = [];
   const totalChunks = chunks.length;
-  const CONCURRENCY = Math.min(4, totalChunks);
+  const CONCURRENCY = Math.min(3, totalChunks);
   let nextChunkIndex = 0;
   let completed = 0;
   const chunkStartTime = Date.now();
