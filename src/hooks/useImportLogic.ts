@@ -137,12 +137,12 @@ export default function useImportLogic() {
   );
 
   const navigateToTransaction = useCallback((id: string) => {
-    const idx = sortedTransactions.findIndex((t) => t.id === id);
+    const idx = filteredTransactions.findIndex((t) => t.id === id);
     if (idx === -1) return;
     setCurrentPage(Math.floor(idx / PAGE_SIZE));
     setHighlightedId(id);
     setTimeout(() => setHighlightedId(null), 3000);
-  }, [sortedTransactions]);
+  }, [filteredTransactions]);
 
   useEffect(() => {
     if (highlightedId && highlightedRowRef.current) {
