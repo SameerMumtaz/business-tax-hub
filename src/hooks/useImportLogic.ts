@@ -108,6 +108,7 @@ export default function useImportLogic() {
   const PAGE_SIZE = 50;
   const [savedRules, setSavedRules] = useState<Set<string>>(new Set());
   const [dismissedRules, setDismissedRules] = useState<Set<string>>(new Set());
+  const [viewFilter, setViewFilter] = useState<"all" | "selected" | "excluded">("all");
 
   const sortedTransactions = useMemo(() => {
     return [...transactions].sort((a, b) => {
