@@ -103,20 +103,7 @@ export function auditExpenses(expenses: Expense[], dismissedSet?: Set<string>): 
     });
   }
 
-  // 5. Round-number expenses
-  const roundExpenses = expenses.filter((e) => e.amount >= 500 && e.amount % 100 === 0);
-  if (roundExpenses.length > 3) {
-    const total = roundExpenses.reduce((s, e) => s + e.amount, 0);
-    issues.push({
-      type: "documentation", severity: "low",
-      title: `${roundExpenses.length} round-number expenses`,
-      description: "Multiple round-number expenses may look like estimates to the IRS.",
-      affected_ids: roundExpenses.slice(0, 5).map((e) => e.id),
-      suggestion: "review",
-      suggestion_detail: "Ensure you have receipts for these amounts.",
-      dollarImpact: total,
-    });
-  }
+  // (Round-number expense check removed — too noisy for real-world use)
 
   // 6. 1099 threshold
   const totalByVendor = new Map<string, { total: number; ids: string[] }>();
@@ -225,20 +212,7 @@ export function auditSales(sales: Sale[], expenses: Expense[], matchedSaleIds?: 
     });
   }
 
-  // 5. Round-number sales
-  const roundSales = sales.filter((s) => s.amount >= 1000 && s.amount % 100 === 0);
-  if (roundSales.length > 5) {
-    const total = roundSales.reduce((s, r) => s + r.amount, 0);
-    issues.push({
-      type: "documentation", severity: "low",
-      title: `${roundSales.length} round-number sales`,
-      description: "Multiple round-number amounts may look like estimates.",
-      affected_ids: roundSales.slice(0, 5).map((s) => s.id),
-      suggestion: "review",
-      suggestion_detail: "Ensure each sale is documented with an invoice.",
-      dollarImpact: total,
-    });
-  }
+  // (Round-number sales check removed — too noisy for real-world use)
 
   return buildResult(issues, dismissedSet);
 }
