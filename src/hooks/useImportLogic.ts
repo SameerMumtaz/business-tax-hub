@@ -108,6 +108,7 @@ export default function useImportLogic() {
   const PAGE_SIZE = 50;
   const [savedRules, setSavedRules] = useState<Set<string>>(new Set());
   const [dismissedRules, setDismissedRules] = useState<Set<string>>(new Set());
+  const [viewFilter, setViewFilter] = useState<"all" | "selected" | "excluded">("all");
 
   const sortedTransactions = useMemo(() => {
     return [...transactions].sort((a, b) => {
@@ -123,19 +124,25 @@ export default function useImportLogic() {
     });
   }, [transactions, sortField, sortDir]);
 
-  const totalPages = Math.ceil(sortedTransactions.length / PAGE_SIZE);
+  const filteredTransactions = useMemo(() => {
+    if (viewFilter === "selected") return sortedTransactions.filter((t) => t.include);
+    if (viewFilter === "excluded") return sortedTransactions.filter((t) => !t.include);
+    return sortedTransactions;
+  }, [sortedTransactions, viewFilter]);
+
+  const totalPages = Math.ceil(filteredTransactions.length / PAGE_SIZE);
   const pagedTransactions = useMemo(
-    () => sortedTransactions.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE),
-    [sortedTransactions, currentPage]
+    () => filteredTransactions.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE),
+    [filteredTransactions, currentPage]
   );
 
   const navigateToTransaction = useCallback((id: string) => {
-    const idx = sortedTransactions.findIndex((t) => t.id === id);
+    const idx = filteredTransactions.findIndex((t) => t.id === id);
     if (idx === -1) return;
     setCurrentPage(Math.floor(idx / PAGE_SIZE));
     setHighlightedId(id);
     setTimeout(() => setHighlightedId(null), 3000);
-  }, [sortedTransactions]);
+  }, [filteredTransactions]);
 
   useEffect(() => {
     if (highlightedId && highlightedRowRef.current) {
@@ -429,7 +436,8 @@ export default function useImportLogic() {
     categorizing, sortField, sortDir, auditIssues, auditSummary, auditRiskLevel, auditEstimatedTax, auditing,
     dismissedIssues, pdfProcessing, pdfStatus, pdfProgress, pdfInputRef, highlightedId, highlightedRowRef,
     inlineRuleIssueIdx, setInlineRuleIssueIdx, inlineRuleKeyword, setInlineRuleKeyword, inlineRuleCategory, setInlineRuleCategory,
-    currentPage, setCurrentPage, PAGE_SIZE, sortedTransactions, totalPages, pagedTransactions,
+    currentPage, setCurrentPage, PAGE_SIZE, sortedTransactions, filteredTransactions, totalPages, pagedTransactions,
+    viewFilter, setViewFilter,
     navigateToTransaction, handlePdfUpload, handleFileUpload, handleDrop, handleFileInput, toggleInclude, selectAll, deselectAll, deleteTransaction,
     toggleSort, updateCategory, ruleSuggestions, visibleSuggestions, saveRule, dismissRule, saveAllRules, saveInlineRule,
     handleAudit, applyIssueSuggestion, dismissIssue, uncategorizedCount, handleImport, setStep, setTransactions,

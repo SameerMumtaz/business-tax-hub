@@ -46,7 +46,8 @@ export default function ImportPage() {
     categorizing, sortField, sortDir, auditIssues, auditSummary, auditRiskLevel, auditEstimatedTax,
     dismissedIssues, pdfProcessing, pdfStatus, pdfProgress, highlightedId, highlightedRowRef,
     inlineRuleIssueIdx, setInlineRuleIssueIdx, inlineRuleKeyword, setInlineRuleKeyword, inlineRuleCategory, setInlineRuleCategory,
-    currentPage, setCurrentPage, PAGE_SIZE, sortedTransactions, totalPages, pagedTransactions, transactions,
+    currentPage, setCurrentPage, PAGE_SIZE, sortedTransactions, filteredTransactions, totalPages, pagedTransactions, transactions,
+    viewFilter, setViewFilter,
     navigateToTransaction, handleFileUpload, handleDrop, handleFileInput,
     toggleInclude, selectAll, deselectAll, deleteTransaction,
     toggleSort, updateCategory, visibleSuggestions, saveRule, dismissRule, saveAllRules, saveInlineRule,
@@ -144,6 +145,11 @@ export default function ImportPage() {
               </div>
               <div className="flex gap-2 items-center flex-wrap">
                 {categorizing && <span className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Categorizing…</span>}
+                <div className="flex border rounded-md overflow-hidden">
+                  <button onClick={() => { setViewFilter("all"); setCurrentPage(0); }} className={`px-3 py-1.5 text-xs font-medium transition-colors ${viewFilter === "all" ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted"}`}>All ({transactions.length})</button>
+                  <button onClick={() => { setViewFilter("selected"); setCurrentPage(0); }} className={`px-3 py-1.5 text-xs font-medium transition-colors border-l ${viewFilter === "selected" ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted"}`}>Selected ({selectedCount})</button>
+                  <button onClick={() => { setViewFilter("excluded"); setCurrentPage(0); }} className={`px-3 py-1.5 text-xs font-medium transition-colors border-l ${viewFilter === "excluded" ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted"}`}>Excluded ({excludedCount})</button>
+                </div>
                 {selectedCount < transactions.length ? (
                   <Button variant="outline" size="sm" onClick={selectAll}>Select All</Button>
                 ) : (
@@ -265,7 +271,7 @@ export default function ImportPage() {
               </table>
               {totalPages > 1 && (
                 <div className="flex items-center justify-between pt-3 border-t">
-                  <span className="text-xs text-muted-foreground">Showing {currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, sortedTransactions.length)} of {sortedTransactions.length}</span>
+                  <span className="text-xs text-muted-foreground">Showing {currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, filteredTransactions.length)} of {filteredTransactions.length}</span>
                   <div className="flex gap-1">
                     <Button variant="outline" size="sm" className="h-7 text-xs" disabled={currentPage === 0} onClick={() => setCurrentPage(0)}>First</Button>
                     <Button variant="outline" size="sm" className="h-7 text-xs" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => p - 1)}>Prev</Button>
