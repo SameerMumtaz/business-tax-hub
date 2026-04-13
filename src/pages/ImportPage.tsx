@@ -7,10 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { memo } from "react";
+import { memo, useState, useRef, useCallback } from "react";
 import {
   Upload, Check, X, ArrowRight, Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown,
-  Lightbulb, Plus, XCircle, ShieldAlert, AlertTriangle, Info, Ban, Tag, ExternalLink, CheckCircle,
+  Lightbulb, Plus, XCircle, ShieldAlert, AlertTriangle, Info, Ban, Tag, ExternalLink, CheckCircle, FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -39,7 +39,101 @@ const TransactionRow = memo(function TransactionRow({
   );
 });
 
-export default function ImportPage() {
+function DropZone({ pdfProcessing, pdfStatus, pdfProgress, onDrop, onFileInput }: {
+  pdfProcessing: boolean;
+  pdfStatus: string;
+  pdfProgress: number;
+  onDrop: (e: React.DragEvent) => void;
+  onFileInput: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  const [hovering, setHovering] = useState(false);
+  const [dropped, setDropped] = useState(false);
+  const dragCounter = useRef(0);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (dragCounter.current === 1) setHovering(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) setHovering(false);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current = 0;
+    setHovering(false);
+    setDropped(true);
+    setTimeout(() => setDropped(false), 600);
+    onDrop(e);
+  }, [onDrop]);
+
+  return (
+    <div
+      className={`relative border-2 border-dashed rounded-lg p-12 text-center transition-all duration-300 ${
+        pdfProcessing
+          ? "border-primary bg-accent/50"
+          : hovering
+            ? "border-primary bg-accent scale-[1.02] shadow-lg shadow-primary/10"
+            : dropped
+              ? "border-primary bg-accent/30 scale-[0.98]"
+              : "border-border hover:border-muted-foreground/40"
+      }`}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {pdfProcessing ? (
+        <div className="flex flex-col items-center gap-3 max-w-xs mx-auto animate-fade-in">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">{pdfStatus}</p>
+          {pdfProgress > 0 && <Progress value={pdfProgress} className="h-2 w-full" />}
+        </div>
+      ) : (
+        <div className={`transition-all duration-300 ${hovering ? "scale-110" : dropped ? "scale-95 opacity-70" : ""}`}>
+          {hovering ? (
+            <div className="animate-fade-in">
+              <FileText className="h-12 w-12 text-primary mx-auto mb-4 animate-bounce" />
+              <h3 className="text-lg font-semibold text-primary mb-2">Drop to upload</h3>
+              <p className="text-sm text-muted-foreground">Release to start processing your file</p>
+            </div>
+          ) : (
+            <>
+              <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Drop your bank statement here</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Supports PDF statements, CSV, TSV, XLSX, and XLS — from any bank.
+              </p>
+              <label>
+                <input
+                  type="file"
+                  accept=".pdf,.csv,.tsv,.txt,.xlsx,.xls"
+                  className="hidden"
+                  onChange={onFileInput}
+                />
+                <Button variant="outline" asChild><span>Browse Files</span></Button>
+              </label>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
   const logic = useImportLogic();
   const {
     step, importing, importProgress, importStatus, dragOver, setDragOver, pdfDragOver, setPdfDragOver,
@@ -75,39 +169,13 @@ export default function ImportPage() {
         </div>
 
         {step === "upload" && (
-          <div
-            className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
-              pdfProcessing ? "border-primary bg-accent/50" : (dragOver || pdfDragOver) ? "border-primary bg-accent" : "border-border"
-            }`}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
+          <DropZone
+            pdfProcessing={pdfProcessing}
+            pdfStatus={pdfStatus}
+            pdfProgress={pdfProgress}
             onDrop={handleDrop}
-          >
-            {pdfProcessing ? (
-              <div className="flex flex-col items-center gap-3 max-w-xs mx-auto">
-                <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">{pdfStatus}</p>
-                {pdfProgress > 0 && <Progress value={pdfProgress} className="h-2 w-full" />}
-              </div>
-            ) : (
-              <>
-                <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Drop your bank statement here</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Supports PDF statements, CSV, TSV, XLSX, and XLS — from any bank.
-                </p>
-                <label>
-                  <input
-                    type="file"
-                    accept=".pdf,.csv,.tsv,.txt,.xlsx,.xls"
-                    className="hidden"
-                    onChange={handleFileInput}
-                  />
-                  <Button variant="outline" asChild><span>Browse Files</span></Button>
-                </label>
-              </>
-            )}
-          </div>
+            onFileInput={handleFileInput}
+          />
         )}
 
         {step === "review" && (
